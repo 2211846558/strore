@@ -1,0 +1,184 @@
+@import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap');
+
+:root {
+  /* Dark Neon Brand Palette */
+  --primary: #8b3dff;
+  --primary-hover: #b533ff;
+  --primary-light: rgba(139, 61, 255, 0.15);
+  --primary-dark: #c084fc;
+  --accent: #4285f4;
+  --accent-light: rgba(66, 133, 244, 0.12);
+
+  --gradient-primary: linear-gradient(135deg, #b533ff 0%, #8b3dff 50%, #4285f4 100%);
+  --gradient-primary-hover: linear-gradient(135deg, #9d2be6 0%, #a020f0 50%, #5a9cfd 100%);
+  --gradient-soft: linear-gradient(160deg, #131127 0%, #18162e 45%, #1b1836 100%);
+  --gradient-sidebar: linear-gradient(180deg, #18162e 0%, #131127 55%, #1b1836 100%);
+
+  /* Surfaces */
+  --bg-main: #131127;
+  --bg-card: #1b1836;
+  --bg-sidebar: #18162e;
+  --bg-input: #242240;
+
+  --text-primary: #ffffff;
+  --text-secondary: rgba(255, 255, 255, 0.7);
+  --text-muted: rgba(255, 255, 255, 0.55);
+
+  --success: #34d399;
+  --danger: #f87171;
+  --warning: #fbbf24;
+
+  --border-color: rgba(255, 255, 255, 0.08);
+  --border-focus: rgba(255, 255, 255, 0.18);
+
+  --font-family: 'Tajawal', system-ui, -apple-system, sans-serif;
+
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 6px 18px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 14px 32px rgba(0, 0, 0, 0.5);
+  --shadow-card: 0 4px 20px rgba(0, 0, 0, 0.35);
+  --shadow-primary: 0 4px 14px rgba(139, 61, 255, 0.4);
+}
+
+[data-theme='light'] {
+  --bg-main: #edeef6;
+  --bg-card: #f4f5fb;
+  --bg-sidebar: #edeef6;
+  --bg-input: #ffffff;
+
+  --text-primary: #131127;
+  --text-secondary: #4b4868;
+  --text-muted: #7b7898;
+
+  --border-color: rgba(19, 17, 39, 0.06);
+  --border-focus: rgba(19, 17, 39, 0.15);
+
+  --gradient-soft: linear-gradient(160deg, #edeef6 0%, #e2e4ef 100%);
+  --gradient-sidebar: linear-gradient(180deg, #edeef6 0%, #e2e4ef 100%);
+
+  --shadow-sm: 0 1px 2px rgba(19, 17, 39, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(19, 17, 39, 0.08);
+  --shadow-lg: 0 10px 15px -3px rgba(19, 17, 39, 0.08);
+  --shadow-card: 0 4px 10px rgba(19, 17, 39, 0.05);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-family);
+  color: var(--text-primary);
+  direction: rtl;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  background: var(--gradient-soft);
+  min-height: 100vh;
+}
+
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+}
+
+/* Primary action buttons — site-wide theme */
+.add-product-btn,
+.add-offer-btn,
+.add-shipment-btn,
+.export-btn,
+.edit-store-btn,
+.export-statement-btn,
+.save-button:not(.archive-btn):not(.restore-btn),
+.plan-card .subscribe-btn,
+.plan-card.popular .subscribe-btn,
+.subscription-card .renew-btn,
+.campaign-subscribe-btn,
+.payment-confirm-btn,
+.confirm-btn {
+  background: var(--gradient-primary) !important;
+  color: white !important;
+  border: none !important;
+  box-shadow: var(--shadow-primary);
+}
+
+.add-product-btn:hover,
+.add-offer-btn:hover,
+.add-shipment-btn:hover,
+.export-btn:hover,
+.edit-store-btn:hover,
+.export-statement-btn:hover:not(:disabled),
+.save-button:not(.archive-btn):not(.restore-btn):hover,
+.plan-card .subscribe-btn:hover,
+.plan-card.popular .subscribe-btn:hover,
+.subscription-card .renew-btn:hover,
+.campaign-subscribe-btn:hover,
+.payment-confirm-btn:hover,
+.confirm-btn:hover {
+  background: var(--gradient-primary-hover) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(139, 61, 255, 0.45);
+}
+
+/* Badges & notifications */
+.type-badge.sales,
+.status-badge.success,
+.transaction-table .type-badge.sales,
+.transaction-table .status-badge.success,
+.txn-detail-modal .type-badge.sales,
+.txn-detail-modal .status-badge.success {
+  background: var(--gradient-primary) !important;
+  color: white !important;
+  border: none !important;
+}
+
+.product-stock {
+  background: var(--gradient-primary) !important;
+  color: white !important;
+}
+
+.toast-notification {
+  background: var(--gradient-primary) !important;
+  color: white !important;
+  box-shadow: var(--shadow-lg) !important;
+}
+
+/* Shared page titles */
+.page-title {
+  background: var(--gradient-primary);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Cards site-wide */
+.stat-card,
+.chart-section,
+.transactions-section,
+.products-page .product-card,
+.plan-card {
+  box-shadow: var(--shadow-card);
+}
+
+::-webkit-scrollbar {
+  display: none;
+}
+
+html, body {
+  min-height: 100vh;
+}
+
+html {
+  scrollbar-width: none;
+}

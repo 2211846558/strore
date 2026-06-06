@@ -1,0 +1,123 @@
+.sadad-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100;
+  padding: 20px;
+  backdrop-filter: blur(4px);
+}
+
+.sadad-modal {
+  background: #18162e;
+  border: 1px solid #2a2645;
+  border-radius: 20px;
+  width: 100%;
+  max-width: 400px;
+  padding: 28px 24px 24px;
+  text-align: center;
+  position: relative;
+  color: white;
+}
+
+.sadad-close {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  background: none;
+  border: none;
+  color: #9ca3af;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.sadad-icon-wrap {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 16px;
+  color: white;
+}
+
+.sadad-modal h2 {
+  font-size: 20px;
+  font-weight: 800;
+  margin: 0 0 6px;
+}
+
+.sadad-subtitle {
+  font-size: 14px;
+  color: #9ca3af;
+  margin: 0 0 24px;
+}
+
+.sadad-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sadad-field.readonly {
+  background: #242240;
+  border: 1px solid #3a3658;
+  border-radius: 12px;
+  padding: 14px 16px;
+  text-align: right;
+  font-weight: 700;
+  color: #e5e7eb;
+}
+
+.sadad-form input {
+  background: #242240;
+  border: 1px solid #3a3658;
+  border-radius: 12px;
+  padding: 14px 16px;
+  color: white;
+  font-size: 15px;
+  font-family: inherit;
+  outline: none;
+  text-align: right;
+}
+
+.sadad-form input::placeholder {
+  color: #6b7280;
+}
+
+.sadad-form input:focus {
+  border-color: #6366f1;
+}
+
+.sadad-error {
+  color: #f87171;
+  font-size: 13px;
+  margin: 0;
+  text-align: center;
+}
+
+.sadad-submit {
+  margin-top: 8px;
+  padding: 14px;
+  border: none;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #3b82f6, #6366f1);
+  color: white;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.sadad-submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.sadad-submit:hover:not(:disabled) {
+  opacity: 0.95;
+}

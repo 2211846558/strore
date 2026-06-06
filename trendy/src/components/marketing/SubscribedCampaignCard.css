@@ -1,0 +1,147 @@
+﻿.subscribed-campaign-card {
+  background-color: var(--bg-card);
+  border-radius: 16px;
+  border: 1px solid var(--border-color);
+  padding: 30px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.subscribed-campaign-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.sub-campaign-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.sub-campaign-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sub-campaign-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.sub-campaign-status {
+  align-self: flex-start;
+  font-size: 12px;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-weight: bold;
+}
+
+.sub-campaign-status.active {
+  background: var(--gradient-primary);
+  color: white;
+}
+
+.sub-campaign-status.expired {
+  background-color: var(--bg-input);
+  color: var(--text-secondary);
+}
+
+.sub-campaign-date {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.sub-campaign-desc {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.sub-campaign-products {
+  background: var(--primary-light);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+
+.sub-campaign-products-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.sub-campaign-products-header svg {
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+.sub-campaign-products-count {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-inline-start: auto;
+}
+
+.sub-campaign-products-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sub-campaign-product-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.sub-campaign-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.sub-campaign-price {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sub-campaign-price .amount {
+  font-size: 32px;
+  font-weight: 800;
+  color: var(--primary);
+}
+
+.sub-campaign-price .currency {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.sub-campaign-stats {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 14px;
+  color: var(--text-secondary);
+}

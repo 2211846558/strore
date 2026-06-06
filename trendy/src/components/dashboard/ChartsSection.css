@@ -1,0 +1,79 @@
+.charts-section {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: 24px;
+}
+
+.chart-card {
+  background-color: var(--bg-card);
+  border-radius: 16px;
+  padding: 24px;
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-card);
+  display: flex;
+  flex-direction: column;
+  height: 400px;
+  transition: box-shadow 0.25s ease, border-color 0.25s ease;
+}
+
+.chart-card:hover {
+  box-shadow: var(--shadow-lg);
+  border-color: var(--border-focus);
+}
+
+.chart-header {
+  margin-bottom: 20px;
+  text-align: right;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.chart-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.chart-subtitle {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.chart-container {
+  flex-grow: 1;
+  width: 100%;
+  min-height: 0;
+}
+
+.custom-tooltip {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 12px 16px;
+  box-shadow: var(--shadow-md);
+}
+
+.tooltip-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+  text-align: right;
+}
+
+.tooltip-value {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--primary-dark);
+  text-align: right;
+}
+
+@media (max-width: 768px) {
+  .charts-section {
+    grid-template-columns: 1fr;
+  }
+
+  .chart-card {
+    height: 360px;
+  }
+}

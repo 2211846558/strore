@@ -1,0 +1,96 @@
+.plans-page {
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+}
+
+.plans-header {
+  margin-bottom: 10px;
+}
+
+.plans-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap-reverse;
+  gap: 20px;
+  background-color: var(--bg-main);
+}
+
+.search-bar {
+  display: flex;
+  align-items: center;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 8px 16px;
+  width: 100%;
+  max-width: 400px;
+}
+
+.search-icon {
+  color: var(--text-muted);
+  margin-left: 10px;
+}
+
+.search-input {
+  border: none;
+  background: transparent;
+  outline: none;
+  width: 100%;
+  font-family: inherit;
+  font-size: 15px;
+  color: var(--text-primary);
+}
+
+.tabs-container {
+  display: flex;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 4px;
+}
+
+.tab-btn {
+  padding: 10px 24px;
+  border-radius: 6px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  transition: all 0.2s ease;
+}
+
+.tab-btn:hover {
+  color: var(--text-primary);
+}
+
+.tab-btn.active {
+  background-color: var(--primary-light);
+  color: var(--primary);
+}
+
+.plans-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 24px;
+}
+
+@media (max-width: 768px) {
+  .plans-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .search-bar {
+    max-width: 100%;
+  }
+  
+  .tabs-container {
+    width: 100%;
+    justify-content: space-between;
+  }
+  
+  .tab-btn {
+    flex: 1;
+  }
+}

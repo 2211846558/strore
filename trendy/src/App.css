@@ -1,0 +1,4 @@
+/* General styles for the app container can go here if needed, but we mostly use specific component styles */
+.app-container {
+  min-height: 100vh;
+}

@@ -1,0 +1,191 @@
+.support-badge-container {
+  position: relative;
+}
+
+.support-badge-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px 22px;
+  border-radius: 14px;
+  font-weight: 800;
+  font-size: 15px;
+  background: var(--gradient-primary);
+  color: white;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  box-shadow: var(--shadow-primary);
+  transition: all 0.25s ease;
+  position: relative;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.support-badge-btn:hover {
+  background: var(--gradient-primary-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(139, 61, 255, 0.45);
+}
+
+.support-badge-btn.open {
+  background: var(--gradient-primary-hover);
+  box-shadow: 0 4px 16px rgba(139, 61, 255, 0.45);
+}
+
+/* Dropdown */
+.support-dropdown {
+  position: absolute;
+  top: calc(100% + 14px);
+  right: 0;
+  width: 360px;
+  background: var(--bg-card);
+  border-radius: 20px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+  border: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 1000;
+}
+
+.support-dropdown-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--border-color);
+  background: linear-gradient(135deg, rgba(139, 61, 255, 0.08) 0%, rgba(66, 133, 244, 0.05) 100%);
+  flex-shrink: 0;
+}
+
+.support-dropdown-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.support-dropdown-title h3 {
+  font-size: 17px;
+  font-weight: 800;
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.support-dropdown-title svg {
+  color: var(--primary);
+}
+
+.support-close-btn {
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  cursor: pointer;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.support-close-btn:hover {
+  background: var(--danger);
+  color: white;
+  border-color: var(--danger);
+}
+
+/* Body */
+.support-body {
+  padding: 28px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 20px;
+}
+
+.support-icon-wrap {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: var(--primary-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary);
+}
+
+.support-text {
+  font-size: 15px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+  margin: 0;
+}
+
+.support-number-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg-input);
+  padding: 14px 24px;
+  border-radius: 14px;
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  font-size: 18px;
+  font-weight: 800;
+  direction: ltr;
+}
+
+.support-number-card svg {
+  color: var(--primary);
+}
+
+.support-whatsapp-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 14px 24px;
+  border-radius: 14px;
+  background: var(--gradient-primary);
+  color: white;
+  font-weight: 800;
+  font-size: 15px;
+  border: none;
+  box-shadow: var(--shadow-primary);
+  transition: all 0.25s ease;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.support-whatsapp-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(139, 61, 255, 0.45);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .support-badge-label {
+    display: none;
+  }
+
+  .support-badge-btn {
+    padding: 12px 14px;
+  }
+
+  .support-dropdown {
+    width: 320px;
+  }
+}
+
+@media (max-width: 480px) {
+  .support-dropdown {
+    position: fixed;
+    top: 80px;
+    left: 10px;
+    right: 10px;
+    width: auto;
+  }
+}

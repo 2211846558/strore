@@ -1,0 +1,38 @@
+.dashboard-layout {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+  overflow-x: hidden;
+}
+
+.dashboard-layout .sidebar {
+  flex: 0 0 260px;
+}
+
+.main-content {
+  flex-grow: 1;
+  padding: 36px 40px;
+  background: transparent;
+  min-height: 100vh;
+  scrollbar-width: none;
+}
+
+.main-content::-webkit-scrollbar {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .dashboard-layout {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    width: 100%;
+    height: auto;
+    position: static;
+  }
+
+  .main-content {
+    padding: 20px;
+  }
+}

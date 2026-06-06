@@ -1,0 +1,220 @@
+.product-card {
+  background-color: var(--bg-card);
+  border-radius: 16px;
+  border: 1px solid var(--border-color);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  height: auto;
+  overflow: visible;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  position: relative;
+}
+
+.product-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.product-card.archived {
+  opacity: 0.6;
+}
+
+.archive-badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background-color: #9ca3af;
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 8px;
+  z-index: 1;
+}
+
+.product-image {
+  width: 100%;
+  height: 120px;
+  border-radius: 10px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.product-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.product-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  flex-shrink: 0;
+}
+
+.product-name {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin: 0;
+  text-align: center;
+  line-height: 1.35;
+}
+
+.product-category {
+  font-size: 12px;
+  padding: 4px 14px;
+  border-radius: 16px;
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-weight: 600;
+  background-color: var(--bg-card);
+}
+
+.product-description {
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-align: center;
+  line-height: 1.6;
+  margin: 0;
+  width: 100%;
+  flex-shrink: 0;
+}
+
+.product-colors,
+.product-sizes {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  flex-shrink: 0;
+}
+
+.color-tag,
+.size-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  padding: 5px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  background-color: var(--bg-input);
+  white-space: nowrap;
+}
+
+.color-tag .tag-icon {
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+.product-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 8px;
+  margin-top: 4px;
+  flex-shrink: 0;
+}
+
+.product-stock {
+  background: var(--gradient-primary);
+  color: white;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: 10px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.product-price {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.product-price .amount {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--primary);
+  line-height: 1;
+}
+
+.product-price .currency {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.product-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  width: 100%;
+  margin-top: 4px;
+  flex-shrink: 0;
+}
+
+.product-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background-color: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.product-btn span {
+  line-height: 1;
+}
+
+.product-btn.archive-action-btn.archive {
+  color: var(--warning);
+  border-color: rgba(251, 191, 36, 0.3);
+  background-color: rgba(251, 191, 36, 0.12);
+}
+
+.product-btn.archive-action-btn.archive:hover {
+  background-color: rgba(251, 191, 36, 0.2);
+  border-color: var(--warning);
+  color: var(--warning);
+}
+
+.product-btn.archive-action-btn.restore {
+  color: var(--success);
+  border-color: rgba(52, 211, 153, 0.3);
+  background-color: rgba(52, 211, 153, 0.12);
+}
+
+.product-btn.archive-action-btn.restore:hover {
+  background-color: rgba(52, 211, 153, 0.2);
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.product-btn.edit-btn:hover {
+  background-color: var(--primary-light);
+  border-color: var(--primary);
+  color: var(--primary);
+}

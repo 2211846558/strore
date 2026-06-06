@@ -1,0 +1,9 @@
+/* Using the same layout structure as Plans.css */
+/* We can just import Plans.css here or redefine the specific ones if needed. */
+@import './Plans.css';
+
+.marketing-page {
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+}

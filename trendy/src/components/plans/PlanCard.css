@@ -1,0 +1,110 @@
+.plan-card {
+  background-color: var(--bg-card);
+  border-radius: 16px;
+  border: 1px solid var(--border-color);
+  padding: 30px;
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.plan-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lg);
+}
+
+.plan-card:focus-within {
+  border: 2px solid var(--primary);
+  box-shadow: 0 10px 25px -5px rgba(139, 61, 255, 0.15);
+  outline: none;
+}
+
+.plan-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 24px;
+  gap: 12px;
+}
+
+.title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.plan-title {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.active-badge {
+  background: var(--gradient-primary);
+  color: white;
+  font-size: 10px;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-weight: bold;
+}
+
+.popular-badge {
+  background-color: var(--primary-light);
+  color: var(--primary);
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: 16px;
+  font-weight: 700;
+}
+
+.plan-price {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.plan-price .amount {
+  font-size: 48px;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.plan-price .currency {
+  font-size: 16px;
+  color: var(--text-secondary);
+  margin-right: 8px;
+}
+
+.plan-features {
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 15px;
+  line-height: 1.6;
+  flex-grow: 1;
+  margin-bottom: 30px;
+}
+
+.subscribe-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 14px;
+  border-radius: 8px;
+  background: var(--gradient-primary);
+  color: white;
+  font-size: 16px;
+  font-weight: 700;
+  transition: background-color 0.2s ease;
+}
+
+.subscribe-btn:hover {
+  background-color: black;
+}
+
+.plan-card.popular .subscribe-btn {
+  background: var(--gradient-primary);
+}

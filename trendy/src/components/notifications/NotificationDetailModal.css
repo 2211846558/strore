@@ -1,0 +1,127 @@
+﻿.notification-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+  padding: 20px;
+}
+
+.notification-detail-modal {
+  background: var(--bg-card);
+  border-radius: 16px;
+  width: 100%;
+  max-width: 440px;
+  padding: 24px;
+  box-shadow: var(--shadow-lg);
+}
+
+.notification-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.notification-detail-header h2 {
+  font-size: 20px;
+  font-weight: 800;
+  margin: 0;
+}
+
+.notification-detail-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  padding: 4px;
+  display: flex;
+}
+
+.notification-detail-close:hover {
+  color: var(--text-primary);
+}
+
+.notification-detail-summary {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+  text-align: right;
+}
+
+.notification-detail-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.notification-detail-icon.order {
+  background: #1e2a3f;
+  color: #60a5fa;
+}
+
+.notification-detail-icon.store {
+  background: #1e3f2e;
+  color: #34d399;
+}
+
+.notification-detail-icon.stock {
+  background: #3f1e1e;
+  color: #f87171;
+}
+
+.notification-detail-icon.system {
+  background: var(--bg-input);
+  color: #9ca3af;
+}
+
+.notification-detail-title {
+  font-size: 18px;
+  font-weight: 800;
+  margin: 0 0 4px;
+  color: var(--text-primary);
+}
+
+.notification-detail-time {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.notification-detail-message {
+  background: var(--bg-input);
+  border-radius: 12px;
+  padding: 16px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  text-align: right;
+  margin-bottom: 20px;
+}
+
+.notification-detail-action {
+  width: 100%;
+  padding: 14px;
+  border: none;
+  border-radius: 12px;
+  background: var(--gradient-primary);
+  color: white;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  transition: opacity 0.2s ease;
+}
+
+.notification-detail-action:hover {
+  opacity: 0.95;
+}

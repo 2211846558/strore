@@ -1,0 +1,238 @@
+﻿.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+}
+
+.modal-content {
+  background-color: var(--bg-card);
+  border-radius: 16px;
+  width: 90%;
+  max-width: 600px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow-lg);
+}
+
+.close-button {
+  color: var(--text-muted);
+  transition: color 0.2s ease;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.close-button:hover {
+  color: var(--text-primary);
+}
+
+.txn-detail-modal {
+  max-width: 520px;
+  width: 90%;
+  padding: 0;
+}
+
+.txn-detail-modal .modal-header {
+  padding: 24px 24px 0;
+  margin-bottom: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.txn-detail-modal .modal-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.txn-detail-body {
+  padding: 0 24px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.txn-info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px 20px;
+}
+
+.detail-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.detail-field.full-width {
+  grid-column: 1 / -1;
+}
+
+.detail-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.detail-value {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.txn-code-value {
+  direction: ltr;
+}
+
+.client-value {
+  font-size: 15px;
+}
+
+.txn-detail-modal .type-badge,
+.txn-detail-modal .status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 12px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.txn-detail-modal .type-badge.sales,
+.txn-detail-modal .status-badge.success {
+  background: var(--gradient-primary);
+  color: white;
+}
+
+.txn-detail-modal .type-badge.sub,
+.txn-detail-modal .status-badge.pending {
+  background-color: var(--bg-input);
+  color: var(--text-secondary);
+}
+
+.txn-detail-modal .type-badge.refund {
+  background-color: #3f3a1e;
+  color: #fbbf24;
+}
+
+.txn-detail-modal .status-badge.failed {
+  background-color: #3f1e1e;
+  color: #ef4444;
+}
+
+.financial-section {
+  border-top: 1px solid var(--border-color);
+  padding-top: 16px;
+}
+
+.financial-title {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin: 0 0 14px 0;
+  text-align: right;
+}
+
+.financial-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.financial-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.financial-label {
+  font-size: 14px;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.financial-value {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.financial-value.commission {
+  color: #ef4444;
+}
+
+.financial-divider {
+  height: 1px;
+  background-color: var(--border-color);
+  margin: 4px 0;
+}
+
+.financial-row.net-row .financial-label {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.financial-value.net {
+  font-size: 16px;
+  font-weight: 800;
+  color: #4ade80;
+}
+
+.financial-value.net.negative {
+  color: #ef4444;
+}
+
+.status-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.status-banner.success {
+  background-color: #1e3f2e;
+  color: #34d399;
+  border: 1px solid #1e3f2e;
+}
+
+.status-banner.pending {
+  background-color: #3f3a1e;
+  color: #fbbf24;
+  border: 1px solid #3f3a1e;
+}
+
+.status-banner.failed {
+  background-color: #3f1e1e;
+  color: #f87171;
+  border: 1px solid #3f1e1e;
+}
+
+@media (max-width: 480px) {
+  .txn-info-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .detail-field.full-width {
+    grid-column: auto;
+  }
+}
