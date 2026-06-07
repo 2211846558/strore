@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Mail, Lock, ArrowRight } from 'lucide-react';
+import { Mail, Lock, ArrowRight, Hash } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { getApiErrorMessage } from '../api/stores';
 import './Login.css';
@@ -10,13 +10,18 @@ const Login = () => {
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [storeCode, setStoreCode] = useState('');
   const [error, setError] = useState('');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     try {
-      await login({ email: email.trim(), password });
+      await login({
+        email: email.trim(),
+        password,
+        storeCode: storeCode.trim(),
+      });
       navigate('/');
     } catch (err) {
       setError(getApiErrorMessage(err, 'فشل تسجيل الدخول. تحقق من البيانات.'));
@@ -39,16 +44,37 @@ const Login = () => {
           {error && <p className="login-error">{error}</p>}
 
           <div className="input-group">
-            <label>البريد الإلكتروني للمتجر</label>
+            <label htmlFor="store-code">رقم المتجر</label>
             <div className="input-wrapper">
               <input
+                id="store-code"
+                type="text"
+                placeholder="مثال: my-store"
+                value={storeCode}
+                onChange={(e) => setStoreCode(e.target.value)}
+                required
+                dir="ltr"
+                className="ltr-input"
+                autoComplete="organization"
+              />
+              <Hash className="input-icon" size={20} />
+            </div>
+            <span className="input-hint">الرمز الفريد للمتجر الذي حصلت عليه عند قبول طلب الانضمام</span>
+          </div>
+
+          <div className="input-group">
+            <label htmlFor="login-email">البريد الإلكتروني</label>
+            <div className="input-wrapper">
+              <input
+                id="login-email"
                 type="email"
-                placeholder="store@example.com"
+                placeholder="admin@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 dir="ltr"
                 className="ltr-input"
+                autoComplete="email"
               />
               <Mail className="input-icon" size={20} />
             </div>
@@ -56,11 +82,12 @@ const Login = () => {
 
           <div className="input-group">
             <div className="password-header">
-              <label>كلمة المرور</label>
+              <label htmlFor="login-password">كلمة المرور</label>
               <Link to="/forgot-password" className="forgot-password">نسيت كلمة المرور؟</Link>
             </div>
             <div className="input-wrapper">
               <input
+                id="login-password"
                 type="password"
                 placeholder="••••••••"
                 value={password}
@@ -68,6 +95,7 @@ const Login = () => {
                 required
                 dir="ltr"
                 className="ltr-input"
+                autoComplete="current-password"
               />
               <Lock className="input-icon" size={20} />
             </div>

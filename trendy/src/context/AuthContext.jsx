@@ -23,14 +23,14 @@ export const AuthProvider = ({ children }) => {
     if (id) setStoreId(id);
   }, []);
 
-  const login = useCallback(async ({ email, password }) => {
+  const login = useCallback(async ({ email, password, storeCode }) => {
     setIsLoading(true);
     try {
-      const data = await apiStoreLogin({ email, password });
+      const data = await apiStoreLogin({ email, password, storeCode });
       const authUser = data.user;
       const store = getActiveStore(authUser);
       setUser(authUser);
-      setStoreId(store?.id ?? null);
+      setStoreId(authUser.store_id ?? store?.id ?? null);
       setIsAuthenticated(true);
       return data;
     } finally {

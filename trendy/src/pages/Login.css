@@ -239,6 +239,60 @@
   max-width: 520px;
 }
 
+.join-section-label {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--primary);
+  margin: 8px 0 0;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.required-mark {
+  color: #dc2626;
+}
+
+.optional-mark {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.entity-type-group {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.entity-type-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  font-size: 15px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.entity-type-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.entity-type-btn.active {
+  border-color: var(--primary);
+  background: var(--primary-light);
+  color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(139, 61, 255, 0.12);
+}
+
 .logo-upload-box {
   display: flex;
   flex-direction: column;
@@ -355,6 +409,87 @@
   outline: none;
   border-color: var(--primary);
   box-shadow: 0 0 0 4px var(--primary-light);
+}
+
+/* Join email verification */
+.join-verify-container {
+  max-width: 480px;
+}
+
+.verify-icon-wrapper {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: var(--primary-light);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+  color: var(--primary);
+}
+
+.verify-email-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.verify-email-badge svg {
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+.verify-store-name {
+  text-align: center;
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 0 0 24px;
+}
+
+.otp-inputs {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  direction: ltr;
+}
+
+.otp-digit {
+  width: 48px;
+  height: 56px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 22px;
+  font-weight: 800;
+  font-family: inherit;
+  text-align: center;
+  transition: all 0.2s ease;
+}
+
+.otp-digit:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px var(--primary-light);
+}
+
+.otp-timer {
+  text-align: center;
+  margin-top: 10px;
+}
+
+.otp-timer-warning {
+  color: #dc2626;
+  font-weight: 700;
 }
 
 /* Success state */

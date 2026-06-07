@@ -9,67 +9,71 @@ const FIELD_LABELS = {
   store_email: 'إيميل المتجر',
   password: 'كلمة المرور',
   phone: 'رقم هاتف المتجر',
+  entity_type: 'نوع الكيان',
   type: 'نوع المتجر',
   zone_id: 'المنطقة',
   google_map_url: 'رابط خريطة Google',
   commercial_register_number: 'رقم السجل التجاري',
   logo: 'لوقو المتجر',
+  notes: 'ملاحظات',
+  description: 'وصف المتجر',
+  store_code: 'رقم المتجر',
+  merchant_data: 'بيانات التاجر',
+  otp: 'رمز التحقق',
 };
-
-const fileToBase64 = (file) =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
 
 const isLocalStoreType = (type) => type === 'محلي' || type === 'local';
 
 /**
- * تحويل بيانات النموذج إلى payload مطابق لـ StoreJoinRequest في Laravel
+ * تحويل بيانات النموذج إلى FormData مطابق لـ StoreJoinRequest في Laravel
  */
-export async function buildStoreJoinPayload(form, logoFile) {
-  const payload = {
-    user_name: form.managerName.trim(),
-    email: form.managerEmail.trim(),
-    user_phone: form.managerPhone.trim(),
-    name: form.storeName.trim(),
-    store_email: form.storeEmail.trim(),
-    password: form.password,
-    phone: form.storePhone.trim(),
-    type: form.storeType,
-  };
+export function buildStoreJoinFormData(form, logoFile) {
+  const fd = new FormData();
 
-  if (form.commercialReg?.trim()) {
-    payload.commercial_register_number = form.commercialReg.trim();
+  fd.append('user_name', form.managerName.trim());
+  fd.append('email', form.managerEmail.trim());
+  fd.append('user_phone', form.managerPhone.trim());
+  fd.append('name', form.storeName.trim());
+  fd.append('store_email', form.storeEmail.trim());
+  fd.append('password', form.password);
+  fd.append('phone', form.storePhone.trim());
+  fd.append('entity_type', form.entityType);
+  fd.append('type', form.storeType);
+
+  if (form.entityType === 'company' && form.commercialReg?.trim()) {
+    fd.append('commercial_register_number', form.commercialReg.trim());
   }
+
   if (form.description?.trim()) {
-    payload.description = form.description.trim();
+    fd.append('description', form.description.trim());
   }
+
   if (form.notes?.trim()) {
-    payload.notes = form.notes.trim();
-  }
-  if (logoFile) {
-    payload.logo = await fileToBase64(logoFile);
+    fd.append('notes', form.notes.trim());
   }
 
   if (isLocalStoreType(form.storeType)) {
-    payload.zone_id = Number(form.zoneId);
-    payload.google_map_url = form.googleMapUrl.trim();
+    fd.append('zone_id', String(Number(form.zoneId)));
+    fd.append('google_map_url', form.googleMapUrl.trim());
   }
 
-  return payload;
+  if (logoFile) {
+    fd.append('logo', logoFile);
+  }
+
+  return fd;
 }
 
 /**
  * POST /api/stores/join
+ * إرسال طلب انضمام — يُرسل رمز التحقق (OTP) إلى إيميل المتجر
  */
 export async function submitStoreJoinRequest(form, logoFile) {
-  const body = await buildStoreJoinPayload(form, logoFile);
+  const body = buildStoreJoinFormData(form, logoFile);
   return apiRequest(API_ENDPOINTS.storesJoin, {
     method: 'POST',
     body,
+    auth: false,
   });
 }
 
@@ -77,17 +81,24 @@ export async function submitStoreJoinRequest(form, logoFile) {
  * GET /api/zones — قائمة المناطق (للمتاجر المحلية)
  */
 export async function fetchZones() {
-  const res = await apiRequest('/zones');
+  const res = await apiRequest(API_ENDPOINTS.zones, { auth: false });
   return res?.data ?? res ?? [];
 }
 
 const translateValidationMessage = (message, field) => {
   const label = FIELD_LABELS[field] || field;
   if (/required/i.test(message)) return `${label} مطلوب`;
+  if (/required_if/i.test(message)) return `${label} مطلوب`;
   if (/email/i.test(message)) return `${label} غير صالح`;
   if (/min/i.test(message) && field === 'password') return 'كلمة المرور يجب أن تكون 8 أحرف على الأقل';
+  if (/max/i.test(message) && field === 'notes') return 'الملاحظات يجب ألا تتجاوز 2000 حرف';
   if (/unique/i.test(message)) return `${label} مستخدم مسبقاً`;
+  if (/size/i.test(message) && field === 'otp') return 'رمز التحقق يجب أن يكون 6 أرقام';
+  if (/exists/i.test(message) && field === 'store_email') return 'لا يوجد طلب انضمام بهذا الإيميل';
   if (/in:/i.test(message) && field === 'type') return 'نوع المتجر غير صالح';
+  if (/in:/i.test(message) && field === 'entity_type') return 'نوع الكيان غير صالح';
+  if (/mimes/i.test(message) && field === 'logo') return 'صيغة اللوقو غير مدعومة (JPEG, PNG, WEBP فقط)';
+  if (/max/i.test(message) && field === 'logo') return 'حجم اللوقo يجب ألا يتجاوز 2 ميغابايت';
   return message.replace(/^\./, '').trim();
 };
 

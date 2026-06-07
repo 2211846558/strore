@@ -23,17 +23,18 @@ export const getStoredStoreId = () => {
 
 export const getActiveStore = (user) => {
   if (!user) return null;
+  if (user.store) return user.store;
   const owned = user.owned_stores || user.ownedStores || [];
   if (owned.length > 0) return owned[0];
-  return user.store || null;
+  return null;
 };
 
 export const persistAuthSession = ({ token, user }) => {
   localStorage.setItem(TOKEN_KEY, token);
   localStorage.setItem(USER_KEY, JSON.stringify(user));
-  const store = getActiveStore(user);
-  if (store?.id) {
-    localStorage.setItem(STORE_ID_KEY, String(store.id));
+  const storeId = user.store_id || getActiveStore(user)?.id;
+  if (storeId) {
+    localStorage.setItem(STORE_ID_KEY, String(storeId));
   }
 };
 
@@ -45,11 +46,16 @@ export const clearAuthSession = () => {
 
 /**
  * POST /api/v1/auth/store/login
+ * تسجيل دخول مدير المتجر
  */
-export async function storeLogin({ email, password }) {
+export async function storeLogin({ email, password, storeCode }) {
   const res = await apiRequest(API_ENDPOINTS.storeLogin, {
     method: 'POST',
-    body: { email, password },
+    body: {
+      email,
+      password,
+      store_code: storeCode,
+    },
   });
 
   const payload = res?.data ?? res;
@@ -58,6 +64,22 @@ export async function storeLogin({ email, password }) {
   }
 
   return payload;
+}
+
+/**
+ * POST /api/v1/auth/store/verify-join
+ * التحقق من إيميل المتجر بعد تقديم طلب الانضمام
+ * body: { store_email: string, otp: string }
+ */
+export async function verifyStoreJoin({ storeEmail, otp }) {
+  return apiRequest(API_ENDPOINTS.storeVerifyJoin, {
+    method: 'POST',
+    body: {
+      store_email: storeEmail,
+      otp: String(otp),
+    },
+    auth: false,
+  });
 }
 
 /**
