@@ -95,6 +95,46 @@ export const WalletProvider = ({ children }) => {
     return value;
   }, [storeId, balance]);
 
+  const rechargeViaStripe = useCallback(async ({ paymentMethodId, amount, cardLast4 }) => {
+    const value = Number(amount);
+    if (!paymentMethodId) {
+      throw new Error('تعذّر الحصول على معرّف الدفع من Stripe');
+    }
+    if (!value || value <= 0) {
+      throw new Error('يرجى إدخال مبلغ صالح');
+    }
+    if (!storeId) {
+      throw new Error('لم يتم تحديد المتجر. يرجى تسجيل الدخول مرة أخرى.');
+    }
+
+    const res = await chargeStoreWallet({
+      storeId,
+      amount: value,
+      paymentMethodId,
+    });
+
+    const newBalance = Number(res?.balance ?? balance + value);
+    setBalance(newBalance);
+
+    const masked = cardLast4 ? `****${cardLast4}` : 'Stripe';
+
+    setTransactions((prev) => [
+      {
+        id: Date.now(),
+        type: 'credit',
+        amount: value,
+        description: `شحن المحفظة - بطاقة: ${masked}`,
+        date: new Date().toISOString().slice(0, 10),
+        time: new Date().toLocaleTimeString('ar-LY', { hour: '2-digit', minute: '2-digit' }),
+        ref: null,
+      },
+      ...prev,
+    ]);
+
+    await refreshWallet();
+    return value;
+  }, [storeId, balance, refreshWallet]);
+
   const value = useMemo(
     () => ({
       balance,
@@ -102,9 +142,10 @@ export const WalletProvider = ({ children }) => {
       transactions,
       loading,
       rechargeViaSadad,
+      rechargeViaStripe,
       refreshWallet,
     }),
-    [balance, status, transactions, loading, rechargeViaSadad, refreshWallet]
+    [balance, status, transactions, loading, rechargeViaSadad, rechargeViaStripe, refreshWallet]
   );
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;

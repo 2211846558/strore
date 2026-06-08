@@ -1,0 +1,67 @@
+.plans-onboarding-layout {
+  min-height: 100vh;
+  background: var(--bg-main);
+  display: flex;
+  flex-direction: column;
+}
+
+.plans-onboarding-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 32px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-card);
+}
+
+.plans-onboarding-brand {
+  font-size: 28px;
+  font-weight: 900;
+  color: var(--text-primary);
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+}
+
+.plans-onboarding-brand .brand-dot {
+  color: var(--primary);
+}
+
+.plans-onboarding-logout {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.plans-onboarding-logout:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.plans-onboarding-main {
+  flex: 1;
+  padding: 32px;
+  max-width: 1200px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+@media (max-width: 768px) {
+  .plans-onboarding-header {
+    padding: 16px 20px;
+  }
+
+  .plans-onboarding-main {
+    padding: 20px 16px;
+  }
+}

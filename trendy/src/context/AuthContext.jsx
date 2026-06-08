@@ -48,9 +48,16 @@ export const AuthProvider = ({ children }) => {
   const updateStoreInSession = useCallback((storeData) => {
     if (!user) return;
     const owned = user.owned_stores || user.ownedStores || [];
-    const updatedOwned = owned.map((s) => (s.id === storeData.id ? { ...s, ...storeData } : s));
+    const updatedOwned = owned.map((s) =>
+      s.id === storeData.id ? { ...s, ...storeData } : s
+    );
+    const nextStore =
+      user.store && (user.store.id === storeData.id || user.store_id === storeData.id)
+        ? { ...user.store, ...storeData }
+        : user.store;
     const nextUser = {
       ...user,
+      store: nextStore,
       owned_stores: updatedOwned.length ? updatedOwned : user.owned_stores,
       ownedStores: updatedOwned.length ? updatedOwned : user.ownedStores,
     };
@@ -59,19 +66,21 @@ export const AuthProvider = ({ children }) => {
   }, [user]);
 
   const store = useMemo(() => getActiveStore(user), [user]);
+  const hasActivePlan = store?.status === 'active';
 
   const value = useMemo(
     () => ({
       user,
       store,
       storeId,
+      hasActivePlan,
       isAuthenticated,
       isLoading,
       login,
       logout,
       updateStoreInSession,
     }),
-    [user, store, storeId, isAuthenticated, isLoading, login, logout, updateStoreInSession]
+    [user, store, storeId, hasActivePlan, isAuthenticated, isLoading, login, logout, updateStoreInSession]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

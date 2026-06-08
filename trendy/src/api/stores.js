@@ -136,7 +136,11 @@ export function getApiErrorMessage(error, fallback = 'تعذّر إرسال ال
     }
   }
   if (error?.message) {
-    return error.message.replace(/^\./, '').trim();
+    const msg = error.message.replace(/^\./, '').trim();
+    if (/no api key provided/i.test(msg) || /Stripe::setApiKey/i.test(msg)) {
+      return 'بوابة الدفع غير مهيّأة على الخادم. يرجى التواصل مع الدعم الفني.';
+    }
+    return msg;
   }
   return fallback;
 }

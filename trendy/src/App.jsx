@@ -1,7 +1,9 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { WalletProvider } from './context/WalletContext';
+import { StripeProvider } from './providers/StripeProvider';
 import DashboardLayout from './components/layout/DashboardLayout';
+import PlansOnboardingLayout from './components/layout/PlansOnboardingLayout';
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
 import Join from './pages/Join';
@@ -20,11 +22,29 @@ import Chat from './pages/Chat';
 import './App.css';
 
 function AppRoutes() {
-  const { isAuthenticated, logout } = useAuth();
+  const { isAuthenticated, hasActivePlan, logout } = useAuth();
 
   const handleLogout = async () => {
     await logout();
   };
+
+  const authHome = hasActivePlan ? '/' : '/plans';
+
+  if (isAuthenticated && !hasActivePlan) {
+    return (
+      <Routes>
+        <Route
+          path="/plans"
+          element={
+            <PlansOnboardingLayout onLogout={handleLogout}>
+              <Plans onboarding />
+            </PlansOnboardingLayout>
+          }
+        />
+        <Route path="*" element={<Navigate to="/plans" replace />} />
+      </Routes>
+    );
+  }
 
   return (
     <Routes>
@@ -34,7 +54,7 @@ function AppRoutes() {
           !isAuthenticated ? (
             <Login />
           ) : (
-            <Navigate to="/" replace />
+            <Navigate to={authHome} replace />
           )
         }
       />
@@ -44,7 +64,7 @@ function AppRoutes() {
           !isAuthenticated ? (
             <Join />
           ) : (
-            <Navigate to="/" replace />
+            <Navigate to={authHome} replace />
           )
         }
       />
@@ -54,7 +74,7 @@ function AppRoutes() {
           !isAuthenticated ? (
             <ForgotPassword />
           ) : (
-            <Navigate to="/" replace />
+            <Navigate to={authHome} replace />
           )
         }
       />
@@ -70,7 +90,6 @@ function AppRoutes() {
         }
       >
         <Route index element={<Dashboard />} />
-        <Route path="plans" element={<Plans />} />
         <Route path="marketing" element={<Marketing />} />
         <Route path="products" element={<Products />} />
         <Route path="inventory" element={<Inventory />} />
@@ -91,11 +110,13 @@ function App() {
   return (
     <AuthProvider>
       <WalletProvider>
-        <BrowserRouter>
-          <div className="app-container">
-            <AppRoutes />
-          </div>
-        </BrowserRouter>
+        <StripeProvider>
+          <BrowserRouter>
+            <div className="app-container">
+              <AppRoutes />
+            </div>
+          </BrowserRouter>
+        </StripeProvider>
       </WalletProvider>
     </AuthProvider>
   );

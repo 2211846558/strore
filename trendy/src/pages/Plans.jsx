@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Search } from 'lucide-react';
 import PlanCard from '../components/plans/PlanCard';
 import SubscriptionCard from '../components/plans/SubscriptionCard';
-import PlanConfirmModal from '../components/plans/PlanConfirmModal';
+import PlanSubscribeWalletModal from '../components/plans/PlanSubscribeWalletModal';
 import { fetchPlans } from '../api/plans';
 import { getApiErrorMessage } from '../api/stores';
+import { useAuth } from '../context/AuthContext';
 import './Plans.css';
 
 const mapPlanFromApi = (plan) => ({
@@ -16,27 +18,19 @@ const mapPlanFromApi = (plan) => ({
   isPopular: false,
 });
 
-const Plans = () => {
+const Plans = ({ onboarding = false }) => {
+  const navigate = useNavigate();
+  const { storeId, updateStoreInSession } = useAuth();
   const [activeTab, setActiveTab] = useState('available');
   const [searchQuery, setSearchQuery] = useState('');
-  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [availablePlans, setAvailablePlans] = useState([]);
   const [loadingPlans, setLoadingPlans] = useState(true);
   const [plansError, setPlansError] = useState('');
   const [toast, setToast] = useState(null);
 
-  const [mySubscriptions, setMySubscriptions] = useState([
-    {
-      id: 1,
-      title: 'الخطة الأساسية',
-      price: '100',
-      status: 'نشط',
-      dateRange: { start: '16-04-2026', end: '16-05-2026' },
-      statusText: 'الاشتراك نشط حالياً',
-      isExpired: false,
-    },
-  ]);
+  const [mySubscriptions, setMySubscriptions] = useState([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -66,7 +60,7 @@ const Plans = () => {
 
   const handleSubscribeClick = (plan) => {
     setSelectedPlan(plan);
-    setIsConfirmModalOpen(true);
+    setIsWalletModalOpen(true);
   };
 
   const isPlanActive = (planTitle) =>
@@ -119,7 +113,12 @@ const Plans = () => {
     });
 
     showToast(`تم الاشتراك في ${plan.title} بنجاح`);
-    setIsConfirmModalOpen(false);
+    setIsWalletModalOpen(false);
+
+    if (onboarding && storeId) {
+      updateStoreInSession({ id: storeId, status: 'active' });
+      navigate('/');
+    }
   };
 
   const filteredAvailablePlans = availablePlans.filter((plan) =>
@@ -135,7 +134,11 @@ const Plans = () => {
       <header className="page-header plans-header">
         <div className="header-title-wrapper">
           <h1 className="page-title">إدارة الخطط</h1>
-          <p className="page-subtitle">عرض وإدارة خطط الاشتراك المتاحة للمتجر</p>
+          <p className="page-subtitle">
+            {onboarding
+              ? 'اختر خطة اشتراك للبدء في استخدام لوحة تحكم المتجر'
+              : 'عرض وإدارة خطط الاشتراك المتاحة للمتجر'}
+          </p>
         </div>
       </header>
 
@@ -212,11 +215,12 @@ const Plans = () => {
         )}
       </div>
 
-      <PlanConfirmModal
-        isOpen={isConfirmModalOpen}
-        onClose={() => setIsConfirmModalOpen(false)}
+      <PlanSubscribeWalletModal
+        isOpen={isWalletModalOpen}
+        onClose={() => setIsWalletModalOpen(false)}
         plan={selectedPlan}
         onConfirm={handleConfirmSubscription}
+        onToast={showToast}
       />
 
       {toast && (

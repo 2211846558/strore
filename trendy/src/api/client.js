@@ -24,7 +24,13 @@ export async function apiRequest(path, { method = 'GET', body, headers = {}, aut
     config.body = isFormData ? body : JSON.stringify(body);
   }
 
-  const response = await fetch(url, config);
+  const response = await fetch(url, config).catch(() => {
+    const error = new Error(
+      'تعذّر الاتصال بالخادم. تأكد من تشغيل الباكند وأن عنوان API صحيح في ملف .env'
+    );
+    error.isNetworkError = true;
+    throw error;
+  });
 
   let data = null;
   const contentType = response.headers.get('content-type') || '';

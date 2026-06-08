@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, 
-  CreditCard, 
   Megaphone, 
   Package, 
   Box, 
@@ -28,7 +27,6 @@ const Sidebar = ({ onLogout }) => {
 
   const menuItems = [
     { title: 'لوحة التحكم', icon: LayoutDashboard, path: '/' },
-    { title: 'إدارة الخطط', icon: CreditCard, path: '/plans' },
     { title: 'التسويق والمحتوى', icon: Megaphone, path: '/marketing' },
     { title: 'المنتجات', icon: Package, path: '/products' },
     { title: 'المخزون', icon: Box, path: '/inventory' },

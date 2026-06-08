@@ -18,7 +18,9 @@ export async function getWalletLogs() {
 }
 
 /**
- * POST /api/stores/wallet/charge — body: { store_id, amount, payment_method_id }
+ * POST /api/stores/wallet/charge — api.md
+ * body: { store_id, amount, payment_method_id }
+ * payment_method_id: معرّف Stripe (مثل pm_card_visa)
  */
 export async function chargeStoreWallet({ storeId, amount, paymentMethodId }) {
   return apiRequest(API_ENDPOINTS.storeWalletCharge, {
