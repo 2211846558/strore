@@ -12,7 +12,6 @@ export function getBackendOrigin() {
 
 /**
  * يصحّح روابط الصور القادمة من الباكند (storage/asset)
- * دون تعديل الـ API — يعالج المسارات النسبية و localhost بدون منفذ.
  */
 export function resolveMediaUrl(url) {
   if (!url || typeof url !== 'string') return null;
@@ -37,10 +36,6 @@ export function resolveMediaUrl(url) {
     ) {
       return `${apiOrigin.origin}${parsed.pathname}${parsed.search}${parsed.hash}`;
     }
-
-    if (parsed.hostname === 'localhost' && !parsed.port && !apiOrigin.port) {
-      return trimmed;
-    }
   } catch {
     return trimmed;
   }
@@ -50,52 +45,36 @@ export function resolveMediaUrl(url) {
 
 function extractStorageFilename(url) {
   if (!url) return null;
-  const match = String(url).match(/\/storage\/([^/]+)$/);
+  const match = String(url).match(/\/storage\/(?:products\/\d+\/)?([^/]+)$/);
   return match ? match[1] : null;
 }
 
-/**
- * الباكند يُرجع أحياناً /storage/{filename} فقط بينما الملف الفعلي في
- * storage/products/{productId}/{filename} — نُعيد بناء المسار من الفرونت.
- */
 export function resolveProductImageUrl(url, productId) {
   const candidates = getProductImageCandidates(url, productId);
   return candidates[0] || null;
 }
 
 /**
- * قائمة روابط محتملة للصورة — نجرّبها بالترتيب عند فشل التحميل.
+ * قائمة روابط محتملة للصورة — المسار الصحيح أولاً.
  */
 export function getProductImageCandidates(url, productId) {
-  if (!url || !productId) {
-    const single = resolveMediaUrl(url);
-    return single ? [single] : [];
-  }
+  if (!url) return [];
 
-  const resolved = resolveMediaUrl(url);
-  if (!resolved) return [];
-
-  if (resolved.includes(`/products/${productId}/`)) {
-    return import.meta.env.DEV
-      ? [resolved.replace(/^https?:\/\/[^/]+/, ''), resolved]
-      : [resolved];
-  }
-
-  const filename = extractStorageFilename(resolved);
-  if (!filename) return [resolved];
-
-  const correctPath = `/storage/products/${productId}/${filename}`;
   const origin = getBackendOrigin();
-  const absolute = `${origin}${correctPath}`;
+  const resolved = resolveMediaUrl(url);
 
-  const candidates = [];
-  if (import.meta.env.DEV) candidates.push(correctPath);
-  candidates.push(absolute);
-  if (resolved !== absolute && !resolved.endsWith(correctPath)) {
-    candidates.push(resolved);
+  if (productId) {
+    const filename = extractStorageFilename(resolved || url);
+    if (filename) {
+      const correctPath = `/storage/products/${productId}/${filename}`;
+      const absolute = `${origin}${correctPath}`;
+      const proxied = correctPath;
+      return [...new Set([absolute, proxied, resolved, url].filter(Boolean))];
+    }
   }
 
-  return [...new Set(candidates.filter(Boolean))];
+  if (resolved) return [resolved];
+  return [url];
 }
 
 /**
@@ -154,7 +133,7 @@ export function resolveStoreLogoUrl(logo, storeId) {
   return candidates[0] || null;
 }
 
-/** صورة بديلة محلية — بدون نص عربي أو طلب خارجي */
+/** صورة بديلة محلية */
 export function productPlaceholderImage() {
   const svg =
     '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400">' +

@@ -36,7 +36,7 @@ const ProductCard = ({ product, onEdit, onArchive, onAddVariant }) => {
   const imgSrc =
     candidateIndex < candidates.length
       ? candidates[candidateIndex]
-      : currentSlide?.url || productPlaceholderImage();
+      : productPlaceholderImage();
 
   const handleImageError = () => {
     if (candidateIndex < candidates.length - 1) {
