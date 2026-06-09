@@ -1,5 +1,6 @@
 import { apiRequest } from './client';
 import { API_ENDPOINTS } from './config';
+import { extractListFromResponse } from './finance';
 
 /**
  * GET /api/wallet/balance
@@ -10,11 +11,16 @@ export async function getWalletBalance() {
 }
 
 /**
- * GET /api/wallet/logs
+ * GET /api/wallet/logs — محفظة المستخدم (للعملاء/السائقين)
+ * لمدير المتجر استخدم fetchAllTransactions من finance.js
  */
-export async function getWalletLogs() {
-  const res = await apiRequest(API_ENDPOINTS.walletLogs);
-  return res?.data ?? res ?? [];
+export async function getWalletLogs({ perPage = 50, page = 1 } = {}) {
+  const query = new URLSearchParams({
+    per_page: String(perPage),
+    page: String(page),
+  });
+  const res = await apiRequest(`${API_ENDPOINTS.walletLogs}?${query}`);
+  return extractListFromResponse(res);
 }
 
 /**

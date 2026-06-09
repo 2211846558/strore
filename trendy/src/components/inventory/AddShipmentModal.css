@@ -129,6 +129,28 @@
   color: var(--text-secondary);
 }
 
+.category-display {
+  min-height: 46px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-card);
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+}
+
+.category-display.empty {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.category-display.filled {
+  color: var(--text-primary);
+  font-weight: 700;
+  background-color: var(--bg-input);
+}
+
 .checkbox-grid {
   display: grid;
   gap: 10px;
@@ -172,6 +194,43 @@
   margin: 0;
 }
 
+.catalog-loading,
+.catalog-empty,
+.shipment-form-note,
+.form-error {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.catalog-loading {
+  color: var(--text-secondary);
+}
+
+.catalog-empty,
+.shipment-form-note {
+  color: #f59e0b;
+}
+
+.shipment-batch-field {
+  margin-bottom: 4px;
+}
+
+.required-mark {
+  color: #ef4444;
+}
+
+.field-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.form-error {
+  color: #ef4444;
+  margin: 0;
+}
+
 .add-item-btn {
   display: flex;
   align-items: center;
@@ -196,6 +255,13 @@
 .add-item-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.add-item-hint {
+  margin: 0;
+  font-size: 12px;
+  color: #f59e0b;
+  line-height: 1.5;
 }
 
 .shipment-items-section {

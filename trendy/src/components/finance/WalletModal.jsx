@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Wallet, Plus, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
 import SadadRechargeModal from './SadadRechargeModal';
 import { useWallet } from '../../context/WalletContext';
@@ -6,15 +6,20 @@ import { getApiErrorMessage } from '../../api/stores';
 import './WalletModal.css';
 
 const WalletModal = ({ isOpen, onClose, onToast }) => {
-  const { balance, status, transactions, rechargeViaSadad } = useWallet();
-  const [sadadOpen, setSadadOpen] = useState(false);
+  const { balance, status, transactions, loading, rechargeViaStripe, refreshWallet } = useWallet();
+  const [rechargeOpen, setRechargeOpen] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) refreshWallet();
+  }, [isOpen, refreshWallet]);
 
   if (!isOpen) return null;
 
-  const handleSadadConfirm = async (data) => {
+  const handleRechargeConfirm = async ({ paymentMethodId, amount, cardLast4 }) => {
     try {
-      const amount = await rechargeViaSadad(data);
-      onToast?.(`تم شحن المحفظة بمبلغ ${amount.toLocaleString()} د.ل بنجاح`);
+      const charged = await rechargeViaStripe({ paymentMethodId, amount, cardLast4 });
+      await refreshWallet();
+      onToast?.(`تم شحن المحفظة بمبلغ ${charged.toLocaleString()} د.ل بنجاح`);
     } catch (err) {
       throw new Error(getApiErrorMessage(err, 'تعذّر إتمام عملية الشحن'));
     }
@@ -37,7 +42,7 @@ const WalletModal = ({ isOpen, onClose, onToast }) => {
               <span className="wallet-status-badge">{status}</span>
             </div>
             <p className="wallet-balance-amount">{balance.toFixed(2)} د.ل</p>
-            <button type="button" className="wallet-recharge-btn" onClick={() => setSadadOpen(true)}>
+            <button type="button" className="wallet-recharge-btn" onClick={() => setRechargeOpen(true)}>
               <Plus size={18} />
               شحن الرصيد
             </button>
@@ -45,7 +50,9 @@ const WalletModal = ({ isOpen, onClose, onToast }) => {
 
           <div className="wallet-transactions">
             <h3>آخر المعاملات</h3>
-            {transactions.length === 0 ? (
+            {loading ? (
+              <p className="wallet-empty">جاري تحميل المعاملات...</p>
+            ) : transactions.length === 0 ? (
               <p className="wallet-empty">لا توجد معاملات بعد</p>
             ) : (
               <ul className="wallet-tx-list">
@@ -76,7 +83,7 @@ const WalletModal = ({ isOpen, onClose, onToast }) => {
             <div>
               <p className="wallet-info-title">معلومات المحفظة</p>
               <p className="wallet-info-text">
-                يمكنك شحن المحفظة عبر سداد واستخدام الرصيد للاشتراك في الخطط ودفع رسوم المنصة.
+                يمكنك شحن المحفظة ببطاقة بنكية (Stripe) واستخدام الرصيد للاشتراك في الخطط ودفع رسوم المنصة.
               </p>
             </div>
           </div>
@@ -84,9 +91,9 @@ const WalletModal = ({ isOpen, onClose, onToast }) => {
       </div>
 
       <SadadRechargeModal
-        isOpen={sadadOpen}
-        onClose={() => setSadadOpen(false)}
-        onConfirm={handleSadadConfirm}
+        isOpen={rechargeOpen}
+        onClose={() => setRechargeOpen(false)}
+        onConfirm={handleRechargeConfirm}
       />
     </>
   );

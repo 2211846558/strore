@@ -1,35 +1,9 @@
 import React, { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react';
 import { useAuth } from './AuthContext';
-import {
-  getWalletBalance,
-  getWalletLogs,
-  chargeStoreWallet,
-} from '../api/wallet';
-import { getApiErrorMessage } from '../api/stores';
+import { getWalletBalance, chargeStoreWallet } from '../api/wallet';
+import { fetchAllTransactions, mapToWalletLog } from '../api/finance';
 
 const WalletContext = createContext(null);
-
-const mapLogToTransaction = (log) => {
-  const amount = Math.abs(Number(log.net_amount ?? log.amount ?? 0));
-  const isCredit = ['deposit', 'credit', 'top_up', 'top-up'].includes(
-    String(log.transaction_type || log.type || '').toLowerCase()
-  ) || Number(log.net_amount ?? log.amount) > 0;
-
-  const dateObj = log.date ? new Date(log.date) : new Date();
-  return {
-    id: log.transaction_id ?? log.id ?? Date.now(),
-    type: isCredit ? 'credit' : 'debit',
-    amount,
-    description: log.description || 'معاملة مالية',
-    date: dateObj.toISOString().slice(0, 10),
-    time: dateObj.toLocaleTimeString('ar-LY', { hour: '2-digit', minute: '2-digit' }),
-    ref: log.reference_details?.order_number
-      ? `#${log.reference_details.order_number}`
-      : log.reference_id
-        ? `#${log.reference_id}`
-        : null,
-  };
-};
 
 export const WalletProvider = ({ children }) => {
   const { isAuthenticated, storeId } = useAuth();
@@ -42,13 +16,12 @@ export const WalletProvider = ({ children }) => {
     if (!isAuthenticated) return;
     setLoading(true);
     try {
-      const [balanceRes, logsRes] = await Promise.all([
+      const [balanceRes, txResult] = await Promise.all([
         getWalletBalance(),
-        getWalletLogs(),
+        fetchAllTransactions({ perPage: 50 }),
       ]);
       setBalance(Number(balanceRes?.balance ?? 0));
-      const logs = Array.isArray(logsRes) ? logsRes : logsRes?.data ?? [];
-      setTransactions(logs.map(mapLogToTransaction));
+      setTransactions(txResult.transactions.map(mapToWalletLog));
     } catch {
       // يبقى الرصيد الحالي عند فشل التحميل
     } finally {
@@ -59,41 +32,6 @@ export const WalletProvider = ({ children }) => {
   useEffect(() => {
     refreshWallet();
   }, [refreshWallet, storeId]);
-
-  const rechargeViaSadad = useCallback(async ({ phone, birthYear, amount }) => {
-    const value = Number(amount);
-    if (!phone || !birthYear || !value || value <= 0) {
-      throw new Error('يرجى تعبئة جميع بيانات الشحن');
-    }
-    if (!storeId) {
-      throw new Error('لم يتم تحديد المتجر. يرجى تسجيل الدخول مرة أخرى.');
-    }
-
-    const paymentMethodId = `sadad:${phone}:${birthYear}`;
-    const res = await chargeStoreWallet({
-      storeId,
-      amount: value,
-      paymentMethodId,
-    });
-
-    const newBalance = Number(res?.balance ?? balance + value);
-    setBalance(newBalance);
-
-    setTransactions((prev) => [
-      {
-        id: Date.now(),
-        type: 'credit',
-        amount: value,
-        description: `شحن المحفظة عبر sadad - هاتف: ${phone}`,
-        date: new Date().toISOString().slice(0, 10),
-        time: new Date().toLocaleTimeString('ar-LY', { hour: '2-digit', minute: '2-digit' }),
-        ref: `سداد-${birthYear}`,
-      },
-      ...prev,
-    ]);
-
-    return value;
-  }, [storeId, balance]);
 
   const rechargeViaStripe = useCallback(async ({ paymentMethodId, amount, cardLast4 }) => {
     const value = Number(amount);
@@ -116,21 +54,6 @@ export const WalletProvider = ({ children }) => {
     const newBalance = Number(res?.balance ?? balance + value);
     setBalance(newBalance);
 
-    const masked = cardLast4 ? `****${cardLast4}` : 'Stripe';
-
-    setTransactions((prev) => [
-      {
-        id: Date.now(),
-        type: 'credit',
-        amount: value,
-        description: `شحن المحفظة - بطاقة: ${masked}`,
-        date: new Date().toISOString().slice(0, 10),
-        time: new Date().toLocaleTimeString('ar-LY', { hour: '2-digit', minute: '2-digit' }),
-        ref: null,
-      },
-      ...prev,
-    ]);
-
     await refreshWallet();
     return value;
   }, [storeId, balance, refreshWallet]);
@@ -141,11 +64,10 @@ export const WalletProvider = ({ children }) => {
       status,
       transactions,
       loading,
-      rechargeViaSadad,
       rechargeViaStripe,
       refreshWallet,
     }),
-    [balance, status, transactions, loading, rechargeViaSadad, rechargeViaStripe, refreshWallet]
+    [balance, status, transactions, loading, rechargeViaStripe, refreshWallet]
   );
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;

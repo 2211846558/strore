@@ -121,3 +121,73 @@
 .sadad-submit:hover:not(:disabled) {
   opacity: 0.95;
 }
+
+.sadad-field-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #e5e7eb;
+  text-align: right;
+}
+
+.sadad-stripe-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sadad-stripe-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.sadad-stripe-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: right;
+}
+
+.sadad-stripe-label {
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+.sadad-stripe-input {
+  background: #242240;
+  border: 1px solid #3a3658;
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+
+.sadad-stripe-input:focus-within {
+  border-color: #6366f1;
+}
+
+.sadad-hint {
+  font-size: 12px;
+  color: #9ca3af;
+  margin: 0;
+}
+
+.sadad-secure-note {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #9ca3af;
+  margin: 0;
+}
+
+.sadad-stripe-missing {
+  text-align: center;
+}
+
+.sadad-stripe-missing code {
+  font-size: 11px;
+  word-break: break-all;
+}

@@ -395,3 +395,18 @@
     font-size: 12px;
   }
 }
+
+.finance-error {
+  margin: 0 0 16px;
+  color: #ef4444;
+  font-size: 14px;
+}
+
+.finance-loading-chart {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 300px;
+  color: var(--text-secondary);
+  font-size: 14px;
+}

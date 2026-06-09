@@ -166,6 +166,52 @@
   color: var(--text-secondary);
 }
 
+.status-badge.cancelled {
+  background-color: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+.inventory-error {
+  margin: 0 0 16px;
+  color: #ef4444;
+  font-size: 14px;
+}
+
+.action-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.inventory-confirm-dialog {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 24px;
+  width: min(420px, 90vw);
+  text-align: right;
+}
+
+.inventory-confirm-dialog h3 {
+  margin: 0 0 10px;
+  font-size: 18px;
+}
+
+.inventory-confirm-dialog p {
+  margin: 0 0 20px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.inventory-confirm-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-start;
+}
+
+.delete-confirm-btn {
+  background: #ef4444 !important;
+}
+
 .action-buttons {
   display: flex;
   gap: 8px;

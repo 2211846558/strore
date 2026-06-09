@@ -20,6 +20,9 @@ const formatAmount = (value) => {
 };
 
 const getCommission = (transaction) => {
+  if (transaction.fee != null && transaction.fee > 0) {
+    return formatAmount(transaction.fee);
+  }
   if (transaction.type === 'مبيعات') return formatAmount(transaction.amount * 0.05);
   return 0;
 };
@@ -45,7 +48,7 @@ const TransactionDetailModal = ({ isOpen, onClose, transaction }) => {
   if (!isOpen || !transaction) return null;
 
   const commission = getCommission(transaction);
-  const hasCommission = transaction.type === 'مبيعات';
+  const hasCommission = commission > 0;
   const netSign = transaction.sign === '+' ? '+' : '-';
   const banner = getStatusBanner(transaction.status);
   const BannerIcon = banner.icon;
@@ -93,7 +96,7 @@ const TransactionDetailModal = ({ isOpen, onClose, transaction }) => {
               </div>
               {hasCommission && (
                 <div className="financial-row">
-                  <span className="financial-label">عمولة المنصة (5%)</span>
+                  <span className="financial-label">عمولة المنصة</span>
                   <span className="financial-value commission">- {commission} د.ل</span>
                 </div>
               )}

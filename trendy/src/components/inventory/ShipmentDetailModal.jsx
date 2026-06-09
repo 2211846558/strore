@@ -20,6 +20,10 @@ const ShipmentDetailModal = ({ isOpen, onClose, shipment }) => {
         <div className="shipment-detail-body">
           <div className="detail-info-row">
             <div className="detail-info-item">
+              <span className="detail-label">رقم الدفعة</span>
+              <span className="detail-value">{shipment.batchNumber || shipment.code || '—'}</span>
+            </div>
+            <div className="detail-info-item">
               <span className="detail-label">التاريخ</span>
               <span className="detail-value">{shipment.date}</span>
             </div>
@@ -27,7 +31,11 @@ const ShipmentDetailModal = ({ isOpen, onClose, shipment }) => {
               <span className="detail-label">الحالة</span>
               <span
                 className={`status-badge ${
-                  shipment.status === 'مستلمة' ? 'received' : 'pending'
+                  shipment.statusRaw === 'received'
+                    ? 'received'
+                    : shipment.statusRaw === 'cancelled'
+                      ? 'cancelled'
+                      : 'pending'
                 }`}
               >
                 {shipment.status}
@@ -42,7 +50,8 @@ const ShipmentDetailModal = ({ isOpen, onClose, shipment }) => {
                 <div className="detail-item-info">
                   <span className="detail-item-name">{item.name}</span>
                   <span className="detail-item-meta">
-                    التصنيف: {item.category} | اللون: {item.color} | المقاس: {item.size}
+                    التصنيف: {item.category} | التنوع:{' '}
+                    {item.variantLabel || `${item.color} / ${item.size}`}
                   </span>
                 </div>
                 <div className="detail-item-qty">

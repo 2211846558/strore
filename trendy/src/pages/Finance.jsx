@@ -1,5 +1,16 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Search, Eye, Wallet, Download, DollarSign, TrendingUp, ArrowUpRight, CreditCard, Landmark } from 'lucide-react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import {
+  Search,
+  Eye,
+  Wallet,
+  Download,
+  DollarSign,
+  TrendingUp,
+  ArrowUpRight,
+  CreditCard,
+  Landmark,
+  CheckCircle2,
+} from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
@@ -7,100 +18,123 @@ import WalletModal from '../components/finance/WalletModal';
 import TransactionDetailModal from '../components/finance/TransactionDetailModal';
 import { useWallet } from '../context/WalletContext';
 import { fetchCustodySummary } from '../api/custody';
+import {
+  fetchAllTransactions,
+  fetchTransactionDetails,
+  fetchProfitOverview,
+  fetchMonthlyRevenueChart,
+  exportFinanceReport,
+  filterTransactionsByType,
+  FINANCE_TYPE_OPTIONS,
+  FINANCE_STATUS_OPTIONS,
+} from '../api/finance';
+import { getApiErrorMessage } from '../api/stores';
 import './Finance.css';
 
-const chartData = [
-  { month: 'يناير', revenue: 45000 },
-  { month: 'فبراير', revenue: 52000 },
-  { month: 'مارس', revenue: 48000 },
-  { month: 'أبريل', revenue: 62000 },
-  { month: 'مايو', revenue: 69000 },
-];
-
-const initialTransactions = [
-  {
-    id: 1, code: 'TXN001', date: '2026-05-03', time: '14:30',
-    type: 'مبيعات', client: 'محمد أحمد', amount: 450, net: 427.5,
-    status: 'ناجح', sign: '+'
-  },
-  {
-    id: 2, code: 'TXN002', date: '2026-05-03', time: '11:15',
-    type: 'اشتراك', client: 'المنصة', amount: 250, net: 250,
-    status: 'ناجح', sign: '-'
-  },
-  {
-    id: 3, code: 'TXN003', date: '2026-05-02', time: '16:45',
-    type: 'مبيعات', client: 'فاطمة علي', amount: 180, net: 171,
-    status: 'ناجح', sign: '+'
-  },
-  {
-    id: 4, code: 'TXN004', date: '2026-05-02', time: '13:20',
-    type: 'استرداد', client: 'عمر سالم', amount: 85, net: 85,
-    status: 'ناجح', sign: '-'
-  },
-  {
-    id: 5, code: 'TXN005', date: '2026-05-01', time: '10:30',
-    type: 'مبيعات', client: 'سارة محمود', amount: 125, net: 118.75,
-    status: 'معلق', sign: '+'
-  },
-];
+const formatMoney = (value) =>
+  Number(value || 0).toLocaleString('ar-LY', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
 
 const Finance = () => {
   const { balance: walletBalance } = useWallet();
-  const [transactions] = useState(initialTransactions);
+  const [transactions, setTransactions] = useState([]);
+  const [chartData, setChartData] = useState([]);
+  const [profitOverview, setProfitOverview] = useState(null);
+  const [custodySummary, setCustodySummary] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
+  const [loading, setLoading] = useState(true);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [error, setError] = useState('');
   const [isWalletOpen, setIsWalletOpen] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState(null);
   const [toast, setToast] = useState(null);
-  const [custodySummary, setCustodySummary] = useState(null);
-
-  useEffect(() => {
-    fetchCustodySummary()
-      .then(setCustodySummary)
-      .catch(() => {});
-  }, []);
-
-  const showToast = (message) => {
-    setToast(message);
-    setTimeout(() => setToast(null), 2500);
-  };
-
-  const statuses = [
-    { value: 'all', label: 'جميع الحالات' },
-    { value: 'ناجح', label: 'ناجح' },
-    { value: 'معلق', label: 'معلق' },
-    { value: 'فاشل', label: 'فاشل' },
-  ];
-
-  const types = [
-    { value: 'all', label: 'جميع الأنواع' },
-    { value: 'مبيعات', label: 'مبيعات' },
-    { value: 'اشتراك', label: 'اشتراك' },
-    { value: 'استرداد', label: 'استرداد' },
-  ];
-
-  const filteredTransactions = transactions.filter((t) => {
-    const matchSearch =
-      t.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.client.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchStatus = statusFilter === 'all' || t.status === statusFilter;
-    const matchType = typeFilter === 'all' || t.type === typeFilter;
-    return matchSearch && matchStatus && matchType;
-  });
-
-  const totalTransactions = transactions.length;
-  const successfulTransactions = transactions.filter((t) => t.status === 'ناجح').length;
-  const totalRevenue = transactions.reduce((sum, t) => (t.sign === '+' ? sum + t.net : sum - t.net), 0);
-  const platformFee = transactions.filter((t) => t.type === 'مبيعات').reduce((sum, t) => sum + t.amount * 0.05, 0);
-  const currentBalance = walletBalance;
 
   const reportRef = useRef(null);
 
+  const showToast = (message) => {
+    setToast(message);
+    setTimeout(() => setToast(null), 3500);
+  };
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 400);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  const loadFinanceData = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const [txResult, profit, chart, custody] = await Promise.all([
+        fetchAllTransactions({
+          search: debouncedSearch,
+          status: statusFilter !== 'all' ? statusFilter : undefined,
+          perPage: 100,
+        }),
+        fetchProfitOverview(),
+        fetchMonthlyRevenueChart(5),
+        fetchCustodySummary().catch(() => null),
+      ]);
+
+      setTransactions(txResult.transactions);
+      setProfitOverview(profit);
+      setChartData(chart);
+      setCustodySummary(custody);
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'تعذّر تحميل البيانات المالية'));
+      setTransactions([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [debouncedSearch, statusFilter]);
+
+  useEffect(() => {
+    loadFinanceData();
+  }, [loadFinanceData]);
+
+  const filteredTransactions = filterTransactionsByType(transactions, typeFilter);
+
+  const totalTransactions = transactions.length;
+  const successfulTransactions = transactions.filter((t) => t.status === 'ناجح').length;
+  const totalRevenue = Number(
+    profitOverview?.net_profit ?? profitOverview?.total_revenue ?? 0,
+  );
+  const platformFee = transactions.reduce((sum, t) => sum + Number(t.fee || 0), 0);
+  const currentBalance = walletBalance;
+
+  const handleViewTransaction = async (transaction) => {
+    setLoadingDetail(true);
+    try {
+      const detail = await fetchTransactionDetails(transaction.id);
+      setSelectedTransaction(detail);
+    } catch (err) {
+      showToast(getApiErrorMessage(err, 'تعذّر تحميل تفاصيل المعاملة'));
+    } finally {
+      setLoadingDetail(false);
+    }
+  };
+
   const handleExportPDF = async () => {
-    if (!reportRef.current) return;
     showToast('جاري تصدير التقرير...');
+    try {
+      const apiRes = await exportFinanceReport({
+        search: debouncedSearch,
+        status: statusFilter !== 'all' ? statusFilter : undefined,
+      });
+      if (apiRes?.message) {
+        showToast(apiRes.message);
+      }
+    } catch {
+      // التصدير المحلي يعمل حتى لو فشل endpoint الخادم
+    }
+
+    if (!reportRef.current) return;
+
     try {
       const canvas = await html2canvas(reportRef.current, { scale: 2, useCORS: true });
       const imgData = canvas.toDataURL('image/png');
@@ -110,7 +144,7 @@ const Finance = () => {
       pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
       pdf.save('finance-report.pdf');
       showToast('تم تصدير التقرير بنجاح');
-    } catch (err) {
+    } catch {
       showToast('حدث خطأ أثناء التصدير');
     }
   };
@@ -130,7 +164,7 @@ const Finance = () => {
             <span className="stat-label">الرصيد الحالي</span>
             <DollarSign size={20} className="stat-icon blue" />
           </div>
-          <span className="stat-value blue">د.ل {currentBalance.toLocaleString()}</span>
+          <span className="stat-value blue">{formatMoney(currentBalance)} د.ل</span>
           <span className="stat-sub">رصيد المتجر</span>
         </div>
         <div className="stat-card">
@@ -138,16 +172,16 @@ const Finance = () => {
             <span className="stat-label">صافي الإيرادات</span>
             <TrendingUp size={20} className="stat-icon green" />
           </div>
-          <span className="stat-value green">د.ل {totalRevenue.toLocaleString()}</span>
-          <span className="stat-sub">+15% عن الشهر الماضي</span>
+          <span className="stat-value green">{formatMoney(totalRevenue)} د.ل</span>
+          <span className="stat-sub">من أرباح المتجر</span>
         </div>
         <div className="stat-card">
           <div className="stat-header">
             <span className="stat-label">عمولة المنصة</span>
             <ArrowUpRight size={20} className="stat-icon orange" />
           </div>
-          <span className="stat-value orange">د.ل {platformFee.toLocaleString()}</span>
-          <span className="stat-sub">5% من المبيعات</span>
+          <span className="stat-value orange">{formatMoney(platformFee)} د.ل</span>
+          <span className="stat-sub">مجموع الرسوم</span>
         </div>
         <div className="stat-card">
           <div className="stat-header">
@@ -155,7 +189,7 @@ const Finance = () => {
             <Landmark size={20} className="stat-icon orange" />
           </div>
           <span className="stat-value orange">
-            د.ل {(custodySummary?.total_custody_owed ?? 0).toLocaleString()}
+            {formatMoney(custodySummary?.total_custody_owed ?? 0)} د.ل
           </span>
           <span className="stat-sub">{custodySummary?.status_text || '—'}</span>
         </div>
@@ -175,25 +209,29 @@ const Finance = () => {
           <p className="chart-subtitle">تطور الإيرادات خلال الأشهر الماضية</p>
         </div>
         <div className="chart-container">
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#242240" />
-              <XAxis dataKey="month" tick={{ fontSize: 13, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 13, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-              <Tooltip
-                contentStyle={{ borderRadius: 10, border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                formatter={(value) => [`${value.toLocaleString()} د.ل`, 'الإيرادات']}
-              />
-              <Line
-                type="monotone"
-                dataKey="revenue"
-                stroke="#8b3dff"
-                strokeWidth={2}
-                dot={{ r: 4, fill: '#8b3dff', strokeWidth: 2, stroke: '#18162e' }}
-                activeDot={{ r: 6 }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
+          {loading ? (
+            <p className="finance-loading-chart">جاري تحميل الرسم البياني...</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#242240" />
+                <XAxis dataKey="month" tick={{ fontSize: 13, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 13, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+                <Tooltip
+                  contentStyle={{ borderRadius: 10, border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                  formatter={(value) => [`${formatMoney(value)} د.ل`, 'الإيرادات']}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="revenue"
+                  stroke="#8b3dff"
+                  strokeWidth={2}
+                  dot={{ r: 4, fill: '#8b3dff', strokeWidth: 2, stroke: '#18162e' }}
+                  activeDot={{ r: 6 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
         </div>
       </div>
 
@@ -204,11 +242,11 @@ const Finance = () => {
             <p className="section-subtitle">جميع العمليات المالية للمتجر</p>
           </div>
           <div className="transactions-actions">
-            <button className="wallet-btn" onClick={() => setIsWalletOpen(true)}>
+            <button className="wallet-btn" onClick={() => setIsWalletOpen(true)} type="button">
               <Wallet size={16} />
               المحفظة
             </button>
-            <button className="export-btn" onClick={handleExportPDF}>
+            <button className="export-btn" onClick={handleExportPDF} type="button">
               <Download size={16} />
               تصدير التقرير (PDF)
             </button>
@@ -218,15 +256,19 @@ const Finance = () => {
         <div className="finance-controls">
           <div className="filter-dropdown">
             <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-              {statuses.map((s) => (
-                <option key={s.value} value={s.value}>{s.label}</option>
+              {FINANCE_STATUS_OPTIONS.map((s) => (
+                <option key={s.value} value={s.value}>
+                  {s.label}
+                </option>
               ))}
             </select>
           </div>
           <div className="filter-dropdown">
             <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
-              {types.map((t) => (
-                <option key={t.value} value={t.value}>{t.label}</option>
+              {FINANCE_TYPE_OPTIONS.map((t) => (
+                <option key={t.value} value={t.value}>
+                  {t.label}
+                </option>
               ))}
             </select>
           </div>
@@ -234,13 +276,15 @@ const Finance = () => {
             <Search size={20} className="search-icon" />
             <input
               type="text"
-              placeholder="البحث برقم المعاملة أو اسم العميل..."
+              placeholder="البحث برقم المعاملة أو الوصف..."
               className="search-input"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
         </div>
+
+        {error && <p className="finance-error">{error}</p>}
 
         <div className="transaction-table-wrapper">
           <table className="transaction-table">
@@ -257,7 +301,13 @@ const Finance = () => {
               </tr>
             </thead>
             <tbody>
-              {filteredTransactions.length > 0 ? (
+              {loading ? (
+                <tr>
+                  <td colSpan="8" className="no-results-cell">
+                    جاري تحميل المعاملات...
+                  </td>
+                </tr>
+              ) : filteredTransactions.length > 0 ? (
                 filteredTransactions.map((t) => (
                   <tr key={t.id}>
                     <td className="txn-code">{t.code}</td>
@@ -266,19 +316,27 @@ const Finance = () => {
                       <div className="txn-time">{t.time}</div>
                     </td>
                     <td>
-                      <span className={`type-badge ${t.type === 'مبيعات' ? 'sales' : t.type === 'اشتراك' ? 'sub' : 'refund'}`}>
+                      <span
+                        className={`type-badge ${
+                          t.type === 'مبيعات' ? 'sales' : t.type === 'اشتراك' ? 'sub' : 'refund'
+                        }`}
+                      >
                         {t.type}
                       </span>
                     </td>
                     <td>{t.client}</td>
                     <td className={`amount-cell ${t.sign === '+' ? 'positive' : 'negative'}`}>
-                      د.ل {t.amount}{t.sign}
+                      {formatMoney(t.amount)} د.ل{t.sign}
                     </td>
                     <td className={`amount-cell ${t.sign === '+' ? 'positive' : 'negative'}`}>
-                      د.ل {t.net}{t.sign}
+                      {formatMoney(t.net)} د.ل{t.sign}
                     </td>
                     <td>
-                      <span className={`status-badge ${t.status === 'ناجح' ? 'success' : t.status === 'معلق' ? 'pending' : 'failed'}`}>
+                      <span
+                        className={`status-badge ${
+                          t.status === 'ناجح' ? 'success' : t.status === 'معلق' ? 'pending' : 'failed'
+                        }`}
+                      >
                         {t.status}
                       </span>
                     </td>
@@ -287,7 +345,8 @@ const Finance = () => {
                         type="button"
                         className="action-btn view-btn"
                         title="عرض التفاصيل"
-                        onClick={() => setSelectedTransaction(t)}
+                        onClick={() => handleViewTransaction(t)}
+                        disabled={loadingDetail}
                       >
                         <Eye size={16} />
                       </button>
@@ -296,7 +355,9 @@ const Finance = () => {
                 ))
               ) : (
                 <tr>
-                  <td colSpan="8" className="no-results-cell">لا توجد معاملات تطابق بحثك.</td>
+                  <td colSpan="8" className="no-results-cell">
+                    لا توجد معاملات تطابق بحثك.
+                  </td>
                 </tr>
               )}
             </tbody>
@@ -318,6 +379,7 @@ const Finance = () => {
 
       {toast && (
         <div className="toast-notification">
+          <CheckCircle2 size={18} />
           <span>{toast}</span>
         </div>
       )}

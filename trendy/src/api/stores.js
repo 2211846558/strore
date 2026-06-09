@@ -20,6 +20,9 @@ const FIELD_LABELS = {
   store_code: 'رقم المتجر',
   merchant_data: 'بيانات التاجر',
   otp: 'رمز التحقق',
+  batch_number: 'رقم الدفعة',
+  selling_price: 'سعر البيع',
+  unit_cost: 'سعر التكلفة',
 };
 
 const isLocalStoreType = (type) => type === 'محلي' || type === 'local';
@@ -137,6 +140,9 @@ export function getApiErrorMessage(error, fallback = 'تعذّر إرسال ال
   }
   if (error?.message) {
     const msg = error.message.replace(/^\./, '').trim();
+    if (/no such paymentmethod/i.test(msg)) {
+      return 'طريقة الدفع غير صالحة. استخدم بطاقة بنكية عبر Stripe (ليس سداد).';
+    }
     if (/no api key provided/i.test(msg) || /Stripe::setApiKey/i.test(msg)) {
       return 'بوابة الدفع غير مهيّأة على الخادم. يرجى التواصل مع الدعم الفني.';
     }
