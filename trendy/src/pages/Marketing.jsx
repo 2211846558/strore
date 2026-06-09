@@ -1,87 +1,112 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import CampaignCard from '../components/marketing/CampaignCard';
 import SubscribedCampaignCard from '../components/marketing/SubscribedCampaignCard';
 import CampaignPaymentModal from '../components/marketing/CampaignPaymentModal';
 import ProductSelectionModal from '../components/marketing/ProductSelectionModal';
+import {
+  fetchAvailableCampaigns,
+  loadMyCampaigns,
+  saveMyCampaign,
+  subscribeToCampaign,
+  buildSubscriptionEntry,
+  CAMPAIGN_SUBSCRIPTION_COST,
+} from '../api/campaigns';
+import { getApiErrorMessage } from '../api/stores';
+import { useAuth } from '../context/AuthContext';
+import { useWallet } from '../context/WalletContext';
 import './Marketing.css';
 
 const Marketing = () => {
+  const { storeId } = useAuth();
+  const { balance, refreshWallet } = useWallet();
   const [activeTab, setActiveTab] = useState('available');
-  
-  // Modals state
+  const [availableCampaigns, setAvailableCampaigns] = useState([]);
+  const [myCampaigns, setMyCampaigns] = useState([]);
+  const [loadingCampaigns, setLoadingCampaigns] = useState(true);
+  const [campaignsError, setCampaignsError] = useState('');
+  const [toast, setToast] = useState('');
+
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [selectedCampaign, setSelectedCampaign] = useState(null);
-  const [myCampaigns, setMyCampaigns] = useState([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const availableCampaigns = [
-    {
-      id: 1,
-      title: 'الباقة البلاتينية المميزة',
-      type: 'platinum',
-      description: 'أفضل باقة للنمو السريع مع استهداف دقيق وتحليلات يومية لأداء الحملة.',
-      duration: '30',
-      productsCount: '50',
-      price: '900',
-    },
-    {
-      id: 2,
-      title: 'الباقة الذهبية المتكاملة',
-      type: 'search',
-      description: 'حملة إعلانية واسعة النطاق تشمل محركات البحث ومنصات التواصل الاجتماعي.',
-      duration: '15',
-      productsCount: '15',
-      price: '450',
-    },
-    {
-      id: 3,
-      title: 'الباقة الفضية للتواصل الاجتماعي',
-      type: 'social',
-      description: 'ترويج لمنتجاتك على منصات التواصل الاجتماعي لزيادة الوصول والمبيعات.',
-      duration: '7',
-      productsCount: '5',
-      price: '150',
-    },
-  ];
+  const showToast = (message) => {
+    setToast(message);
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const loadCampaigns = useCallback(async () => {
+    setLoadingCampaigns(true);
+    setCampaignsError('');
+    try {
+      const campaigns = await fetchAvailableCampaigns();
+      setAvailableCampaigns(campaigns);
+    } catch (err) {
+      setCampaignsError(getApiErrorMessage(err, 'تعذّر تحميل الحملات المتاحة'));
+    } finally {
+      setLoadingCampaigns(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadCampaigns();
+  }, [loadCampaigns]);
+
+  useEffect(() => {
+    if (storeId) {
+      setMyCampaigns(loadMyCampaigns(storeId));
+    }
+  }, [storeId]);
+
+  const subscribedIds = new Set(myCampaigns.map((c) => c.megaCampaignId ?? c.id));
+  const visibleCampaigns = availableCampaigns.filter(
+    (c) => !subscribedIds.has(c.megaCampaignId ?? c.id),
+  );
 
   const handleSubscribeClick = (campaign) => {
     setSelectedCampaign(campaign);
     setIsPaymentModalOpen(true);
   };
 
-  const handlePaymentConfirm = (campaign) => {
-    // Open product selection immediately after payment
+  const handlePaymentConfirm = () => {
+    setIsPaymentModalOpen(false);
     setIsProductModalOpen(true);
   };
 
-  const handleCampaignActivate = (campaign, selectedProducts) => {
-    const pad = (n) => n.toString().padStart(2, '0');
-    const formatDate = (date) => `${pad(date.getDate())}-${pad(date.getMonth() + 1)}-${date.getFullYear()}`;
-    
-    const today = new Date();
-    const endDate = new Date(today);
-    endDate.setDate(today.getDate() + parseInt(campaign.duration || 30));
+  const handleCampaignActivate = async (campaign, selectedProducts, discountPercentage) => {
+    if (!storeId) {
+      showToast('لم يتم تحديد المتجر. يرجى تسجيل الدخول مرة أخرى.');
+      return;
+    }
 
-    setMyCampaigns(prev => [...prev, {
-      id: Date.now(),
-      title: campaign.title,
-      description: campaign.description,
-      price: campaign.price,
-      duration: campaign.duration,
-      productsCount: campaign.productsCount,
-      status: 'نشطة',
-      dateRange: { start: formatDate(today), end: formatDate(endDate) },
-      selectedProducts,
-    }]);
-    
-    setIsProductModalOpen(false);
-    setIsPaymentModalOpen(false);
-    setSelectedCampaign(null);
-    setActiveTab('my-campaigns');
+    setIsSubmitting(true);
+    try {
+      await subscribeToCampaign({
+        storeId,
+        megaCampaignId: campaign.megaCampaignId ?? campaign.id,
+        productIds: selectedProducts.map((p) => p.id),
+        discountPercentage,
+      });
+
+      const entry = buildSubscriptionEntry(campaign, selectedProducts, discountPercentage);
+      const updated = saveMyCampaign(storeId, entry);
+      setMyCampaigns(updated);
+      await refreshWallet();
+
+      setIsProductModalOpen(false);
+      setSelectedCampaign(null);
+      setActiveTab('my-campaigns');
+      showToast('تم الاشتراك في الحملة وخصم الرسوم من المحفظة بنجاح');
+    } catch (err) {
+      showToast(getApiErrorMessage(err, 'تعذّر إتمام الاشتراك في الحملة'));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
-    <div className="plans-page">
+    <div className="plans-page marketing-page">
       <header className="page-header plans-header">
         <div className="header-title-wrapper">
           <h1 className="page-title">إدارة التسويق والمحتوى</h1>
@@ -89,15 +114,19 @@ const Marketing = () => {
         </div>
       </header>
 
+      {toast && <div className="marketing-toast" role="status">{toast}</div>}
+
       <div className="plans-controls">
         <div className="tabs-container">
           <button
+            type="button"
             className={`tab-btn ${activeTab === 'available' ? 'active' : ''}`}
             onClick={() => setActiveTab('available')}
           >
             الحملات المتاحة
           </button>
           <button
+            type="button"
             className={`tab-btn ${activeTab === 'my-campaigns' ? 'active' : ''}`}
             onClick={() => setActiveTab('my-campaigns')}
           >
@@ -108,20 +137,27 @@ const Marketing = () => {
 
       <div className="plans-content">
         {activeTab === 'available' && (
-          <div className="plans-grid">
-            {availableCampaigns.map((campaign) => (
-              <CampaignCard
-                key={campaign.id}
-                title={campaign.title}
-                type={campaign.type}
-                description={campaign.description}
-                duration={campaign.duration}
-                productsCount={campaign.productsCount}
-                price={campaign.price}
-                onSubscribe={() => handleSubscribeClick(campaign)}
-              />
-            ))}
-          </div>
+          <>
+            {loadingCampaigns && <p className="no-results">جاري تحميل الحملات...</p>}
+            {campaignsError && <p className="form-error-banner">{campaignsError}</p>}
+            {!loadingCampaigns && !campaignsError && visibleCampaigns.length === 0 && (
+              <p className="no-results">لا توجد حملات متاحة حالياً.</p>
+            )}
+            <div className="plans-grid">
+              {visibleCampaigns.map((campaign) => (
+                <CampaignCard
+                  key={campaign.id}
+                  title={campaign.title}
+                  type={campaign.type}
+                  description={campaign.description}
+                  duration={campaign.duration}
+                  productsCount={campaign.productsCount}
+                  price={campaign.price}
+                  onSubscribe={() => handleSubscribeClick(campaign)}
+                />
+              ))}
+            </div>
+          </>
         )}
 
         {activeTab === 'my-campaigns' && (
@@ -151,13 +187,17 @@ const Marketing = () => {
         isOpen={isPaymentModalOpen}
         onClose={() => setIsPaymentModalOpen(false)}
         campaign={selectedCampaign}
+        walletBalance={balance}
+        subscriptionCost={CAMPAIGN_SUBSCRIPTION_COST}
         onConfirm={handlePaymentConfirm}
       />
 
       <ProductSelectionModal
         isOpen={isProductModalOpen}
-        onClose={() => setIsProductModalOpen(false)}
+        onClose={() => !isSubmitting && setIsProductModalOpen(false)}
         campaign={selectedCampaign}
+        storeId={storeId}
+        isSubmitting={isSubmitting}
         onActivate={handleCampaignActivate}
       />
     </div>

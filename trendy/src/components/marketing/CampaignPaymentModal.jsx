@@ -1,9 +1,18 @@
 import React from 'react';
-import { X, CheckCircle2, CreditCard } from 'lucide-react';
+import { X, CheckCircle2, CreditCard, Wallet } from 'lucide-react';
 import './CampaignPaymentModal.css';
 
-const CampaignPaymentModal = ({ isOpen, onClose, campaign, onConfirm }) => {
+const CampaignPaymentModal = ({
+  isOpen,
+  onClose,
+  campaign,
+  walletBalance = 0,
+  subscriptionCost = 50,
+  onConfirm,
+}) => {
   if (!isOpen || !campaign) return null;
+
+  const hasEnoughBalance = Number(walletBalance) >= Number(subscriptionCost);
 
   const handleModalClick = (e) => {
     e.stopPropagation();
@@ -16,7 +25,7 @@ const CampaignPaymentModal = ({ isOpen, onClose, campaign, onConfirm }) => {
           <div className="modal-title-group">
             <h2 className="modal-title">تأكيد الاشتراك والدفع</h2>
           </div>
-          <button className="close-button" onClick={onClose}>
+          <button type="button" className="close-button" onClick={onClose}>
             <X size={24} />
           </button>
         </div>
@@ -31,31 +40,47 @@ const CampaignPaymentModal = ({ isOpen, onClose, campaign, onConfirm }) => {
             <span className="payment-value">{campaign.duration} أيام</span>
           </div>
           <div className="payment-detail-row">
-            <span className="payment-label">عدد المنتجات:</span>
-            <span className="payment-value">{campaign.productsCount} منتجات</span>
+            <span className="payment-label">رصيد المحفظة:</span>
+            <span className="payment-value">{Number(walletBalance).toLocaleString()} د.ل</span>
           </div>
-          
+
           <div className="payment-total-row">
-            <span className="payment-total-label">المبلغ الإجمالي:</span>
-            <span className="payment-total-value">{campaign.price} د.ل</span>
+            <span className="payment-total-label">رسوم الاشتراك:</span>
+            <span className="payment-total-value">{subscriptionCost} د.ل</span>
           </div>
         </div>
 
-        <div className="info-alert">
-          <CheckCircle2 size={20} className="info-icon-alert" />
-          <p>سيتم تفعيل الحملة مباشرة بعد إتمام عملية الدفع. يمكنك متابعة الأداء من تبويب "حملاتي".</p>
-        </div>
+        {hasEnoughBalance ? (
+          <div className="info-alert">
+            <CheckCircle2 size={20} className="info-icon-alert" />
+            <p>سيتم خصم رسوم الاشتراك من محفظة المتجر بعد اختيار المنتجات وتأكيد الحملة.</p>
+          </div>
+        ) : (
+          <div className="info-alert warning-alert">
+            <Wallet size={20} className="info-icon-alert" />
+            <p>
+              رصيد المحفظة غير كافٍ. يرجى شحن المحفظة من قسم المالية أولاً
+              {' '}
+              (المطلوب {subscriptionCost} د.ل).
+            </p>
+          </div>
+        )}
 
         <div className="modal-footer payment-footer">
-          <button className="cancel-button" onClick={onClose}>
+          <button type="button" className="cancel-button" onClick={onClose}>
             إلغاء
           </button>
-          <button className="save-button payment-confirm-btn" onClick={() => {
-            onConfirm(campaign);
-            onClose();
-          }}>
+          <button
+            type="button"
+            className="save-button payment-confirm-btn"
+            disabled={!hasEnoughBalance}
+            onClick={() => {
+              onConfirm(campaign);
+              onClose();
+            }}
+          >
             <CreditCard size={18} />
-            تأكيد الدفع والاشتراك
+            متابعة واختيار المنتجات
           </button>
         </div>
       </div>

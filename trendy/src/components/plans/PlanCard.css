@@ -101,8 +101,15 @@
   transition: background-color 0.2s ease;
 }
 
-.subscribe-btn:hover {
+.subscribe-btn:hover:not(:disabled) {
   background-color: black;
+}
+
+.subscribe-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  background: var(--border-color);
+  color: var(--text-secondary);
 }
 
 .plan-card.popular .subscribe-btn {

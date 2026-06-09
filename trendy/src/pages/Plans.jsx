@@ -1,36 +1,31 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search } from 'lucide-react';
 import PlanCard from '../components/plans/PlanCard';
 import SubscriptionCard from '../components/plans/SubscriptionCard';
 import PlanSubscribeWalletModal from '../components/plans/PlanSubscribeWalletModal';
-import { fetchPlans } from '../api/plans';
+import {
+  fetchPlans,
+  mapPlanFromApi,
+  mapStoreSubscription,
+  extractStoreFromSubscriptionResponse,
+} from '../api/plans';
 import { getApiErrorMessage } from '../api/stores';
 import { useAuth } from '../context/AuthContext';
 import './Plans.css';
 
-const mapPlanFromApi = (plan) => ({
-  id: plan.id,
-  title: plan.name,
-  price: String(plan.price),
-  durationDays: plan.duration_days ?? 30,
-  featuresText: `عمولة المنصة: ${plan.commission_rate ?? 0}% — مدة ${plan.duration_days ?? 30} يوم`,
-  isPopular: false,
-});
-
 const Plans = ({ onboarding = false }) => {
   const navigate = useNavigate();
-  const { storeId, updateStoreInSession } = useAuth();
+  const { store, storeId, updateStoreInSession } = useAuth();
   const [activeTab, setActiveTab] = useState('available');
   const [searchQuery, setSearchQuery] = useState('');
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState(null);
+  const [subscribeAction, setSubscribeAction] = useState('subscribe');
   const [availablePlans, setAvailablePlans] = useState([]);
   const [loadingPlans, setLoadingPlans] = useState(true);
   const [plansError, setPlansError] = useState('');
   const [toast, setToast] = useState(null);
-
-  const [mySubscriptions, setMySubscriptions] = useState([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -50,83 +45,74 @@ const Plans = ({ onboarding = false }) => {
         if (!cancelled) setLoadingPlans(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  const currentSubscription = useMemo(
+    () => mapStoreSubscription(store, availablePlans),
+    [store, availablePlans],
+  );
+
+  const mySubscriptions = currentSubscription ? [currentSubscription] : [];
 
   const showToast = (message) => {
     setToast(message);
     setTimeout(() => setToast(null), 2500);
   };
 
-  const handleSubscribeClick = (plan) => {
+  const resolveSubscribeAction = (plan) => {
+    if (!currentSubscription) return 'subscribe';
+    if (currentSubscription.isExpired && currentSubscription.planId === plan.id) return 'renew';
+    if (!currentSubscription.isExpired && currentSubscription.planId === plan.id) return null;
+    if (currentSubscription.planId) return 'change';
+    return 'subscribe';
+  };
+
+  const handleSubscribeClick = (plan, forcedAction) => {
+    const action = forcedAction ?? resolveSubscribeAction(plan);
+    if (!action) {
+      showToast('أنت مشترك في هذه الخطة حالياً');
+      return;
+    }
     setSelectedPlan(plan);
+    setSubscribeAction(action);
     setIsWalletModalOpen(true);
   };
 
-  const isPlanActive = (planTitle) =>
-    mySubscriptions.some((sub) => sub.title === planTitle && !sub.isExpired);
+  const isPlanActive = (planId) =>
+    Boolean(
+      currentSubscription &&
+        !currentSubscription.isExpired &&
+        currentSubscription.planId === planId,
+    );
 
-  const handleConfirmSubscription = (plan) => {
-    setMySubscriptions((prev) => {
-      const existingIndex = prev.findIndex((sub) => sub.title === plan.title);
+  const handleConfirmSubscription = (plan, apiResponse) => {
+    const updatedStore = extractStoreFromSubscriptionResponse(apiResponse, plan);
+    if (storeId) {
+      updateStoreInSession({ id: storeId, ...updatedStore });
+    }
 
-      const pad = (n) => n.toString().padStart(2, '0');
-      const formatDate = (date) => `${pad(date.getDate())}-${pad(date.getMonth() + 1)}-${date.getFullYear()}`;
-
-      const today = new Date();
-      const endDate = new Date(today);
-      endDate.setDate(today.getDate() + (plan.durationDays || 30));
-
-      if (existingIndex !== -1) {
-        const updated = [...prev];
-        const existing = updated[existingIndex];
-        const currentEndParts = existing.dateRange.end.split('-');
-        const currentEndDate = new Date(`${currentEndParts[2]}-${currentEndParts[1]}-${currentEndParts[0]}`);
-        const newEndDate = existing.isExpired ? endDate : new Date(currentEndDate);
-        if (!existing.isExpired) newEndDate.setDate(currentEndDate.getDate() + (plan.durationDays || 30));
-
-        updated[existingIndex] = {
-          ...existing,
-          status: 'نشط',
-          isExpired: false,
-          statusText: 'الاشتراك نشط حالياً',
-          dateRange: {
-            start: existing.isExpired ? formatDate(today) : existing.dateRange.start,
-            end: formatDate(newEndDate),
-          },
-        };
-        return updated;
-      }
-
-      return [
-        ...prev,
-        {
-          id: Date.now(),
-          title: plan.title,
-          price: plan.price,
-          status: 'نشط',
-          dateRange: { start: formatDate(today), end: formatDate(endDate) },
-          statusText: 'الاشتراك نشط حالياً',
-          isExpired: false,
-        },
-      ];
-    });
-
-    showToast(`تم الاشتراك في ${plan.title} بنجاح`);
+    const messages = {
+      renew: `تم تجديد اشتراك ${plan.title} بنجاح`,
+      change: `تم الانتقال إلى ${plan.title} بنجاح`,
+      subscribe: `تم الاشتراك في ${plan.title} بنجاح`,
+    };
+    showToast(messages[subscribeAction] || messages.subscribe);
     setIsWalletModalOpen(false);
 
     if (onboarding && storeId) {
-      updateStoreInSession({ id: storeId, status: 'active' });
       navigate('/');
     }
   };
 
   const filteredAvailablePlans = availablePlans.filter((plan) =>
-    plan.title.toLowerCase().includes(searchQuery.toLowerCase())
+    plan.title.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
   const filteredSubscriptions = mySubscriptions.filter((sub) =>
-    sub.title.toLowerCase().includes(searchQuery.toLowerCase())
+    sub.title.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
   return (
@@ -137,7 +123,7 @@ const Plans = ({ onboarding = false }) => {
           <p className="page-subtitle">
             {onboarding
               ? 'اختر خطة اشتراك للبدء في استخدام لوحة تحكم المتجر'
-              : 'عرض وإدارة خطط الاشتراك المتاحة للمتجر'}
+              : 'عرض الخطط المتاحة، الاشتراك، وتجديد الاشتراك من المحفظة'}
           </p>
         </div>
       </header>
@@ -158,14 +144,16 @@ const Plans = ({ onboarding = false }) => {
           <button
             className={`tab-btn ${activeTab === 'available' ? 'active' : ''}`}
             onClick={() => setActiveTab('available')}
+            type="button"
           >
             الخطط المتاحة
           </button>
           <button
             className={`tab-btn ${activeTab === 'my-subscriptions' ? 'active' : ''}`}
             onClick={() => setActiveTab('my-subscriptions')}
+            type="button"
           >
-            اشتراكاتي
+            اشتراكي
           </button>
         </div>
       </div>
@@ -183,7 +171,7 @@ const Plans = ({ onboarding = false }) => {
                   price={plan.price}
                   featuresText={plan.featuresText}
                   isPopular={plan.isPopular}
-                  isActive={isPlanActive(plan.title)}
+                  isActive={isPlanActive(plan.id)}
                   onSubscribe={() => handleSubscribeClick(plan)}
                 />
               ))
@@ -205,11 +193,22 @@ const Plans = ({ onboarding = false }) => {
                   dateRange={sub.dateRange}
                   statusText={sub.statusText}
                   isExpired={sub.isExpired}
-                  onRenew={() => handleSubscribeClick(sub)}
+                  onRenew={() => {
+                    const plan =
+                      availablePlans.find((p) => p.id === sub.planId) ?? {
+                        id: sub.planId,
+                        title: sub.title,
+                        price: sub.price,
+                        durationDays: sub.durationDays ?? 30,
+                      };
+                    handleSubscribeClick(plan, 'renew');
+                  }}
                 />
               ))
             ) : (
-              <p className="no-results">لا توجد اشتراكات تطابق بحثك.</p>
+              <p className="no-results">
+                لا يوجد اشتراك نشط. انتقل إلى «الخطط المتاحة» للاشتراك في خطة.
+              </p>
             )}
           </div>
         )}
@@ -219,6 +218,7 @@ const Plans = ({ onboarding = false }) => {
         isOpen={isWalletModalOpen}
         onClose={() => setIsWalletModalOpen(false)}
         plan={selectedPlan}
+        action={subscribeAction}
         onConfirm={handleConfirmSubscription}
         onToast={showToast}
       />

@@ -7,3 +7,18 @@
   flex-direction: column;
   gap: 30px;
 }
+
+.marketing-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1200;
+  padding: 12px 20px;
+  border-radius: 12px;
+  background: rgba(34, 197, 94, 0.95);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+}

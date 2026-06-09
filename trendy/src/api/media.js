@@ -1,0 +1,110 @@
+/**
+ * أصل خادم Laravel (بدون /api) — يُستخرج من VITE_API_BASE_URL
+ * مثال: http://localhost:8000/api → http://localhost:8000
+ */
+export function getBackendOrigin() {
+  const apiBase = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') || '';
+  if (apiBase) {
+    return apiBase.replace(/\/api\/?$/, '') || apiBase;
+  }
+  return typeof window !== 'undefined' ? window.location.origin : '';
+}
+
+/**
+ * يصحّح روابط الصور القادمة من الباكند (storage/asset)
+ * دون تعديل الـ API — يعالج المسارات النسبية و localhost بدون منفذ.
+ */
+export function resolveMediaUrl(url) {
+  if (!url || typeof url !== 'string') return null;
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith('data:') || trimmed.startsWith('blob:')) return trimmed;
+
+  const origin = getBackendOrigin();
+
+  if (trimmed.startsWith('/')) {
+    return `${origin}${trimmed}`;
+  }
+
+  try {
+    const parsed = new URL(trimmed);
+    const apiOrigin = new URL(origin || window.location.origin);
+
+    if (
+      (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') &&
+      !parsed.port &&
+      apiOrigin.port
+    ) {
+      return `${apiOrigin.origin}${parsed.pathname}${parsed.search}${parsed.hash}`;
+    }
+
+    if (parsed.hostname === 'localhost' && !parsed.port && !apiOrigin.port) {
+      return trimmed;
+    }
+  } catch {
+    return trimmed;
+  }
+
+  return trimmed;
+}
+
+function extractStorageFilename(url) {
+  if (!url) return null;
+  const match = String(url).match(/\/storage\/([^/]+)$/);
+  return match ? match[1] : null;
+}
+
+/**
+ * الباكند يُرجع أحياناً /storage/{filename} فقط بينما الملف الفعلي في
+ * storage/products/{productId}/{filename} — نُعيد بناء المسار من الفرونت.
+ */
+export function resolveProductImageUrl(url, productId) {
+  const candidates = getProductImageCandidates(url, productId);
+  return candidates[0] || null;
+}
+
+/**
+ * قائمة روابط محتملة للصورة — نجرّبها بالترتيب عند فشل التحميل.
+ */
+export function getProductImageCandidates(url, productId) {
+  if (!url || !productId) {
+    const single = resolveMediaUrl(url);
+    return single ? [single] : [];
+  }
+
+  const resolved = resolveMediaUrl(url);
+  if (!resolved) return [];
+
+  if (resolved.includes(`/products/${productId}/`)) {
+    return import.meta.env.DEV
+      ? [resolved.replace(/^https?:\/\/[^/]+/, ''), resolved]
+      : [resolved];
+  }
+
+  const filename = extractStorageFilename(resolved);
+  if (!filename) return [resolved];
+
+  const correctPath = `/storage/products/${productId}/${filename}`;
+  const origin = getBackendOrigin();
+  const absolute = `${origin}${correctPath}`;
+
+  const candidates = [];
+  if (import.meta.env.DEV) candidates.push(correctPath);
+  candidates.push(absolute);
+  if (resolved !== absolute && !resolved.endsWith(correctPath)) {
+    candidates.push(resolved);
+  }
+
+  return [...new Set(candidates.filter(Boolean))];
+}
+
+/** صورة بديلة محلية — بدون نص عربي أو طلب خارجي */
+export function productPlaceholderImage() {
+  const svg =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400">' +
+    '<rect fill="#e2e8f0" width="400" height="400"/>' +
+    '<path fill="#94a3b8" d="M120 280l50-65 45 55 35-45 70 55H120z"/>' +
+    '<circle fill="#94a3b8" cx="155" cy="155" r="28"/>' +
+    '</svg>';
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}

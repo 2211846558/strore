@@ -1,40 +1,65 @@
 import React, { useState, useEffect } from 'react';
 import { X, CheckCircle2, Check } from 'lucide-react';
+import { fetchStoreProducts } from '../../api/campaigns';
+import { getApiErrorMessage } from '../../api/stores';
 import './ProductSelectionModal.css';
 
-const ProductSelectionModal = ({ isOpen, onClose, campaign, onActivate }) => {
+const ProductSelectionModal = ({
+  isOpen,
+  onClose,
+  campaign,
+  storeId,
+  isSubmitting = false,
+  onActivate,
+}) => {
   const [selectedProducts, setSelectedProducts] = useState([]);
+  const [productsList, setProductsList] = useState([]);
+  const [discountPercentage, setDiscountPercentage] = useState('10');
+  const [loadingProducts, setLoadingProducts] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    if (isOpen) {
-      setSelectedProducts([]);
-    }
-  }, [isOpen, campaign]);
+    if (!isOpen) return undefined;
 
-  // Mock products list for selection
-  const productsList = [
-    { id: 1, name: 'قميص قطني أبيض' },
-    { id: 2, name: 'قميص قطني أزرق' },
-    { id: 3, name: 'فستان شتوي' },
-    { id: 4, name: 'فستان صيفي' },
-    { id: 5, name: 'بنطلون جينز' },
-    { id: 6, name: 'شورت رياضي' },
-    { id: 7, name: 'بنطلون كاجوال' },
-  ];
+    setSelectedProducts([]);
+    setDiscountPercentage('10');
+    setError('');
+
+    if (!storeId) {
+      setProductsList([]);
+      return undefined;
+    }
+
+    let cancelled = false;
+    (async () => {
+      setLoadingProducts(true);
+      try {
+        const products = await fetchStoreProducts({ storeId });
+        if (!cancelled) setProductsList(products);
+      } catch (err) {
+        if (!cancelled) {
+          setError(getApiErrorMessage(err, 'تعذّر تحميل منتجات المتجر'));
+          setProductsList([]);
+        }
+      } finally {
+        if (!cancelled) setLoadingProducts(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [isOpen, campaign, storeId]);
 
   if (!isOpen || !campaign) return null;
 
-  const maxAllowed = campaign.productsCount;
+  const maxAllowed = Number(campaign.productsCount) || 10;
 
   const handleProductToggle = (product) => {
-    const isSelected = selectedProducts.find(p => p.id === product.id);
-    
+    const isSelected = selectedProducts.find((p) => p.id === product.id);
+
     if (isSelected) {
-      setSelectedProducts(selectedProducts.filter(p => p.id !== product.id));
-    } else {
-      if (selectedProducts.length < maxAllowed) {
-        setSelectedProducts([...selectedProducts, product]);
-      }
+      setSelectedProducts(selectedProducts.filter((p) => p.id !== product.id));
+    } else if (selectedProducts.length < maxAllowed) {
+      setSelectedProducts([...selectedProducts, product]);
     }
   };
 
@@ -42,14 +67,27 @@ const ProductSelectionModal = ({ isOpen, onClose, campaign, onActivate }) => {
     e.stopPropagation();
   };
 
+  const handleActivate = () => {
+    const discount = Number(discountPercentage);
+    if (!discount || discount < 1 || discount > 99) {
+      setError('نسبة الخصم يجب أن تكون بين 1% و 99%');
+      return;
+    }
+    if (selectedProducts.length === 0) {
+      setError('يرجى اختيار منتج واحد على الأقل');
+      return;
+    }
+    onActivate(campaign, selectedProducts, discount);
+  };
+
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay" onClick={isSubmitting ? undefined : onClose}>
       <div className="modal-content product-selection-modal-content" onClick={handleModalClick}>
         <div className="modal-header">
           <div className="modal-title-group">
             <h2 className="modal-title">اختيار المنتجات للحملة الإعلانية</h2>
           </div>
-          <button className="close-button" onClick={onClose}>
+          <button type="button" className="close-button" onClick={onClose} disabled={isSubmitting}>
             <X size={24} />
           </button>
         </div>
@@ -63,7 +101,19 @@ const ProductSelectionModal = ({ isOpen, onClose, campaign, onActivate }) => {
             <span className="selection-label">عدد المنتجات المسموح:</span>
             <span className="selection-value">{maxAllowed} منتجات</span>
           </div>
-          
+          <div className="selection-detail-row">
+            <span className="selection-label">نسبة الخصم في الحملة:</span>
+            <input
+              type="number"
+              min="1"
+              max="99"
+              value={discountPercentage}
+              onChange={(e) => setDiscountPercentage(e.target.value)}
+              className="selection-discount-input"
+              dir="ltr"
+            />
+          </div>
+
           <div className="selection-counter-row">
             <span className="selection-label">المنتجات المختارة:</span>
             <span className={`selection-counter ${selectedProducts.length === maxAllowed ? 'max-reached' : ''}`}>
@@ -72,29 +122,41 @@ const ProductSelectionModal = ({ isOpen, onClose, campaign, onActivate }) => {
           </div>
         </div>
 
-        <div className="products-grid">
-          {productsList.map((product) => {
-            const isSelected = selectedProducts.some(p => p.id === product.id);
-            return (
-              <div 
-                key={product.id} 
-                className={`product-selectable-card ${isSelected ? 'selected' : ''}`}
-                onClick={() => handleProductToggle(product)}
-              >
-                <div className="product-checkbox">
-                  {isSelected ? <CheckCircle2 size={20} className="check-icon" /> : <div className="empty-circle"></div>}
+        {error && <p className="form-error-banner">{error}</p>}
+
+        {loadingProducts ? (
+          <p className="no-selection-text">جاري تحميل المنتجات...</p>
+        ) : (
+          <div className="products-grid">
+            {productsList.map((product) => {
+              const isSelected = selectedProducts.some((p) => p.id === product.id);
+              return (
+                <div
+                  key={product.id}
+                  className={`product-selectable-card ${isSelected ? 'selected' : ''}`}
+                  onClick={() => handleProductToggle(product)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => e.key === 'Enter' && handleProductToggle(product)}
+                >
+                  <div className="product-checkbox">
+                    {isSelected ? <CheckCircle2 size={20} className="check-icon" /> : <div className="empty-circle" />}
+                  </div>
+                  <span className="product-name">{product.name}</span>
                 </div>
-                <span className="product-name">{product.name}</span>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+            {!productsList.length && !loadingProducts && (
+              <p className="no-selection-text">لا توجد منتجات في متجرك حالياً.</p>
+            )}
+          </div>
+        )}
 
         <div className="selected-products-summary">
           <div className="summary-title">المنتجات المختارة للحملة:</div>
           <div className="selected-tags">
             {selectedProducts.length > 0 ? (
-              selectedProducts.map(p => (
+              selectedProducts.map((p) => (
                 <span key={p.id} className="selected-tag">
                   {p.name}
                 </span>
@@ -106,19 +168,23 @@ const ProductSelectionModal = ({ isOpen, onClose, campaign, onActivate }) => {
         </div>
 
         <div className="modal-footer payment-footer">
-          <button className="cancel-button" onClick={onClose}>
+          <button type="button" className="cancel-button" onClick={onClose} disabled={isSubmitting}>
             إلغاء
           </button>
-          <button 
-            className="save-button payment-confirm-btn" 
-            onClick={() => {
-              onActivate(campaign, selectedProducts);
-              onClose();
-            }}
-            disabled={selectedProducts.length === 0}
+          <button
+            type="button"
+            className="save-button payment-confirm-btn"
+            onClick={handleActivate}
+            disabled={isSubmitting || selectedProducts.length === 0 || loadingProducts}
           >
-            <CheckCircle2 size={18} />
-            تأكيد وتفعيل الحملة
+            {isSubmitting ? (
+              <span className="loader" />
+            ) : (
+              <>
+                <Check size={18} />
+                تأكيد والاشتراك في الحملة
+              </>
+            )}
           </button>
         </div>
       </div>

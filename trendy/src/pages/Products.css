@@ -1,4 +1,4 @@
-﻿.products-page {
+.products-page {
   display: flex;
   flex-direction: column;
   min-height: calc(100vh - 80px);
@@ -101,6 +101,13 @@
   .products-grid {
     grid-template-columns: repeat(4, 1fr);
   }
+}
+
+.products-error {
+  color: #ef4444;
+  text-align: center;
+  padding: 12px 20px;
+  margin-bottom: 8px;
 }
 
 .no-results {

@@ -9,7 +9,7 @@ import {
 } from '@stripe/react-stripe-js';
 import { useWallet } from '../../context/WalletContext';
 import { useAuth } from '../../context/AuthContext';
-import { subscribeToPlan } from '../../api/plans';
+import { subscribeToPlan, renewStorePlan, changeStorePlan } from '../../api/plans';
 import { getApiErrorMessage } from '../../api/stores';
 import {
   createStripeCardPaymentMethod,
@@ -38,7 +38,7 @@ const getStripeFieldStyle = () => ({
   },
 });
 
-const PlanSubscribeWalletForm = ({ plan, onClose, onConfirm, onToast }) => {
+const PlanSubscribeWalletForm = ({ plan, action = 'subscribe', onClose, onConfirm, onToast }) => {
   const stripe = useStripe();
   const elements = useElements();
   const { balance, rechargeViaStripe, refreshWallet } = useWallet();
@@ -136,9 +136,16 @@ const PlanSubscribeWalletForm = ({ plan, onClose, onConfirm, onToast }) => {
 
     setSubscribeLoading(true);
     try {
-      await subscribeToPlan({ planId: plan.id, storeId });
+      let res;
+      if (action === 'renew') {
+        res = await renewStorePlan(storeId);
+      } else if (action === 'change') {
+        res = await changeStorePlan(storeId, plan.id);
+      } else {
+        res = await subscribeToPlan({ planId: plan.id, storeId });
+      }
       await refreshWallet();
-      onConfirm(plan);
+      onConfirm(plan, res);
       onClose();
     } catch (err) {
       setError(getApiErrorMessage(err, 'تعذّر إتمام الاشتراك'));
@@ -249,7 +256,13 @@ const PlanSubscribeWalletForm = ({ plan, onClose, onConfirm, onToast }) => {
           onClick={handleSubscribe}
           disabled={!hasEnoughBalance || subscribeLoading}
         >
-          {subscribeLoading ? 'جاري الاشتراك...' : 'تأكيد الاشتراك'}
+          {subscribeLoading
+            ? 'جاري المعالجة...'
+            : action === 'renew'
+              ? 'تأكيد التجديد'
+              : action === 'change'
+                ? 'تأكيد تغيير الخطة'
+                : 'تأكيد الاشتراك'}
         </button>
         <button type="button" className="plan-wallet-btn back" onClick={onClose}>
           <ArrowRight size={18} />
@@ -260,7 +273,14 @@ const PlanSubscribeWalletForm = ({ plan, onClose, onConfirm, onToast }) => {
   );
 };
 
-const PlanSubscribeWalletModal = ({ isOpen, onClose, plan, onConfirm, onToast }) => {
+const PlanSubscribeWalletModal = ({
+  isOpen,
+  onClose,
+  plan,
+  action = 'subscribe',
+  onConfirm,
+  onToast,
+}) => {
   const { refreshWallet } = useWallet();
   const stripeReady = isStripeConfigured();
 
@@ -283,7 +303,13 @@ const PlanSubscribeWalletModal = ({ isOpen, onClose, plan, onConfirm, onToast })
         </div>
         <h2>محفظة الاشتراك</h2>
         <p className="plan-wallet-subtitle">
-          اشتراك في <strong>{plan.title}</strong> — {plan.price} د.ل
+          {action === 'renew' ? (
+            <>تجديد اشتراك <strong>{plan.title}</strong> — {plan.price} د.ل</>
+          ) : action === 'change' ? (
+            <>الانتقال إلى <strong>{plan.title}</strong> — {plan.price} د.ل</>
+          ) : (
+            <>اشتراك في <strong>{plan.title}</strong> — {plan.price} د.ل</>
+          )}
         </p>
 
         {!stripeReady ? (
@@ -305,6 +331,7 @@ const PlanSubscribeWalletModal = ({ isOpen, onClose, plan, onConfirm, onToast })
         ) : (
           <PlanSubscribeWalletForm
             plan={plan}
+            action={action}
             onClose={onClose}
             onConfirm={onConfirm}
             onToast={onToast}

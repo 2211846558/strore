@@ -1,63 +1,65 @@
 import React, { useState, useEffect } from 'react';
-import { X } from 'lucide-react';
+import { X, Upload, ImageIcon, Layers } from 'lucide-react';
 import './ProductModal.css';
 
-const ALL_COLORS = ['أبيض', 'أسود', 'أزرق داكن', 'أخضر', 'أحمر', 'وردي', 'أصفر', 'رمادي', 'بني'];
-const ALL_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
-const CATEGORIES = ['قميص', 'فستان', 'شورت', 'بنطلون'];
-
-const getDefaultImage = (category, name) => {
-  const categoryImages = {
-    'قميص': 'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?auto=format&fit=crop&w=400&q=80',
-    'فستان': 'https://images.unsplash.com/photo-1572804013309-59a88b7e92f1?auto=format&fit=crop&w=400&q=80',
-    'شورت': 'https://images.unsplash.com/photo-1591195853828-11db59a44f6b?auto=format&fit=crop&w=400&q=80',
-    'بنطلون': 'https://images.unsplash.com/photo-1542272604-787c3835535d?auto=format&fit=crop&w=400&q=80',
-  };
-  return categoryImages[category] || `https://placehold.co/400x400/e2e8f0/475569?text=${encodeURIComponent(name || 'منتج')}`;
-};
-
-const ProductModal = ({ isOpen, onClose, onSave, product }) => {
+const ProductModal = ({
+  isOpen,
+  onClose,
+  onSave,
+  onOpenVariants,
+  product,
+  categories = [],
+  isSaving,
+}) => {
   const isEdit = !!product;
 
   const [form, setForm] = useState({
     name: '',
     description: '',
     price: '',
-    category: '',
-    colors: [],
-    sizes: [],
+    categoryId: '',
     stock: '',
-    status: 'نشط',
-    image: '',
   });
+  const [existingImages, setExistingImages] = useState([]);
+  const [newImages, setNewImages] = useState([]);
+  const [savedProduct, setSavedProduct] = useState(null);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    if (isOpen) {
-      if (product) {
-        setForm({
-          name: product.name || '',
-          description: product.description || '',
-          price: product.price || '',
-          category: product.category || '',
-          colors: product.colors || [],
-          sizes: product.sizes || [],
-          stock: product.stock || '',
-          status: product.status || 'نشط',
-          image: product.image || '',
-        });
-      } else {
-        setForm({
-          name: '',
-          description: '',
-          price: '',
-          category: '',
-          colors: [],
-          sizes: [],
-          stock: '',
-          status: 'نشط',
-          image: '',
-        });
-      }
+    if (!isOpen) return;
+
+    setSavedProduct(null);
+    setError('');
+    setNewImages((prev) => {
+      prev.forEach((img) => {
+        if (img.preview?.startsWith('blob:')) URL.revokeObjectURL(img.preview);
+      });
+      return [];
+    });
+
+    if (product) {
+      setForm({
+        name: product.name || '',
+        description: product.description || '',
+        price: product.price || '',
+        categoryId: product.categoryId ? String(product.categoryId) : '',
+        stock: product.stock || '',
+      });
+      const imgs = product.images?.length
+        ? product.images
+        : product.image
+          ? [{ url: product.image }]
+          : [];
+      setExistingImages(imgs);
+    } else {
+      setForm({
+        name: '',
+        description: '',
+        price: '',
+        categoryId: '',
+        stock: '',
+      });
+      setExistingImages([]);
     }
   }, [isOpen, product]);
 
@@ -67,49 +69,138 @@ const ProductModal = ({ isOpen, onClose, onSave, product }) => {
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
-  const toggleColor = (color) => {
-    setForm((prev) => ({
-      ...prev,
-      colors: prev.colors.includes(color)
-        ? prev.colors.filter((c) => c !== color)
-        : [...prev.colors, color],
+  const handleImageChange = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+
+    const added = files.map((file) => ({
+      id: `new-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      file,
+      preview: URL.createObjectURL(file),
     }));
+    setNewImages((prev) => [...prev, ...added]);
+    setError('');
+    e.target.value = '';
   };
 
-  const toggleSize = (size) => {
-    setForm((prev) => ({
-      ...prev,
-      sizes: prev.sizes.includes(size)
-        ? prev.sizes.filter((s) => s !== size)
-        : [...prev.sizes, size],
-    }));
+  const removeNewImage = (id) => {
+    setNewImages((prev) => {
+      const target = prev.find((img) => img.id === id);
+      if (target?.preview?.startsWith('blob:')) URL.revokeObjectURL(target.preview);
+      return prev.filter((img) => img.id !== id);
+    });
   };
 
-  const handleSubmit = () => {
-    if (!form.name || !form.price || !form.category || !form.stock) return;
-    const image = form.image || getDefaultImage(form.category, form.name);
-    onSave({ ...form, image, price: String(form.price), stock: String(form.stock) });
-    onClose();
+  const totalImages = existingImages.length + newImages.length;
+
+  const handleSubmit = async () => {
+    if (!form.name || !form.price || !form.categoryId) {
+      setError('يرجى تعبئة اسم المنتج والسعر والتصنيف.');
+      return;
+    }
+    if (!isEdit && totalImages === 0) {
+      setError('يجب رفع صورة واحدة على الأقل للمنتج.');
+      return;
+    }
+
+    setError('');
+    try {
+      const result = await onSave({
+        name: form.name.trim(),
+        description: form.description.trim(),
+        price: form.price,
+        categoryId: form.categoryId,
+        stock: form.stock,
+        imageFiles: newImages.map((img) => img.file),
+      });
+      if (!isEdit && result) {
+        setSavedProduct(result);
+        return;
+      }
+      onClose();
+    } catch (err) {
+      setError(err?.message || 'تعذّر حفظ المنتج.');
+    }
   };
+
+  const variantTarget = savedProduct || (isEdit ? product : null);
+  const showSuccessStep = !!savedProduct;
 
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content product-modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2 className="modal-title">{isEdit ? 'تعديل المنتج' : 'إضافة منتج جديد'}</h2>
-          <button className="close-button" onClick={onClose}>
+          <h2 className="modal-title">
+            {showSuccessStep ? 'تم إضافة المنتج' : isEdit ? 'تعديل المنتج' : 'إضافة منتج جديد'}
+          </h2>
+          <button className="close-button" onClick={onClose} type="button">
             <X size={24} />
           </button>
         </div>
 
         <div className="product-form">
+          {showSuccessStep && (
+            <div className="product-save-success">
+              <p>تم حفظ المنتج بنجاح. يمكنك الآن إضافة التنوعات (لون، مقاس، ...) أو إغلاق النافذة.</p>
+            </div>
+          )}
+
+          <div className="form-group">
+            <label>
+              صور المنتج {!isEdit && <span className="required-mark">*</span>}
+              {totalImages > 0 && (
+                <span className="image-count-badge">{totalImages} صورة</span>
+              )}
+            </label>
+
+            {totalImages > 0 ? (
+              <div className="images-gallery">
+                {existingImages.map((img, index) => (
+                  <div key={img.id ?? `existing-${index}`} className="gallery-item existing">
+                    <img src={img.url} alt={`صورة ${index + 1}`} />
+                    {isEdit && <span className="gallery-item-tag">حالية</span>}
+                  </div>
+                ))}
+                {newImages.map((img, index) => (
+                  <div key={img.id} className="gallery-item new">
+                    <img src={img.preview} alt={`صورة جديدة ${index + 1}`} />
+                    <button
+                      type="button"
+                      className="gallery-remove-btn"
+                      onClick={() => removeNewImage(img.id)}
+                      aria-label="حذف الصورة"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="image-placeholder">
+                <ImageIcon size={32} />
+                <span>JPEG, PNG أو WebP — حد أقصى 2MB لكل صورة</span>
+              </div>
+            )}
+
+            <label className="upload-btn">
+              <Upload size={16} />
+              {totalImages > 0 ? 'إضافة صور' : 'رفع صور'}
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                multiple
+                onChange={handleImageChange}
+                hidden
+              />
+            </label>
+          </div>
+
           <div className="form-group">
             <label>اسم المنتج</label>
             <input
               type="text"
               value={form.name}
               onChange={(e) => handleChange('name', e.target.value)}
-              placeholder=""
             />
           </div>
 
@@ -126,13 +217,13 @@ const ProductModal = ({ isOpen, onClose, onSave, product }) => {
             <div className="form-group">
               <label>التصنيف</label>
               <select
-                value={form.category}
-                onChange={(e) => handleChange('category', e.target.value)}
+                value={form.categoryId}
+                onChange={(e) => handleChange('categoryId', e.target.value)}
               >
                 <option value="">اختر التصنيف</option>
-                {CATEGORIES.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
+                {categories.map((c) => (
+                  <option key={c.id} value={String(c.id)}>
+                    {c.name}
                   </option>
                 ))}
               </select>
@@ -141,6 +232,7 @@ const ProductModal = ({ isOpen, onClose, onSave, product }) => {
               <label>السعر (د.ل)</label>
               <input
                 type="number"
+                min="0"
                 value={form.price}
                 onChange={(e) => handleChange('price', e.target.value)}
               />
@@ -148,54 +240,56 @@ const ProductModal = ({ isOpen, onClose, onSave, product }) => {
           </div>
 
           <div className="form-group">
-            <label>الألوان المتاحة</label>
-            <div className="checkbox-grid colors-grid">
-              {ALL_COLORS.map((color) => (
-                <label key={color} className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={form.colors.includes(color)}
-                    onChange={() => toggleColor(color)}
-                  />
-                  <span>{color}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-
-          <div className="form-group">
-            <label>المقاسات المتاحة</label>
-            <div className="checkbox-grid sizes-grid">
-              {ALL_SIZES.map((size) => (
-                <label key={size} className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={form.sizes.includes(size)}
-                    onChange={() => toggleSize(size)}
-                  />
-                  <span>{size}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-
-          <div className="form-group">
             <label>الكمية</label>
             <input
               type="number"
+              min="0"
               value={form.stock}
               onChange={(e) => handleChange('stock', e.target.value)}
             />
           </div>
+
+          {error && <p className="form-error">{error}</p>}
         </div>
 
         <div className="modal-footer">
-          <button className="cancel-button" onClick={onClose}>
-            إلغاء
-          </button>
-          <button className="save-button" onClick={handleSubmit}>
-            {isEdit ? 'حفظ التغييرات' : 'إضافة المنتج'}
-          </button>
+          {showSuccessStep ? (
+            <>
+              <button className="cancel-button" onClick={onClose} type="button">
+                إغلاق
+              </button>
+              {onOpenVariants && (
+                <button
+                  className="variant-open-btn"
+                  onClick={() => onOpenVariants(savedProduct)}
+                  type="button"
+                >
+                  <Layers size={16} />
+                  اختيار تنوع المنتج
+                </button>
+              )}
+            </>
+          ) : (
+            <>
+              <button className="cancel-button" onClick={onClose} type="button" disabled={isSaving}>
+                إلغاء
+              </button>
+              {variantTarget && onOpenVariants && (
+                <button
+                  className="variant-open-btn"
+                  onClick={() => onOpenVariants(variantTarget)}
+                  type="button"
+                  disabled={isSaving}
+                >
+                  <Layers size={16} />
+                  إضافة تنوع
+                </button>
+              )}
+              <button className="save-button" onClick={handleSubmit} type="button" disabled={isSaving}>
+                {isSaving ? 'جاري الحفظ...' : isEdit ? 'حفظ التغييرات' : 'إضافة المنتج'}
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>

@@ -1,21 +1,42 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { 
-  LayoutDashboard, 
-  Megaphone, 
-  Package, 
-  Box, 
-  DollarSign, 
-  Tags, 
-  ShoppingBag, 
-  Users, 
-  ShoppingCart, 
+import {
+  LayoutDashboard,
+  Megaphone,
+  Package,
+  Box,
+  DollarSign,
+  CreditCard,
+  Tags,
+  ShoppingBag,
+  Users,
+  ShoppingCart,
   Bell,
   Moon,
   Sun,
-  LogOut
+  LogOut,
 } from 'lucide-react';
 import './Sidebar.css';
+
+const mainMenuItems = [
+  { title: 'لوحة التحكم', icon: LayoutDashboard, path: '/' },
+];
+
+const plansMenuItems = [
+  { title: 'خطط الاشتراك', icon: CreditCard, path: '/plans' },
+];
+
+const storeMenuItems = [
+  { title: 'التسويق والمحتوى', icon: Megaphone, path: '/marketing' },
+  { title: 'المنتجات', icon: Package, path: '/products' },
+  { title: 'المخزون', icon: Box, path: '/inventory' },
+  { title: 'المالية', icon: DollarSign, path: '/finance' },
+  { title: 'العروض والخصومات', icon: Tags, path: '/offers' },
+  { title: 'المبيعات المباشرة', icon: ShoppingBag, path: '/sales' },
+  { title: 'الموظفين', icon: Users, path: '/staff' },
+  { title: 'الطلبات', icon: ShoppingCart, path: '/orders' },
+  { title: 'الإشعارات', icon: Bell, path: '/notifications' },
+];
 
 const Sidebar = ({ onLogout }) => {
   const location = useLocation();
@@ -25,18 +46,24 @@ const Sidebar = ({ onLogout }) => {
     document.documentElement.setAttribute('data-theme', isDarkMode ? 'dark' : 'light');
   }, [isDarkMode]);
 
-  const menuItems = [
-    { title: 'لوحة التحكم', icon: LayoutDashboard, path: '/' },
-    { title: 'التسويق والمحتوى', icon: Megaphone, path: '/marketing' },
-    { title: 'المنتجات', icon: Package, path: '/products' },
-    { title: 'المخزون', icon: Box, path: '/inventory' },
-    { title: 'المالية', icon: DollarSign, path: '/finance' },
-    { title: 'العروض والخصومات', icon: Tags, path: '/offers' },
-    { title: 'المبيعات المباشرة', icon: ShoppingBag, path: '/sales' },
-    { title: 'الموظفين', icon: Users, path: '/staff' },
-    { title: 'الطلبات', icon: ShoppingCart, path: '/orders' },
-    { title: 'الإشعارات', icon: Bell, path: '/notifications' },
-  ];
+  const isLinkActive = (path) =>
+    location.pathname === path ||
+    (path !== '/' && location.pathname.startsWith(`${path}/`));
+
+  const renderNavItems = (items) =>
+    items.map((item) => {
+      const isActive = isLinkActive(item.path);
+      const Icon = item.icon;
+
+      return (
+        <li key={item.path} className="nav-item">
+          <Link to={item.path} className={`nav-link ${isActive ? 'active' : ''}`}>
+            <Icon size={20} className="nav-icon" />
+            <span className="nav-text">{item.title}</span>
+          </Link>
+        </li>
+      );
+    });
 
   return (
     <aside className="sidebar">
@@ -44,27 +71,23 @@ const Sidebar = ({ onLogout }) => {
         <h2 className="brand-title">Trendy</h2>
         <span className="brand-subtitle">لوحة تحكم المتجر</span>
       </div>
-      
+
       <nav className="sidebar-nav">
-        <ul className="nav-list">
-          {menuItems.map((item, index) => {
-            const isActive = location.pathname === item.path;
-            const Icon = item.icon;
-            
-            return (
-              <li key={index} className="nav-item">
-                <Link to={item.path} className={`nav-link ${isActive ? 'active' : ''}`}>
-                  <Icon size={20} className="nav-icon" />
-                  <span className="nav-text">{item.title}</span>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
+        <ul className="nav-list">{renderNavItems(mainMenuItems)}</ul>
+
+        <div className="nav-section">
+          <p className="nav-section-title">إدارة الخطط</p>
+          <ul className="nav-list">{renderNavItems(plansMenuItems)}</ul>
+        </div>
+
+        <div className="nav-section">
+          <p className="nav-section-title">إدارة المتجر</p>
+          <ul className="nav-list">{renderNavItems(storeMenuItems)}</ul>
+        </div>
       </nav>
 
       <div className="sidebar-footer">
-        <button className="nav-link logout-btn" onClick={onLogout}>
+        <button className="nav-link logout-btn" onClick={onLogout} type="button">
           <LogOut size={20} className="nav-icon" />
           <span className="nav-text">تسجيل الخروج</span>
         </button>
@@ -76,10 +99,10 @@ const Sidebar = ({ onLogout }) => {
             <Sun size={20} className="theme-icon" />
           )}
           <label className="theme-switch">
-            <input 
-              type="checkbox" 
-              checked={isDarkMode} 
-              onChange={() => setIsDarkMode(!isDarkMode)} 
+            <input
+              type="checkbox"
+              checked={isDarkMode}
+              onChange={() => setIsDarkMode(!isDarkMode)}
             />
             <span className="slider round"></span>
           </label>

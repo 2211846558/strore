@@ -1,108 +1,141 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Search, Plus, CheckCircle2 } from 'lucide-react';
 import ProductCard from '../components/products/ProductCard';
 import ProductModal from '../components/products/ProductModal';
+import ProductVariantModal from '../components/products/ProductVariantModal';
 import ArchiveConfirmModal from '../components/products/ArchiveConfirmModal';
+import {
+  fetchCategories,
+  fetchStoreProducts,
+  fetchProductDetails,
+  createProduct,
+  updateProduct,
+  archiveProduct,
+  restoreProduct,
+} from '../api/products';
+import { getApiErrorMessage } from '../api/stores';
+import { useAuth } from '../context/AuthContext';
 import './Products.css';
 
-const initialProducts = [
-  {
-    id: 1,
-    name: 'بنطلون جينز',
-    description: 'بنطلون جينز عصري بقصة مريحة',
-    price: '120',
-    category: 'بنطلون',
-    colors: ['أزرق داكن'],
-    sizes: ['L', 'M'],
-    stock: '15',
-    status: 'نشط',
-    image: 'https://images.unsplash.com/photo-1542272604-787c3835535d?auto=format&fit=crop&w=400&q=80',
-  },
-  {
-    id: 2,
-    name: 'شورت رياضي',
-    description: 'شورت رياضي مناسب للتمرين',
-    price: '60',
-    category: 'شورت',
-    colors: ['أسود', 'رمادي'],
-    sizes: ['XL', 'L'],
-    stock: '30',
-    status: 'نشط',
-    image: 'https://images.unsplash.com/photo-1591195853828-11db59a44f6b?auto=format&fit=crop&w=400&q=80',
-  },
-  {
-    id: 3,
-    name: 'فستان صيفي',
-    description: 'فستان صيفي أنيق ومريح',
-    price: '150',
-    category: 'فستان',
-    colors: ['أحمر', 'وردي'],
-    sizes: ['L', 'M', 'S'],
-    stock: '23',
-    status: 'نشط',
-    image: 'https://images.unsplash.com/photo-1572804013309-59a88b7e92f1?auto=format&fit=crop&w=400&q=80',
-  },
-  {
-    id: 4,
-    name: 'قميص قطني أزرق',
-    description: 'قميص قطني عالي الجودة بلون أزرق سماوي يناسب جميع المناسبات',
-    price: '85',
-    category: 'قميص',
-    colors: ['أزرق', 'أبيض'],
-    sizes: ['L', 'M', 'XL'],
-    stock: '45',
-    status: 'نشط',
-    image: 'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?auto=format&fit=crop&w=400&q=80',
-  },
+const STATUS_OPTIONS = [
+  { value: 'all', label: 'الكل' },
+  { value: 'active', label: 'نشط' },
+  { value: 'archived', label: 'مؤرشف' },
 ];
 
 const Products = () => {
-  const [products, setProducts] = useState(initialProducts);
+  const { storeId } = useAuth();
+  const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
   const [archiveTarget, setArchiveTarget] = useState(null);
   const [toast, setToast] = useState(null);
-
-  const categories = ['all', 'قميص', 'فستان', 'شورت', 'بنطلون'];
-  const statuses = [
-    { value: 'all', label: 'الكل' },
-    { value: 'نشط', label: 'نشط' },
-    { value: 'مؤرشف', label: 'مؤرشف' },
-  ];
+  const [loading, setLoading] = useState(true);
+  const [loadingEdit, setLoadingEdit] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isArchiving, setIsArchiving] = useState(false);
+  const [variantProduct, setVariantProduct] = useState(null);
+  const [error, setError] = useState('');
 
   const showToast = (message) => {
     setToast(message);
     setTimeout(() => setToast(null), 2500);
   };
 
-  const filteredProducts = products.filter((p) => {
-    const matchSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchCategory = categoryFilter === 'all' || p.category === categoryFilter;
-    const matchStatus = statusFilter === 'all' || p.status === statusFilter;
-    return matchSearch && matchCategory && matchStatus;
-  });
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 400);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
-  const handleAdd = (product) => {
-    const newProduct = { ...product, id: Date.now() };
-    setProducts((prev) => [...prev, newProduct]);
-    showToast('تم إضافة المنتج');
+  useEffect(() => {
+    fetchCategories()
+      .then(setCategories)
+      .catch(() => setCategories([]));
+  }, []);
+
+  const loadProducts = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const list = await fetchStoreProducts({
+        storeId,
+        name: debouncedSearch,
+        categoryId: categoryFilter,
+        status: statusFilter,
+      });
+      setProducts(list);
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'تعذّر تحميل المنتجات'));
+      setProducts([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [storeId, debouncedSearch, categoryFilter, statusFilter]);
+
+  useEffect(() => {
+    loadProducts();
+  }, [loadProducts]);
+
+  const handleSave = async (formData) => {
+    setIsSaving(true);
+    try {
+      const payload = {
+        storeId,
+        name: formData.name,
+        description: formData.description,
+        price: formData.price,
+        categoryId: formData.categoryId,
+        stock: formData.stock,
+        imageFiles: formData.imageFiles,
+      };
+
+      if (editingProduct) {
+        const updated = await updateProduct(editingProduct.id, payload);
+        setProducts((prev) =>
+          prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p)),
+        );
+        showToast(
+          formData.imageFiles?.length
+            ? 'تم تحديث المنتج وإضافة الصور'
+            : 'تم تحديث المنتج',
+        );
+        await loadProducts();
+        return updated;
+      }
+
+      const created = await createProduct(payload);
+      setProducts((prev) => [created, ...prev]);
+      showToast('تم إضافة المنتج بنجاح');
+      await loadProducts();
+      return created;
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleEdit = (product) => {
-    setProducts((prev) => prev.map((p) => (p.id === product.id ? product : p)));
-    showToast('تم تحديث المنتج');
-  };
-
-  const handleArchiveToggle = (product) => {
-    const newStatus = product.status === 'مؤرشف' ? 'نشط' : 'مؤرشف';
-    setProducts((prev) =>
-      prev.map((p) => (p.id === product.id ? { ...p, status: newStatus } : p))
-    );
-    showToast(newStatus === 'مؤرشف' ? 'تم أرشفة المنتج' : 'تم إلغاء أرشفة المنتج');
-    setArchiveTarget(null);
+  const handleArchiveToggle = async (product) => {
+    setIsArchiving(true);
+    try {
+      const isArchived = product.status === 'مؤرشف';
+      if (isArchived) {
+        await restoreProduct(product.id);
+        showToast('تم إلغاء أرشفة المنتج');
+      } else {
+        await archiveProduct(product.id);
+        showToast('تم أرشفة المنتج');
+      }
+      setArchiveTarget(null);
+      await loadProducts();
+    } catch (err) {
+      showToast(getApiErrorMessage(err, 'تعذّر تنفيذ العملية'));
+    } finally {
+      setIsArchiving(false);
+    }
   };
 
   const openArchiveConfirm = (product) => {
@@ -114,16 +147,21 @@ const Products = () => {
     setIsModalOpen(true);
   };
 
-  const openEdit = (product) => {
-    setEditingProduct(product);
-    setIsModalOpen(true);
+  const openVariants = (product) => {
+    setVariantProduct(product);
   };
 
-  const handleSave = (productData) => {
-    if (editingProduct) {
-      handleEdit({ ...productData, id: editingProduct.id });
-    } else {
-      handleAdd(productData);
+  const openEdit = async (product) => {
+    setLoadingEdit(true);
+    setIsModalOpen(true);
+    try {
+      const details = await fetchProductDetails(product.id);
+      setEditingProduct(details);
+    } catch (err) {
+      setIsModalOpen(false);
+      showToast(getApiErrorMessage(err, 'تعذّر تحميل بيانات المنتج'));
+    } finally {
+      setLoadingEdit(false);
     }
   };
 
@@ -137,14 +175,14 @@ const Products = () => {
       </header>
 
       <div className="products-controls">
-        <button className="add-product-btn" onClick={openAdd}>
+        <button className="add-product-btn" onClick={openAdd} type="button">
           <Plus size={18} />
           إضافة منتج
         </button>
 
         <div className="filter-dropdown">
           <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-            {statuses.map((s) => (
+            {STATUS_OPTIONS.map((s) => (
               <option key={s.value} value={s.value}>
                 {s.label}
               </option>
@@ -155,9 +193,9 @@ const Products = () => {
         <div className="filter-dropdown">
           <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
             <option value="all">جميع التصنيفات</option>
-            {categories.filter((c) => c !== 'all').map((c) => (
-              <option key={c} value={c}>
-                {c}
+            {categories.map((c) => (
+              <option key={c.id} value={String(c.id)}>
+                {c.name}
               </option>
             ))}
           </select>
@@ -175,14 +213,19 @@ const Products = () => {
         </div>
       </div>
 
+      {error && <p className="products-error">{error}</p>}
+
       <div className="products-grid">
-        {filteredProducts.length > 0 ? (
-          filteredProducts.map((product) => (
+        {loading ? (
+          <p className="no-results">جاري تحميل المنتجات...</p>
+        ) : products.length > 0 ? (
+          products.map((product) => (
             <ProductCard
               key={product.id}
               product={product}
               onEdit={openEdit}
               onArchive={openArchiveConfirm}
+              onAddVariant={openVariants}
             />
           ))
         ) : (
@@ -191,15 +234,33 @@ const Products = () => {
       </div>
 
       <ProductModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        isOpen={isModalOpen && !loadingEdit}
+        onClose={() => {
+          setIsModalOpen(false);
+          setEditingProduct(null);
+        }}
         onSave={handleSave}
+        onOpenVariants={(product) => {
+          setIsModalOpen(false);
+          setEditingProduct(null);
+          openVariants(product);
+        }}
         product={editingProduct}
+        categories={categories}
+        isSaving={isSaving}
+      />
+
+      <ProductVariantModal
+        isOpen={!!variantProduct}
+        onClose={() => setVariantProduct(null)}
+        product={variantProduct}
+        storeId={storeId}
+        onVariantAdded={() => showToast('تم إضافة التنوع بنجاح')}
       />
 
       <ArchiveConfirmModal
         isOpen={!!archiveTarget}
-        onClose={() => setArchiveTarget(null)}
+        onClose={() => !isArchiving && setArchiveTarget(null)}
         onConfirm={() => archiveTarget && handleArchiveToggle(archiveTarget)}
         product={archiveTarget}
         action={archiveTarget?.status === 'مؤرشف' ? 'restore' : 'archive'}

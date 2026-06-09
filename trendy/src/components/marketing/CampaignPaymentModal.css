@@ -74,6 +74,16 @@
   margin: 0;
 }
 
+.warning-alert {
+  background-color: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.35);
+}
+
+.warning-alert .info-icon-alert,
+.warning-alert p {
+  color: #d97706;
+}
+
 .payment-footer {
   justify-content: space-between;
   flex-direction: row-reverse;

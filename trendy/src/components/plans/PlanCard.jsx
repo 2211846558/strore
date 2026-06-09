@@ -22,9 +22,9 @@ const PlanCard = ({ title, price, featuresText, isPopular, isActive, onSubscribe
         <p>{featuresText}</p>
       </div>
 
-      <button className="subscribe-btn" onClick={onSubscribe}>
+      <button className="subscribe-btn" onClick={onSubscribe} disabled={isActive}>
         <CreditCard size={18} />
-        اشتراك في الخطة
+        {isActive ? 'مشترك حالياً' : 'اشتراك في الخطة'}
       </button>
     </div>
   );

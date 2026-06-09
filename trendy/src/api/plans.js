@@ -1,12 +1,101 @@
 import { apiRequest } from './client';
 import { API_ENDPOINTS } from './config';
 
+function extractList(res) {
+  const payload = res?.data ?? res;
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.data)) return payload.data;
+  return [];
+}
+
+function formatDisplayDate(date) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${pad(date.getDate())}-${pad(date.getMonth() + 1)}-${date.getFullYear()}`;
+}
+
+export function mapPlanFromApi(plan) {
+  return {
+    id: plan.id,
+    title: plan.name,
+    price: String(plan.price ?? ''),
+    durationDays: plan.duration_days ?? 30,
+    commissionRate: plan.commission_rate ?? 0,
+    featuresText: `عمولة المنصة: ${plan.commission_rate ?? 0}% — مدة ${plan.duration_days ?? 30} يوم`,
+    isPopular: false,
+  };
+}
+
+export function mapStoreSubscription(store, plans = []) {
+  if (!store) return null;
+
+  const nestedPlan = store.plan ?? store.current_plan ?? store.subscription?.plan ?? null;
+  const planId = store.plan_id ?? nestedPlan?.id ?? store.subscription?.plan_id ?? null;
+  const matchedPlan = plans.find((p) => p.id === planId) ?? (nestedPlan ? mapPlanFromApi(nestedPlan) : null);
+
+  const startRaw =
+    store.subscription_starts_at ??
+    store.plan_starts_at ??
+    store.subscription?.starts_at ??
+    store.subscription?.start_date ??
+    null;
+  const endRaw =
+    store.subscription_ends_at ??
+    store.plan_expires_at ??
+    store.subscription?.ends_at ??
+    store.subscription?.end_date ??
+    store.expires_at ??
+    null;
+
+  const endDate = endRaw ? new Date(endRaw) : null;
+  const isExpired = endDate ? endDate.getTime() < Date.now() : store.status !== 'active';
+
+  if (!planId && !matchedPlan && store.status !== 'active') return null;
+
+  return {
+    id: planId ?? store.id,
+    planId,
+    title: matchedPlan?.title ?? nestedPlan?.name ?? 'خطة الاشتراك',
+    price: matchedPlan?.price ?? String(nestedPlan?.price ?? store.plan_price ?? '0'),
+    durationDays: matchedPlan?.durationDays ?? nestedPlan?.duration_days ?? 30,
+    status: isExpired ? 'منتهي' : 'نشط',
+    isExpired,
+    statusText: isExpired ? 'انتهى الاشتراك — جدّد الآن' : 'الاشتراك نشط حالياً',
+    dateRange: {
+      start: startRaw ? formatDisplayDate(new Date(startRaw)) : '—',
+      end: endRaw ? formatDisplayDate(endDate) : '—',
+    },
+  };
+}
+
+export function extractStoreFromSubscriptionResponse(response, plan) {
+  const payload = response?.data ?? response ?? {};
+  const store =
+    payload.store ??
+    payload.data?.store ??
+    (payload.id && payload.name ? payload : null);
+
+  if (store) return store;
+
+  return {
+    status: 'active',
+    plan_id: plan.id,
+    plan: {
+      id: plan.id,
+      name: plan.title,
+      price: plan.price,
+      duration_days: plan.durationDays,
+    },
+    subscription_ends_at: payload.subscription_ends_at ?? payload.ends_at ?? null,
+    subscription_starts_at: payload.subscription_starts_at ?? payload.starts_at ?? null,
+  };
+}
+
 /**
  * GET /api/plans — الخطط النشطة المتاحة للتجار
  */
 export async function fetchPlans() {
   const res = await apiRequest(API_ENDPOINTS.plans);
-  return res?.data ?? res ?? [];
+  return extractList(res);
 }
 
 /**
@@ -17,4 +106,18 @@ export async function subscribeToPlan({ planId, storeId }) {
     method: 'POST',
     body: { plan_id: planId, store_id: storeId },
   });
+}
+
+/**
+ * POST /api/stores/{store}/renew
+ */
+export async function renewStorePlan(storeId) {
+  return apiRequest(API_ENDPOINTS.storePlanRenew(storeId), { method: 'POST' });
+}
+
+/**
+ * POST /api/stores/{store}/change-plan/{plan}
+ */
+export async function changeStorePlan(storeId, planId) {
+  return apiRequest(API_ENDPOINTS.storePlanChange(storeId, planId), { method: 'POST' });
 }
