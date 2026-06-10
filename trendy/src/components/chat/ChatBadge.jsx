@@ -144,6 +144,11 @@ const ChatBadge = () => {
                 <div className="chat-empty">
                   <p>جاري التحميل...</p>
                 </div>
+              ) : error ? (
+                <div className="chat-empty">
+                  <MessageCircle size={40} className="chat-empty-icon" />
+                  <p>تعذّر تحميل المحادثات</p>
+                </div>
               ) : chats.length === 0 ? (
                 <div className="chat-empty">
                   <MessageCircle size={40} className="chat-empty-icon" />

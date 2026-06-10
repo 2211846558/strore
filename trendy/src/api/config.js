@@ -76,6 +76,7 @@ export const API_ENDPOINTS = {
   orderPrepare: (id) => `/orders/${id}/prepare`,
   orderConfirmDelivery: (id) => `/orders/${id}/confirm-delivery`,
   ordersChat: '/orders/chat',
+  ordersChatStore: '/orders/chat/store',
   ordersChatMessages: (id) => `/orders/chat/${id}/messages`,
   updateStore: (storeId) => `/admin/stores/${storeId}`,
   employees: '/employees',
