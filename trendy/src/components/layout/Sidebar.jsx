@@ -16,6 +16,7 @@ import {
   Sun,
   LogOut,
 } from 'lucide-react';
+import TrendyBrandLogo from '../brand/TrendyBrandLogo';
 import './Sidebar.css';
 
 const navMenuItems = [
@@ -62,7 +63,7 @@ const Sidebar = ({ onLogout }) => {
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
-        <h2 className="brand-title">Trendy</h2>
+        <TrendyBrandLogo />
         <span className="brand-subtitle">لوحة تحكم المتجر</span>
       </div>
 

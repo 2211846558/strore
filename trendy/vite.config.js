@@ -9,6 +9,18 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:8000',
         changeOrigin: true,
+        configure: (proxy) => {
+          proxy.on('proxyRes', (proxyRes) => {
+            const cookies = proxyRes.headers['set-cookie'];
+            if (!cookies) return;
+            proxyRes.headers['set-cookie'] = cookies.map((cookie) =>
+              cookie
+                .replace(/; secure/gi, '')
+                .replace(/; domain=[^;]+/gi, '')
+                .replace(/; SameSite=None/gi, '; SameSite=Lax'),
+            );
+          });
+        },
       },
       '/storage': {
         target: 'http://localhost:8000',

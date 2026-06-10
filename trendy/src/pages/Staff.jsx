@@ -1,75 +1,36 @@
-import React, { useState } from 'react';
-import { Search, Plus, Edit2, Power, CheckCircle2 } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Search, Plus, Edit2, Power, CheckCircle2, Eye } from 'lucide-react';
 import StaffModal from '../components/staff/StaffModal';
+import StaffDetailsModal from '../components/staff/StaffDetailsModal';
 import RoleFilterDropdown from '../components/staff/RoleFilterDropdown';
+import {
+  fetchAllEmployees,
+  fetchEmployee,
+  createEmployee,
+  updateEmployee,
+  toggleEmployee,
+  buildEmployeePayload,
+  buildEmployeeUpdatePayload,
+  buildRoleOptions,
+  EMPLOYEE_ROLE_OPTIONS,
+} from '../api/employees';
+import { getApiErrorMessage } from '../api/stores';
+import { useAuth } from '../context/AuthContext';
 import './Staff.css';
 
-const ROLES = ['مسؤول عمليات', 'محاسب', 'موظف دعم فني', 'مدير متجر', 'موظف متجر'];
-
-const initialStaff = [
-  {
-    id: 1,
-    name: 'أحمد محمد',
-    email: 'ahmed@trendy.com',
-    phone: '0912345678',
-    role: 'مسؤول عمليات',
-    joinDate: '2026-01-15',
-    lastLogin: '2026-05-03 10:30',
-    status: 'نشط',
-    active: true,
-  },
-  {
-    id: 2,
-    name: 'فاطمة علي',
-    email: 'fatima@trendy.com',
-    phone: '0923456789',
-    role: 'محاسب',
-    joinDate: '2026-02-20',
-    lastLogin: '2026-05-03 09:15',
-    status: 'نشط',
-    active: true,
-  },
-  {
-    id: 3,
-    name: 'عمر سالم',
-    email: 'omar@trendy.com',
-    phone: '0934567890',
-    role: 'موظف دعم فني',
-    joinDate: '2026-03-10',
-    lastLogin: '2026-04-28 14:20',
-    status: 'نشط',
-    active: true,
-  },
-  {
-    id: 4,
-    name: 'سارة محمود',
-    email: 'sara@trendy.com',
-    phone: '0945678901',
-    role: 'مدير متجر',
-    joinDate: '2026-03-25',
-    lastLogin: '2026-05-02 16:00',
-    status: 'نشط',
-    active: true,
-  },
-  {
-    id: 5,
-    name: 'خالد إبراهيم',
-    email: 'khaled@trendy.com',
-    phone: '0956789012',
-    role: 'موظف متجر',
-    joinDate: '2026-04-05',
-    lastLogin: '2026-05-01 11:45',
-    status: 'معطل',
-    active: false,
-  },
-];
-
 const Staff = () => {
-  const [staff, setStaff] = useState(initialStaff);
+  const { storeId } = useAuth();
+  const [staff, setStaff] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
+  const [loading, setLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [togglingId, setTogglingId] = useState(null);
+  const [error, setError] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingStaff, setEditingStaff] = useState(null);
+  const [detailsModal, setDetailsModal] = useState({ open: false, member: null, loading: false });
   const [toast, setToast] = useState(null);
 
   const showToast = (message) => {
@@ -77,59 +38,92 @@ const Staff = () => {
     setTimeout(() => setToast(null), 2800);
   };
 
-  const roleOptions = [
-    { value: 'all', label: 'جميع الأدوار' },
-    ...ROLES.map((r) => ({ value: r, label: r })),
-  ];
+  const formRoleOptions = useMemo(
+    () => (buildRoleOptions(staff).length ? buildRoleOptions(staff) : EMPLOYEE_ROLE_OPTIONS),
+    [staff],
+  );
 
-  const filteredStaff = staff.filter((s) => {
-    const q = searchQuery.trim().toLowerCase();
-    const matchSearch =
-      !q ||
-      s.name.toLowerCase().includes(q) ||
-      s.email.toLowerCase().includes(q) ||
-      s.phone.includes(searchQuery.trim());
-    const matchRole = roleFilter === 'all' || s.role === roleFilter;
-    return matchSearch && matchRole;
-  });
+  const roleOptions = useMemo(
+    () => [
+      { value: 'all', label: 'جميع الأدوار' },
+      ...formRoleOptions.map((r) => ({
+        value: String(r.value),
+        label: r.label,
+      })),
+    ],
+    [formRoleOptions],
+  );
 
-  const handleAdd = (member) => {
-    const newMember = {
-      ...member,
-      id: Date.now(),
-      joinDate: new Date().toISOString().split('T')[0],
-      lastLogin: '-',
-      status: 'نشط',
-      active: true,
-    };
-    setStaff((prev) => [...prev, newMember]);
-    showToast('تم إضافة الموظف بنجاح');
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 400);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  const loadStaff = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const employees = await fetchAllEmployees({
+        storeId,
+        search: debouncedSearch,
+        role: roleFilter,
+      });
+      setStaff(employees);
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'تعذّر تحميل قائمة الموظفين'));
+      setStaff([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [storeId, debouncedSearch, roleFilter]);
+
+  useEffect(() => {
+    loadStaff();
+  }, [loadStaff]);
+
+  const handleSave = async (formData) => {
+    setIsSaving(true);
+    try {
+      if (editingStaff) {
+        const payload = buildEmployeeUpdatePayload(formData, {
+          storeId,
+          roleOptions: formRoleOptions,
+        });
+        await updateEmployee(editingStaff.id, payload);
+        showToast('تم حفظ التغييرات بنجاح');
+      } else {
+        const payload = buildEmployeePayload(formData, {
+          storeId,
+          roleOptions: formRoleOptions,
+        });
+        await createEmployee(payload);
+        showToast('تم إضافة الموظف بنجاح');
+      }
+      setIsModalOpen(false);
+      setEditingStaff(null);
+      await loadStaff();
+    } catch (err) {
+      throw err;
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleEdit = (member) => {
-    setStaff((prev) =>
-      prev.map((s) => (s.id === member.id ? { ...s, ...member } : s))
-    );
-    showToast('تم حفظ التغييرات بنجاح');
-  };
-
-  const handleToggleActive = (id) => {
-    const target = staff.find((s) => s.id === id);
-    if (!target) return;
-
-    setStaff((prev) =>
-      prev.map((s) => {
-        if (s.id !== id) return s;
-        const newActive = !s.active;
-        return { ...s, active: newActive, status: newActive ? 'نشط' : 'معطل' };
-      })
-    );
-
-    showToast(
-      target.active
-        ? `تم تعطيل حساب «${target.name}»`
-        : `تم تفعيل حساب «${target.name}»`
-    );
+  const handleToggleActive = async (member) => {
+    setTogglingId(member.id);
+    try {
+      await toggleEmployee(member.id);
+      showToast(
+        member.active
+          ? `تم تعطيل حساب «${member.name}»`
+          : `تم تفعيل حساب «${member.name}»`
+      );
+      await loadStaff();
+    } catch (err) {
+      showToast(getApiErrorMessage(err, 'تعذّر تغيير حالة الموظف'));
+    } finally {
+      setTogglingId(null);
+    }
   };
 
   const openAdd = () => {
@@ -142,11 +136,14 @@ const Staff = () => {
     setIsModalOpen(true);
   };
 
-  const handleSave = (data) => {
-    if (editingStaff) {
-      handleEdit({ ...data, id: editingStaff.id, active: editingStaff.active, status: editingStaff.status });
-    } else {
-      handleAdd(data);
+  const openDetails = async (member) => {
+    setDetailsModal({ open: true, member: null, loading: true });
+    try {
+      const details = await fetchEmployee(member.id);
+      setDetailsModal({ open: true, member: details, loading: false });
+    } catch (err) {
+      showToast(getApiErrorMessage(err, 'تعذّر تحميل تفاصيل الموظف'));
+      setDetailsModal({ open: false, member: null, loading: false });
     }
   };
 
@@ -183,6 +180,8 @@ const Staff = () => {
         </button>
       </div>
 
+      {error && <div className="staff-error">{error}</div>}
+
       <div className="staff-table-wrapper">
         <table className="staff-table">
           <thead>
@@ -198,8 +197,14 @@ const Staff = () => {
             </tr>
           </thead>
           <tbody>
-            {filteredStaff.length > 0 ? (
-              filteredStaff.map((member) => (
+            {loading ? (
+              <tr>
+                <td colSpan="8" className="no-results-cell">
+                  جاري تحميل الموظفين...
+                </td>
+              </tr>
+            ) : staff.length > 0 ? (
+              staff.map((member) => (
                 <tr key={member.id}>
                   <td className="staff-name">{member.name}</td>
                   <td>{member.email}</td>
@@ -218,6 +223,15 @@ const Staff = () => {
                     <div className="action-buttons">
                       <button
                         type="button"
+                        className="action-btn view-btn"
+                        onClick={() => openDetails(member)}
+                        title="عرض التفاصيل"
+                        aria-label="عرض التفاصيل"
+                      >
+                        <Eye size={16} />
+                      </button>
+                      <button
+                        type="button"
                         className="action-btn edit-btn"
                         onClick={() => openEdit(member)}
                         title="تعديل"
@@ -228,7 +242,8 @@ const Staff = () => {
                       <button
                         type="button"
                         className={`action-btn toggle-btn ${member.active ? 'active' : 'inactive'}`}
-                        onClick={() => handleToggleActive(member.id)}
+                        onClick={() => handleToggleActive(member)}
+                        disabled={togglingId === member.id}
                         title={member.active ? 'تعطيل' : 'تفعيل'}
                         aria-label={member.active ? 'تعطيل' : 'تفعيل'}
                       >
@@ -257,7 +272,15 @@ const Staff = () => {
         }}
         onSave={handleSave}
         member={editingStaff}
-        roles={ROLES}
+        roles={formRoleOptions}
+        isSaving={isSaving}
+      />
+
+      <StaffDetailsModal
+        isOpen={detailsModal.open}
+        onClose={() => setDetailsModal({ open: false, member: null, loading: false })}
+        member={detailsModal.member}
+        loading={detailsModal.loading}
       />
 
       {toast && (

@@ -12,6 +12,18 @@ import {
 
   createShipment,
 
+  updateShipment,
+
+  fetchInventoryVariant,
+
+  fetchVariantMovements,
+
+  adjustInventory,
+
+  loadRecentShipments,
+
+  saveRecentShipment,
+
   INVENTORY_STOCK_FILTER_OPTIONS,
 
 } from '../api/inventory';
@@ -44,9 +56,13 @@ const Inventory = () => {
 
   const [error, setError] = useState('');
 
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isShipmentModalOpen, setIsShipmentModalOpen] = useState(false);
 
-  const [detailModal, setDetailModal] = useState({ open: false, item: null });
+  const [editingShipment, setEditingShipment] = useState(null);
+
+  const [recentShipments, setRecentShipments] = useState([]);
+
+  const [detailModal, setDetailModal] = useState({ open: false, item: null, loading: false });
 
   const [toast, setToast] = useState(null);
 
@@ -120,35 +136,71 @@ const Inventory = () => {
 
 
 
-  const handleAddShipment = async (shipmentData) => {
+  useEffect(() => {
+
+    if (storeId) setRecentShipments(loadRecentShipments(storeId));
+
+  }, [storeId]);
+
+
+
+  const handleSaveShipment = async (shipmentData) => {
 
     setIsSaving(true);
 
     try {
 
-      const created = await createShipment({
+      if (editingShipment?.id) {
 
-        storeId,
+        const updated = await updateShipment(editingShipment.id, {
 
-        items: shipmentData.items,
+          storeId,
 
-        batchNumber: shipmentData.batchNumber,
+          items: shipmentData.items,
 
-      });
+          batchNumber: shipmentData.batchNumber,
 
-      const batchLabel = created.batchNumber || created.code || '';
+        });
 
-      showToast(
+        const next = saveRecentShipment(storeId, updated);
 
-        batchLabel
+        setRecentShipments(next);
 
-          ? `تمت إضافة الشحنة (${batchLabel}) — تحقّق من المخزون بالجدول`
+        showToast(`تم تحديث الشحنة (${updated.batchNumber || updated.code || ''})`);
 
-          : 'تمت إضافة الشحنة — تحقّق من المخزون بالجدول',
+      } else {
 
-      );
+        const created = await createShipment({
 
-      setIsAddModalOpen(false);
+          storeId,
+
+          items: shipmentData.items,
+
+          batchNumber: shipmentData.batchNumber,
+
+        });
+
+        const next = saveRecentShipment(storeId, created);
+
+        setRecentShipments(next);
+
+        const batchLabel = created.batchNumber || created.code || '';
+
+        showToast(
+
+          batchLabel
+
+            ? `تمت إضافة الشحنة (${batchLabel}) — تحقّق من المخزون بالجدول`
+
+            : 'تمت إضافة الشحنة — تحقّق من المخزون بالجدول',
+
+        );
+
+      }
+
+      setIsShipmentModalOpen(false);
+
+      setEditingShipment(null);
 
       await loadInventory();
 
@@ -166,56 +218,56 @@ const Inventory = () => {
 
 
 
-  const handleViewItem = (item) => {
+  const handleViewItem = async (row) => {
+    setDetailModal({ open: true, item: null, loading: true });
+    try {
+      const [variant, movements] = await Promise.all([
+        fetchInventoryVariant(row.variantId),
+        fetchVariantMovements(row.variantId).catch(() => []),
+      ]);
 
-    setDetailModal({
+      setDetailModal({
+        open: true,
+        loading: false,
+        item: {
+          code: variant.sku,
+          batchNumber: variant.sku,
+          date: '—',
+          status: variant.status,
+          statusRaw:
+            variant.statusAlert === 'available'
+              ? 'received'
+              : variant.statusAlert === 'out_of_stock'
+                ? 'cancelled'
+                : 'pending',
+          variantId: row.variantId,
+          movements,
+          items: [
+            {
+              id: variant.id,
+              name: variant.productName,
+              category: '—',
+              variantLabel: variant.attributes,
+              quantity: variant.totalStock,
+            },
+          ],
+        },
+      });
+    } catch (err) {
+      showToast(getApiErrorMessage(err, 'تعذّر تحميل تفاصيل المخزون'));
+      setDetailModal({ open: false, item: null, loading: false });
+    }
+  };
 
-      open: true,
-
-      item: {
-
-        code: item.sku,
-
-        batchNumber: item.sku,
-
-        date: '—',
-
-        status: item.status,
-
-        statusRaw:
-
-          item.statusAlert === 'available'
-
-            ? 'received'
-
-            : item.statusAlert === 'out_of_stock'
-
-              ? 'cancelled'
-
-              : 'pending',
-
-        items: [
-
-          {
-
-            id: item.id,
-
-            name: item.productName,
-
-            category: '—',
-
-            variantLabel: item.attributes,
-
-            quantity: item.totalStock,
-
-          },
-
-        ],
-
-      },
-
-    });
-
+  const handleAdjustStock = async (variantId, quantity, reason) => {
+    try {
+      await adjustInventory({ variantId, quantity, reason, storeId });
+      showToast('تم تعديل المخزون بنجاح');
+      setDetailModal({ open: false, item: null, loading: false });
+      await loadInventory();
+    } catch (err) {
+      showToast(getApiErrorMessage(err, 'تعذّر تعديل المخزون'));
+    }
   };
 
 
@@ -288,7 +340,14 @@ const Inventory = () => {
 
       <div className="inventory-controls">
 
-        <button className="add-shipment-btn" onClick={() => setIsAddModalOpen(true)} type="button">
+        <button
+          className="add-shipment-btn"
+          onClick={() => {
+            setEditingShipment(null);
+            setIsShipmentModalOpen(true);
+          }}
+          type="button"
+        >
 
           <Plus size={18} />
 
@@ -343,6 +402,66 @@ const Inventory = () => {
 
 
       {error && <p className="inventory-error">{error}</p>}
+
+
+
+      {recentShipments.length > 0 && (
+
+        <div className="recent-shipments-panel">
+
+          <h3 className="section-title">الشحنات الأخيرة</h3>
+
+          <div className="recent-shipments-list">
+
+            {recentShipments.map((shipment) => (
+
+              <div key={shipment.id} className="recent-shipment-row">
+
+                <div>
+
+                  <strong>{shipment.code}</strong>
+
+                  <span className="recent-shipment-meta">
+
+                    {shipment.batchNumber || '—'} · {shipment.date} · {shipment.status}
+
+                  </span>
+
+                </div>
+
+                {shipment.statusRaw === 'pending' && (
+
+                  <button
+
+                    type="button"
+
+                    className="action-btn edit-btn"
+
+                    onClick={() => {
+
+                      setEditingShipment(shipment);
+
+                      setIsShipmentModalOpen(true);
+
+                    }}
+
+                  >
+
+                    تعديل
+
+                  </button>
+
+                )}
+
+              </div>
+
+            ))}
+
+          </div>
+
+        </div>
+
+      )}
 
 
 
@@ -484,11 +603,23 @@ const Inventory = () => {
 
       <AddShipmentModal
 
-        isOpen={isAddModalOpen}
+        isOpen={isShipmentModalOpen}
 
-        onClose={() => setIsAddModalOpen(false)}
+        onClose={() => {
 
-        onSave={handleAddShipment}
+          if (!isSaving) {
+
+            setIsShipmentModalOpen(false);
+
+            setEditingShipment(null);
+
+          }
+
+        }}
+
+        onSave={handleSaveShipment}
+
+        initialData={editingShipment}
 
         storeId={storeId}
 
@@ -502,9 +633,13 @@ const Inventory = () => {
 
         isOpen={detailModal.open}
 
-        onClose={() => setDetailModal({ open: false, item: null })}
+        onClose={() => setDetailModal({ open: false, item: null, loading: false })}
 
         shipment={detailModal.item}
+
+        loading={detailModal.loading}
+
+        onAdjust={handleAdjustStock}
 
       />
 

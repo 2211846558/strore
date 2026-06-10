@@ -23,6 +23,12 @@ const FIELD_LABELS = {
   batch_number: 'رقم الدفعة',
   selling_price: 'سعر البيع',
   unit_cost: 'سعر التكلفة',
+  role_id: 'الدور الوظيفي',
+  job_title: 'المسمى الوظيفي',
+  status: 'حالة الطلب',
+  reason: 'سبب الإلغاء',
+  cancellation_reason: 'سبب الإلغاء',
+  message: 'الرسالة',
 };
 
 const isLocalStoreType = (type) => type === 'محلي' || type === 'local';
@@ -102,6 +108,9 @@ const translateValidationMessage = (message, field) => {
   if (/in:/i.test(message) && field === 'entity_type') return 'نوع الكيان غير صالح';
   if (/mimes/i.test(message) && field === 'logo') return 'صيغة اللوقو غير مدعومة (JPEG, PNG, WEBP فقط)';
   if (/max/i.test(message) && field === 'logo') return 'حجم اللوقo يجب ألا يتجاوز 2 ميغابايت';
+  if (/must be an image/i.test(message) && field === 'logo') {
+    return 'يجب رفع صورة بصيغة مدعومة (JPEG, PNG, WEBP)';
+  }
   return message.replace(/^\./, '').trim();
 };
 
@@ -109,24 +118,89 @@ const translateValidationMessage = (message, field) => {
  * PUT /api/admin/stores/{store} — تعديل بيانات المتجر (مدير المتجر)
  */
 export async function updateStore(storeId, payload) {
+  const isFormData = payload instanceof FormData;
   return apiRequest(API_ENDPOINTS.updateStore(storeId), {
-    method: 'PUT',
+    method: isFormData ? 'POST' : 'PUT',
     body: payload,
   });
 }
 
-export async function buildStoreUpdatePayload(formData) {
-  const payload = {};
+/**
+ * بناء FormData لتحديث المتجر — اللوقو يُرسل كملف صورة وليس base64
+ */
+export function buildStoreUpdateFormData(formData, logoFile) {
+  const fd = new FormData();
+  fd.append('_method', 'PUT');
 
-  if (formData.name?.trim()) payload.name = formData.name.trim();
-  if (formData.description !== undefined) payload.description = formData.description?.trim() || null;
-  if (formData.phone?.trim()) payload.phone = formData.phone.trim();
-  if (formData.location?.trim()) payload.google_map_url = formData.location.trim();
-  if (formData.image && String(formData.image).startsWith('data:')) {
-    payload.logo = formData.image;
+  if (formData.name?.trim()) fd.append('name', formData.name.trim());
+  if (formData.description !== undefined) {
+    fd.append('description', formData.description?.trim() || '');
+  }
+  if (formData.phone?.trim()) fd.append('phone', formData.phone.trim());
+  if (formData.email?.trim()) fd.append('store_email', formData.email.trim());
+  if (formData.location?.trim()) fd.append('google_map_url', formData.location.trim());
+  if (logoFile instanceof File) fd.append('logo', logoFile);
+
+  return fd;
+}
+
+/**
+ * استخراج إيميل المتجر — الـ API العام لا يُرجع store_email دائماً
+ */
+export function resolveStoreEmail(store, user = null) {
+  const candidates = [
+    store?.store_email,
+    store?.email,
+    store?.contact_email,
+    user?.store_email,
+    user?.store?.store_email,
+    user?.store?.email,
+    user?.email,
+  ];
+
+  for (const value of candidates) {
+    if (value && String(value).trim()) return String(value).trim();
   }
 
-  return payload;
+  const owned = user?.owned_stores || user?.ownedStores || [];
+  const match = owned.find((s) => s.id === store?.id);
+  if (match?.store_email) return match.store_email;
+  if (match?.email) return match.email;
+
+  return '';
+}
+
+/**
+ * دمج بيانات المتجر من API مع الجلسة دون فقدان الحقول الناقصة في الاستجابة
+ */
+export function mergeStoreProfile(apiStore, sessionStore, user = null) {
+  const base = { ...sessionStore, ...apiStore };
+  return {
+    ...base,
+    store_email: resolveStoreEmail(apiStore, user) || resolveStoreEmail(sessionStore, user),
+    email: resolveStoreEmail(apiStore, user) || resolveStoreEmail(sessionStore, user),
+  };
+}
+
+/**
+ * GET /api/stores/{store}
+ */
+export async function fetchStore(storeId) {
+  const res = await apiRequest(API_ENDPOINTS.storeShow(storeId));
+  return res?.data ?? res;
+}
+
+/**
+ * GET /api/stores/{storeId}/ratings
+ */
+export async function fetchStoreRatings(storeId) {
+  const res = await apiRequest(API_ENDPOINTS.storeRatings(storeId), { auth: false });
+  const data = res?.data ?? res;
+  const average = Number(data?.average_rating ?? data?.average ?? 0);
+  return {
+    average: Number.isNaN(average) ? 0 : average,
+    total: Number(data?.total_ratings ?? data?.total ?? 0),
+  };
 }
 
 export function getApiErrorMessage(error, fallback = 'تعذّر إرسال الطلب، حاول مرة أخرى') {
@@ -145,6 +219,12 @@ export function getApiErrorMessage(error, fallback = 'تعذّر إرسال ال
     }
     if (/no api key provided/i.test(msg) || /Stripe::setApiKey/i.test(msg)) {
       return 'بوابة الدفع غير مهيّأة على الخادم. يرجى التواصل مع الدعم الفني.';
+    }
+    if (/OrderController::show/i.test(msg) || /must be of type int, string given/i.test(msg)) {
+      return 'تعذّر تحميل المحادثات. حاول مرة أخرى.';
+    }
+    if (/App\\Http\\Controllers/i.test(msg) || /vendor\\laravel/i.test(msg)) {
+      return 'حدث خطأ في الخادم. حاول مرة أخرى لاحقاً.';
     }
     return msg;
   }

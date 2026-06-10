@@ -21,7 +21,7 @@ export function mapPlanFromApi(plan) {
     durationDays: plan.duration_days ?? 30,
     commissionRate: plan.commission_rate ?? 0,
     featuresText: `عمولة المنصة: ${plan.commission_rate ?? 0}% — مدة ${plan.duration_days ?? 30} يوم`,
-    isPopular: false,
+    isPopular: Boolean(plan.is_popular ?? plan.is_featured ?? false),
   };
 }
 
@@ -69,24 +69,58 @@ export function mapStoreSubscription(store, plans = []) {
 
 export function extractStoreFromSubscriptionResponse(response, plan) {
   const payload = response?.data ?? response ?? {};
+  const subscription = payload.subscription ?? payload.data?.subscription ?? {};
   const store =
     payload.store ??
     payload.data?.store ??
-    (payload.id && payload.name ? payload : null);
+    subscription.store ??
+    (payload.id && (payload.name || payload.status) ? payload : null);
 
-  if (store) return store;
+  const planId = store?.plan_id ?? subscription.plan_id ?? plan.id;
+  const startsAt =
+    store?.subscription_starts_at ??
+    store?.plan_starts_at ??
+    subscription.starts_at ??
+    subscription.start_date ??
+    payload.subscription_starts_at ??
+    payload.starts_at ??
+    null;
+  const endsAt =
+    store?.subscription_ends_at ??
+    store?.plan_expires_at ??
+    subscription.ends_at ??
+    subscription.end_date ??
+    payload.subscription_ends_at ??
+    payload.ends_at ??
+    null;
+
+  if (store) {
+    return {
+      ...store,
+      status: store.status === 'inactive' ? 'active' : (store.status ?? 'active'),
+      plan_id: planId,
+      subscription_starts_at: startsAt,
+      subscription_ends_at: endsAt,
+      plan: store.plan ?? {
+        id: plan.id,
+        name: plan.title,
+        price: plan.price,
+        duration_days: plan.durationDays,
+      },
+    };
+  }
 
   return {
     status: 'active',
-    plan_id: plan.id,
+    plan_id: planId,
     plan: {
       id: plan.id,
       name: plan.title,
       price: plan.price,
       duration_days: plan.durationDays,
     },
-    subscription_ends_at: payload.subscription_ends_at ?? payload.ends_at ?? null,
-    subscription_starts_at: payload.subscription_starts_at ?? payload.starts_at ?? null,
+    subscription_ends_at: endsAt,
+    subscription_starts_at: startsAt,
   };
 }
 

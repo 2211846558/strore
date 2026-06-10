@@ -98,6 +98,62 @@ export function getProductImageCandidates(url, productId) {
   return [...new Set(candidates.filter(Boolean))];
 }
 
+/**
+ * الباكند يُرجع لوقو المتجر كمسار نسبي مثل logos/{storeId}/{filename}
+ * أو default-store.jpg — نُحوّله إلى /storage/... مع أصل الخادم.
+ */
+export function getStoreLogoCandidates(logo, storeId) {
+  if (!logo || typeof logo !== 'string') return [];
+  const trimmed = logo.trim();
+  if (!trimmed) return [];
+  if (trimmed.startsWith('data:') || trimmed.startsWith('blob:')) return [trimmed];
+
+  const origin = getBackendOrigin();
+  const candidates = [];
+
+  const pushPath = (path) => {
+    if (!path) return;
+    if (import.meta.env.DEV) candidates.push(path);
+    candidates.push(path.startsWith('http') ? path : `${origin}${path}`);
+  };
+
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    pushPath(resolveMediaUrl(trimmed));
+    return [...new Set(candidates.filter(Boolean))];
+  }
+
+  if (trimmed.startsWith('/storage/')) {
+    pushPath(trimmed);
+    return [...new Set(candidates.filter(Boolean))];
+  }
+
+  if (trimmed.startsWith('/')) {
+    pushPath(`/storage${trimmed}`);
+    pushPath(trimmed);
+    return [...new Set(candidates.filter(Boolean))];
+  }
+
+  if (trimmed.startsWith('logos/')) {
+    pushPath(`/storage/${trimmed}`);
+  } else if (storeId) {
+    pushPath(`/storage/logos/${storeId}/${trimmed}`);
+  }
+
+  pushPath(`/storage/${trimmed}`);
+
+  const resolved = resolveMediaUrl(trimmed);
+  if (resolved && resolved !== trimmed) {
+    candidates.push(resolved);
+  }
+
+  return [...new Set(candidates.filter(Boolean))];
+}
+
+export function resolveStoreLogoUrl(logo, storeId) {
+  const candidates = getStoreLogoCandidates(logo, storeId);
+  return candidates[0] || null;
+}
+
 /** صورة بديلة محلية — بدون نص عربي أو طلب خارجي */
 export function productPlaceholderImage() {
   const svg =

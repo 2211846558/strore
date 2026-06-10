@@ -4,11 +4,13 @@ import './EditStoreModal.css';
 
 const EditStoreModal = ({ isOpen, onClose, store, onSave, saving = false }) => {
   const [formData, setFormData] = useState({ ...store });
+  const [logoFile, setLogoFile] = useState(null);
   const fileInputRef = useRef(null);
 
   useEffect(() => {
     if (isOpen) {
       setFormData({ ...store });
+      setLogoFile(null);
     }
   }, [isOpen, store]);
 
@@ -23,6 +25,7 @@ const EditStoreModal = ({ isOpen, onClose, store, onSave, saving = false }) => {
     const file = e.target.files?.[0];
     if (!file || !file.type.startsWith('image/')) return;
 
+    setLogoFile(file);
     const reader = new FileReader();
     reader.onload = () => {
       setFormData((prev) => ({ ...prev, image: reader.result }));
@@ -32,7 +35,7 @@ const EditStoreModal = ({ isOpen, onClose, store, onSave, saving = false }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const ok = await onSave(formData);
+    const ok = await onSave(formData, logoFile);
     if (ok !== false) onClose();
   };
 

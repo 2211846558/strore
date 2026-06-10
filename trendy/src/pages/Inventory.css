@@ -290,6 +290,38 @@
   }
 }
 
+.recent-shipments-panel {
+  margin-bottom: 20px;
+  padding: 16px 20px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+}
+
+.recent-shipments-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.recent-shipment-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--bg-subtle, rgba(0, 0, 0, 0.03));
+}
+
+.recent-shipment-meta {
+  display: block;
+  font-size: 12px;
+  color: var(--text-muted, #6b7280);
+  margin-top: 4px;
+}
+
 @media (max-width: 768px) {
   .inventory-stats {
     grid-template-columns: 1fr;

@@ -1,21 +1,39 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Search, Eye, X, CheckCircle2 } from 'lucide-react';
 import OrderDropdown from '../components/orders/OrderDropdown';
 import OrderDetailModal from '../components/orders/OrderDetailModal';
 import {
-  initialOrders,
+  fetchAllOrders,
+  fetchOrder,
+  updateOrderStatus,
+  cancelOrder,
+  prepareOrder,
+  confirmOrderDelivery,
+  canCancelOrderStatus,
+  canPrepareOrder,
+  canConfirmDelivery,
+} from '../api/orders';
+import { getApiErrorMessage } from '../api/stores';
+import { useAuth } from '../context/AuthContext';
+import {
   STATUS_FILTER_OPTIONS,
   ORDER_STATUSES,
   getStatusBadgeClass,
-  canCancelOrder,
 } from '../data/ordersData';
 import './Orders.css';
 
 const Orders = () => {
-  const [orders, setOrders] = useState(initialOrders);
+  const { storeId } = useAuth();
+  const [orders, setOrders] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [detailOrder, setDetailOrder] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [updatingId, setUpdatingId] = useState(null);
+  const [cancellingId, setCancellingId] = useState(null);
+  const [actionId, setActionId] = useState(null);
+  const [error, setError] = useState('');
+  const [detailModal, setDetailModal] = useState({ open: false, order: null, loading: false });
   const [toast, setToast] = useState(null);
 
   const showToast = (message) => {
@@ -23,41 +41,106 @@ const Orders = () => {
     setTimeout(() => setToast(null), 2800);
   };
 
-  const filteredOrders = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    return orders.filter((order) => {
-      const matchSearch =
-        !q ||
-        order.id.toLowerCase().includes(q) ||
-        order.customerName.toLowerCase().includes(q) ||
-        order.phone.includes(searchQuery.trim());
-      const matchStatus = statusFilter === 'all' || order.status === statusFilter;
-      return matchSearch && matchStatus;
-    });
-  }, [orders, searchQuery, statusFilter]);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 400);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
-  const handleStatusChange = (orderId, newStatus) => {
-    const order = orders.find((o) => o.id === orderId);
+  const loadOrders = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const list = await fetchAllOrders({
+        storeId,
+        search: debouncedSearch,
+        status: statusFilter,
+      });
+      setOrders(list);
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'تعذّر تحميل الطلبات'));
+      setOrders([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [storeId, debouncedSearch, statusFilter]);
+
+  useEffect(() => {
+    loadOrders();
+  }, [loadOrders]);
+
+  const handleStatusChange = async (order, newStatus) => {
     if (!order || order.status === newStatus) return;
 
-    setOrders((prev) =>
-      prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o))
-    );
-    showToast(`تم تحديث حالة الطلب ${orderId} إلى «${newStatus}»`);
+    setUpdatingId(order.orderId);
+    try {
+      await updateOrderStatus(order.orderId, newStatus);
+      showToast(`تم تحديث حالة الطلب ${order.id} إلى «${newStatus}»`);
+      await loadOrders();
+    } catch (err) {
+      showToast(getApiErrorMessage(err, 'تعذّر تحديث حالة الطلب'));
+    } finally {
+      setUpdatingId(null);
+    }
   };
 
-  const handleCancel = (orderId) => {
-    const order = orders.find((o) => o.id === orderId);
-    if (!order || !canCancelOrder(order.status)) return;
+  const handleCancel = async (order) => {
+    if (!order || !canCancelOrderStatus(order.status)) return;
 
-    setOrders((prev) =>
-      prev.map((o) => (o.id === orderId ? { ...o, status: 'ملغي' } : o))
-    );
-    showToast(`تم إلغاء الطلب ${orderId} بنجاح`);
+    const confirmed = window.confirm(`هل تريد إلغاء الطلب ${order.id}؟`);
+    if (!confirmed) return;
+
+    const reason = window.prompt('سبب الإلغاء:', 'إلغاء من المتجر');
+    if (reason === null) return;
+
+    setCancellingId(order.orderId);
+    try {
+      await cancelOrder(order.orderId, reason);
+      showToast(`تم إلغاء الطلب ${order.id} بنجاح`);
+      await loadOrders();
+    } catch (err) {
+      showToast(getApiErrorMessage(err, 'تعذّر إلغاء الطلب'));
+    } finally {
+      setCancellingId(null);
+    }
   };
 
-  const openDetails = (order) => {
-    setDetailOrder(order);
+  const handlePrepare = async (order) => {
+    if (!order || !canPrepareOrder(order)) return;
+    setActionId(order.orderId);
+    try {
+      await prepareOrder(order.orderId);
+      showToast(`تم تجهيز الطلب ${order.id} بنجاح`);
+      await loadOrders();
+    } catch (err) {
+      showToast(getApiErrorMessage(err, 'تعذّر تجهيز الطلب'));
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  const handleConfirmDelivery = async (order) => {
+    if (!order || !canConfirmDelivery(order)) return;
+    setActionId(order.orderId);
+    try {
+      await confirmOrderDelivery(order.orderId);
+      showToast(`تم تأكيد تسليم الطلب ${order.id}`);
+      await loadOrders();
+    } catch (err) {
+      showToast(getApiErrorMessage(err, 'تعذّر تأكيد التسليم'));
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  const openDetails = async (order) => {
+    setDetailModal({ open: true, order: null, loading: true });
+    try {
+      const details = await fetchOrder(order.orderId);
+      setDetailModal({ open: true, order: details, loading: false });
+    } catch (err) {
+      showToast(getApiErrorMessage(err, 'تعذّر تحميل تفاصيل الطلب'));
+      setDetailModal({ open: false, order: null, loading: false });
+    }
   };
 
   return (
@@ -87,10 +170,14 @@ const Orders = () => {
         />
       </div>
 
+      {error && <div className="orders-error">{error}</div>}
+
       <div className="orders-list">
-        {filteredOrders.length > 0 ? (
-          filteredOrders.map((order) => (
-            <article key={order.id} className="order-card">
+        {loading ? (
+          <p className="orders-empty">جاري تحميل الطلبات...</p>
+        ) : orders.length > 0 ? (
+          orders.map((order) => (
+            <article key={order.orderId} className="order-card">
               <div className="order-card-top">
                 <span className={`order-status-badge ${getStatusBadgeClass(order.status)}`}>
                   {order.status}
@@ -105,7 +192,10 @@ const Orders = () => {
                 <div className="order-detail-item">
                   <span className="label">العميل</span>
                   <span className="value">{order.customerName}</span>
-                  <span className="value" style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>
+                  <span
+                    className="value"
+                    style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}
+                  >
                     {order.phone}
                   </span>
                 </div>
@@ -133,14 +223,38 @@ const Orders = () => {
                   className="compact"
                   value={order.status}
                   options={ORDER_STATUSES}
-                  onChange={(status) => handleStatusChange(order.id, status)}
+                  onChange={(status) => handleStatusChange(order, status)}
                 />
+
+                {canPrepareOrder(order) && (
+                  <button
+                    type="button"
+                    className="order-btn-view"
+                    onClick={() => handlePrepare(order)}
+                    disabled={actionId === order.orderId}
+                  >
+                    تجهيز الطلب
+                  </button>
+                )}
+
+                {canConfirmDelivery(order) && (
+                  <button
+                    type="button"
+                    className="order-btn-view"
+                    onClick={() => handleConfirmDelivery(order)}
+                    disabled={actionId === order.orderId}
+                  >
+                    تأكيد التسليم
+                  </button>
+                )}
 
                 <button
                   type="button"
                   className="order-btn-cancel"
-                  onClick={() => handleCancel(order.id)}
-                  disabled={!canCancelOrder(order.status)}
+                  onClick={() => handleCancel(order)}
+                  disabled={
+                    !canCancelOrderStatus(order.status) || cancellingId === order.orderId
+                  }
                 >
                   <X size={16} />
                   إلغاء الطلب
@@ -154,9 +268,10 @@ const Orders = () => {
       </div>
 
       <OrderDetailModal
-        isOpen={!!detailOrder}
-        onClose={() => setDetailOrder(null)}
-        order={detailOrder ? orders.find((o) => o.id === detailOrder.id) : null}
+        isOpen={detailModal.open}
+        onClose={() => setDetailModal({ open: false, order: null, loading: false })}
+        order={detailModal.order}
+        loading={detailModal.loading}
       />
 
       {toast && (

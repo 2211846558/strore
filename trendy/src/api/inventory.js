@@ -219,6 +219,65 @@ export async function cancelShipment(id, { storeId } = {}) {
  */
 export async function fetchInventoryVariant(variantId) {
   const res = await apiRequest(API_ENDPOINTS.inventoryVariant(variantId));
+  const raw = res?.data ?? res;
+  return mapInventoryRow(raw);
+}
+
+/**
+ * GET /inventory/variants/{variantId}/movements
+ */
+export async function fetchVariantMovements(variantId, { perPage = 20 } = {}) {
+  const query = new URLSearchParams({ per_page: String(perPage) });
+  const res = await apiRequest(
+    `${API_ENDPOINTS.inventoryVariantMovements(variantId)}?${query}`,
+  );
+  return extractList(res).map((row) => ({
+    id: row.id,
+    type: row.type ?? row.movement_type ?? '—',
+    quantity: Number(row.quantity ?? 0),
+    date: formatDate(row.created_at ?? row.date),
+    note: row.note ?? row.reason ?? '',
+    shipmentId: row.shipment_id ?? row.shipment?.id ?? null,
+  }));
+}
+
+const RECENT_SHIPMENTS_KEY = (storeId) => `trendy_recent_shipments_${storeId}`;
+
+export function loadRecentShipments(storeId) {
+  if (!storeId) return [];
+  try {
+    const raw = localStorage.getItem(RECENT_SHIPMENTS_KEY(storeId));
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveRecentShipment(storeId, shipment) {
+  if (!storeId || !shipment?.id) return loadRecentShipments(storeId);
+  const mapped = mapShipment(shipment);
+  const current = loadRecentShipments(storeId).filter((s) => s.id !== mapped.id);
+  const next = [mapped, ...current].slice(0, 20);
+  localStorage.setItem(RECENT_SHIPMENTS_KEY(storeId), JSON.stringify(next));
+  return next;
+}
+
+/**
+ * POST /inventory/adjust — تعديل المخزون يدوياً
+ */
+export async function adjustInventory({ variantId, quantity, reason, storeId }) {
+  const body = {
+    variant_id: Number(variantId),
+    quantity: Number(quantity),
+    reason: reason?.trim() || 'تعديل يدوي من لوحة المتجر',
+  };
+  if (storeId) body.store_id = storeId;
+
+  const res = await apiRequest(API_ENDPOINTS.inventoryAdjust, {
+    method: 'POST',
+    body,
+  });
   return res?.data ?? res;
 }
 

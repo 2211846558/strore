@@ -3,6 +3,7 @@ import { Plus, Trash2, Edit2, CheckCircle2 } from 'lucide-react';
 import OfferModal from '../components/offers/OfferModal';
 import {
   fetchAllPromotions,
+  fetchPromotion,
   createPromotion,
   updatePromotion,
   deletePromotion,
@@ -26,6 +27,7 @@ const Offers = () => {
   const [error, setError] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingOffer, setEditingOffer] = useState(null);
+  const [loadingOfferDetails, setLoadingOfferDetails] = useState(false);
   const [toast, setToast] = useState(null);
 
   const showToast = (message) => {
@@ -114,9 +116,17 @@ const Offers = () => {
     setIsModalOpen(true);
   };
 
-  const openEdit = (offer) => {
-    setEditingOffer(offer);
-    setIsModalOpen(true);
+  const openEdit = async (offer) => {
+    setLoadingOfferDetails(true);
+    try {
+      const full = await fetchPromotion(offer.id);
+      setEditingOffer(full);
+      setIsModalOpen(true);
+    } catch (err) {
+      showToast(getApiErrorMessage(err, 'تعذّر تحميل تفاصيل الحملة'));
+    } finally {
+      setLoadingOfferDetails(false);
+    }
   };
 
   const getStatusClass = (status) => {
@@ -212,7 +222,7 @@ const Offers = () => {
                   type="button"
                   className="offer-btn edit-btn"
                   onClick={() => openEdit(offer)}
-                  disabled={isSaving}
+                  disabled={isSaving || loadingOfferDetails}
                 >
                   <Edit2 size={16} />
                   تعديل

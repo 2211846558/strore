@@ -2,6 +2,24 @@
   position: relative;
 }
 
+.chat-dropdown-error {
+  margin: 0 16px 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background-color: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #fca5a5;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.chat-messages-loading {
+  text-align: center;
+  color: var(--text-secondary);
+  padding: 16px;
+  font-size: 13px;
+}
+
 .chat-badge-btn {
   display: flex;
   align-items: center;

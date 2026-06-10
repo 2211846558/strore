@@ -5,11 +5,10 @@ import CampaignPaymentModal from '../components/marketing/CampaignPaymentModal';
 import ProductSelectionModal from '../components/marketing/ProductSelectionModal';
 import {
   fetchAvailableCampaigns,
-  loadMyCampaigns,
+  enrichMyCampaigns,
   saveMyCampaign,
   subscribeToCampaign,
   buildSubscriptionEntry,
-  CAMPAIGN_SUBSCRIPTION_COST,
 } from '../api/campaigns';
 import { getApiErrorMessage } from '../api/stores';
 import { useAuth } from '../context/AuthContext';
@@ -54,9 +53,8 @@ const Marketing = () => {
   }, [loadCampaigns]);
 
   useEffect(() => {
-    if (storeId) {
-      setMyCampaigns(loadMyCampaigns(storeId));
-    }
+    if (!storeId) return;
+    enrichMyCampaigns(storeId).then(setMyCampaigns).catch(() => setMyCampaigns([]));
   }, [storeId]);
 
   const subscribedIds = new Set(myCampaigns.map((c) => c.megaCampaignId ?? c.id));
@@ -82,14 +80,14 @@ const Marketing = () => {
 
     setIsSubmitting(true);
     try {
-      await subscribeToCampaign({
+      const apiRes = await subscribeToCampaign({
         storeId,
         megaCampaignId: campaign.megaCampaignId ?? campaign.id,
         productIds: selectedProducts.map((p) => p.id),
         discountPercentage,
       });
 
-      const entry = buildSubscriptionEntry(campaign, selectedProducts, discountPercentage);
+      const entry = buildSubscriptionEntry(campaign, selectedProducts, discountPercentage, apiRes);
       const updated = saveMyCampaign(storeId, entry);
       setMyCampaigns(updated);
       await refreshWallet();
@@ -188,7 +186,7 @@ const Marketing = () => {
         onClose={() => setIsPaymentModalOpen(false)}
         campaign={selectedCampaign}
         walletBalance={balance}
-        subscriptionCost={CAMPAIGN_SUBSCRIPTION_COST}
+        subscriptionCost={selectedCampaign?.price ?? 50}
         onConfirm={handlePaymentConfirm}
       />
 

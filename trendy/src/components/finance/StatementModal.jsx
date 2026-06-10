@@ -1,10 +1,10 @@
-﻿import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react';
-import { X, Download } from 'lucide-react';
+﻿import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { X } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
+import { fetchAccountStatement } from '../../api/finance';
+import { getApiErrorMessage } from '../../api/stores';
 import './StatementModal.css';
-
-const OPENING_BALANCE = 10000;
 
 const getTypeClass = (type) => {
   if (type === 'مبيعات') return 'sales';
@@ -12,55 +12,42 @@ const getTypeClass = (type) => {
   return 'refund';
 };
 
-const StatementModal = ({ isOpen, onClose, transactions = [], onExportToast }) => {
-  const [startDate, setStartDate] = useState('2026-05-01');
-  const [endDate, setEndDate] = useState('2026-05-03');
+const today = new Date().toISOString().slice(0, 10);
+const monthStart = new Date();
+monthStart.setDate(1);
+const defaultStart = monthStart.toISOString().slice(0, 10);
+
+const StatementModal = ({ isOpen, onClose, onExportToast }) => {
+  const [startDate, setStartDate] = useState(defaultStart);
+  const [endDate, setEndDate] = useState(today);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [openingBalance, setOpeningBalance] = useState(0);
+  const [closingBalance, setClosingBalance] = useState(0);
+  const [items, setItems] = useState([]);
   const [exporting, setExporting] = useState(false);
   const statementRef = useRef(null);
 
-  const { filteredItems, openingBalance, closingBalance } = useMemo(() => {
-    const sorted = [...transactions]
-      .filter((t) => t.status === 'ناجح')
-      .sort((a, b) => {
-        const dateCompare = a.date.localeCompare(b.date);
-        if (dateCompare !== 0) return dateCompare;
-        return a.time.localeCompare(b.time);
-      });
+  const loadStatement = useCallback(async () => {
+    if (!isOpen) return;
+    setLoading(true);
+    setError('');
+    try {
+      const data = await fetchAccountStatement({ startDate, endDate });
+      setOpeningBalance(Number(data.openingBalance ?? 0));
+      setClosingBalance(Number(data.closingBalance ?? 0));
+      setItems(data.transactions ?? []);
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'تعذّر تحميل كشف الحساب'));
+      setItems([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [isOpen, startDate, endDate]);
 
-    let runningBalance = OPENING_BALANCE;
-    const withBalance = sorted.map((t) => {
-      const delta = t.sign === '+' ? t.net : -t.net;
-      runningBalance += delta;
-      return {
-        date: t.date,
-        time: t.time,
-        type: t.type,
-        amount: t.net,
-        sign: t.sign,
-        balance: runningBalance,
-      };
-    });
-
-    const inRange = withBalance.filter(
-      (item) => item.date >= startDate && item.date <= endDate
-    );
-
-    const beforeRange = withBalance.filter((item) => item.date < startDate);
-    const opening =
-      beforeRange.length > 0
-        ? beforeRange[beforeRange.length - 1].balance
-        : OPENING_BALANCE;
-
-    const upToEnd = withBalance.filter((item) => item.date <= endDate);
-    const closing =
-      upToEnd.length > 0 ? upToEnd[upToEnd.length - 1].balance : opening;
-
-    return {
-      filteredItems: [...inRange].reverse(),
-      openingBalance: opening,
-      closingBalance: closing,
-    };
-  }, [transactions, startDate, endDate]);
+  useEffect(() => {
+    loadStatement();
+  }, [loadStatement]);
 
   const handleExport = useCallback(async () => {
     if (!statementRef.current || exporting) return;
@@ -158,14 +145,20 @@ const StatementModal = ({ isOpen, onClose, transactions = [], onExportToast }) =
             </div>
           </div>
 
+          {error && <p className="statement-error">{error}</p>}
+
           <div className="balance-row">
             <div className="balance-item">
               <span className="balance-label">الرصيد الافتتاحي</span>
-              <span className="balance-value opening">{openingBalance.toLocaleString()} د.ل</span>
+              <span className="balance-value opening">
+                {openingBalance.toLocaleString('ar-LY')} د.ل
+              </span>
             </div>
             <div className="balance-item">
               <span className="balance-label">الرصيد الختامي</span>
-              <span className="balance-value closing">{closingBalance.toLocaleString()} د.ل</span>
+              <span className="balance-value closing">
+                {closingBalance.toLocaleString('ar-LY')} د.ل
+              </span>
             </div>
           </div>
 
@@ -177,13 +170,19 @@ const StatementModal = ({ isOpen, onClose, transactions = [], onExportToast }) =
                   <th>الوقت</th>
                   <th>نوع العملية</th>
                   <th>المبلغ</th>
-                  <th>الرصيد المتراكم</th>
+                  <th>الوصف</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredItems.length > 0 ? (
-                  filteredItems.map((item, idx) => (
-                    <tr key={idx}>
+                {loading ? (
+                  <tr>
+                    <td colSpan="5" className="no-results-cell">
+                      جاري تحميل كشف الحساب...
+                    </td>
+                  </tr>
+                ) : items.length > 0 ? (
+                  items.map((item) => (
+                    <tr key={item.id}>
                       <td>{item.date}</td>
                       <td>{item.time}</td>
                       <td>
@@ -192,9 +191,9 @@ const StatementModal = ({ isOpen, onClose, transactions = [], onExportToast }) =
                         </span>
                       </td>
                       <td className={`amount-cell ${item.sign === '+' ? 'positive' : 'negative'}`}>
-                        {item.sign}{item.amount} د.ل
+                        {item.sign}{item.net} د.ل
                       </td>
-                      <td className="balance-cell">{item.balance.toLocaleString()} د.ل</td>
+                      <td>{item.description || '—'}</td>
                     </tr>
                   ))
                 ) : (
@@ -210,6 +209,9 @@ const StatementModal = ({ isOpen, onClose, transactions = [], onExportToast }) =
         </div>
 
         <div className="modal-footer">
+          <button type="button" className="save-button" onClick={handleExport} disabled={exporting || loading}>
+            {exporting ? 'جاري التصدير...' : 'تصدير PDF'}
+          </button>
           <button type="button" className="cancel-button" onClick={onClose}>
             إغلاق
           </button>

@@ -10,6 +10,7 @@ import {
   ArrowLeftRight,
 } from 'lucide-react';
 import { COLOR_DOTS } from '../data/salesProducts';
+import { fetchAttributes, buildColorDotsFromAttributes } from '../api/products';
 import {
   fetchPosCatalog,
   fetchPosCart,
@@ -48,6 +49,7 @@ const Sales = () => {
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [loadingCart, setLoadingCart] = useState(true);
   const [loadingInvoices, setLoadingInvoices] = useState(false);
+  const [colorDots, setColorDots] = useState(COLOR_DOTS);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
   const [selectedProduct, setSelectedProduct] = useState(null);
@@ -67,6 +69,12 @@ const Sales = () => {
     const timer = setTimeout(() => setDebouncedInvoiceSearch(invoiceSearch), 400);
     return () => clearTimeout(timer);
   }, [invoiceSearch]);
+
+  useEffect(() => {
+    fetchAttributes()
+      .then((attrs) => setColorDots(buildColorDotsFromAttributes(attrs)))
+      .catch(() => {});
+  }, []);
 
   const loadProducts = useCallback(async () => {
     setLoadingProducts(true);
@@ -388,7 +396,7 @@ const Sales = () => {
                             <span key={c} className="sales-color-dot">
                               <span
                                 className="sales-color-circle"
-                                style={{ background: COLOR_DOTS[c] || '#ccc' }}
+                                style={{ background: colorDots[c] || '#ccc' }}
                               />
                               {c}
                             </span>

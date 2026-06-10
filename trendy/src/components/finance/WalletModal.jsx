@@ -1,19 +1,42 @@
 import React, { useState, useEffect } from 'react';
-import { X, Wallet, Plus, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
+import { X, Wallet, Plus, ArrowDownLeft, ArrowUpRight, Minus } from 'lucide-react';
 import SadadRechargeModal from './SadadRechargeModal';
 import { useWallet } from '../../context/WalletContext';
 import { getApiErrorMessage } from '../../api/stores';
 import './WalletModal.css';
 
 const WalletModal = ({ isOpen, onClose, onToast }) => {
-  const { balance, status, transactions, loading, rechargeViaStripe, refreshWallet } = useWallet();
+  const { balance, status, transactions, loading, rechargeViaStripe, withdrawFromWallet, refreshWallet } =
+    useWallet();
   const [rechargeOpen, setRechargeOpen] = useState(false);
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
+  const [withdrawAmount, setWithdrawAmount] = useState('');
+  const [cardNumber, setCardNumber] = useState('');
+  const [withdrawing, setWithdrawing] = useState(false);
 
   useEffect(() => {
     if (isOpen) refreshWallet();
   }, [isOpen, refreshWallet]);
 
   if (!isOpen) return null;
+
+  const handleWithdraw = async () => {
+    setWithdrawing(true);
+    try {
+      const amount = await withdrawFromWallet({
+        amount: withdrawAmount,
+        cardNumber,
+      });
+      setWithdrawOpen(false);
+      setWithdrawAmount('');
+      setCardNumber('');
+      onToast?.(`تم سحب ${amount.toLocaleString()} د.ل بنجاح`);
+    } catch (err) {
+      onToast?.(getApiErrorMessage(err, 'تعذّر إتمام عملية السحب'));
+    } finally {
+      setWithdrawing(false);
+    }
+  };
 
   const handleRechargeConfirm = async ({ paymentMethodId, amount, cardLast4 }) => {
     try {
@@ -42,11 +65,49 @@ const WalletModal = ({ isOpen, onClose, onToast }) => {
               <span className="wallet-status-badge">{status}</span>
             </div>
             <p className="wallet-balance-amount">{balance.toFixed(2)} د.ل</p>
-            <button type="button" className="wallet-recharge-btn" onClick={() => setRechargeOpen(true)}>
-              <Plus size={18} />
-              شحن الرصيد
-            </button>
+            <div className="wallet-balance-actions">
+              <button type="button" className="wallet-recharge-btn" onClick={() => setRechargeOpen(true)}>
+                <Plus size={18} />
+                شحن الرصيد
+              </button>
+              <button
+                type="button"
+                className="wallet-withdraw-btn"
+                onClick={() => setWithdrawOpen((v) => !v)}
+              >
+                <Minus size={18} />
+                سحب الرصيد
+              </button>
+            </div>
           </div>
+
+          {withdrawOpen && (
+            <div className="wallet-withdraw-form">
+              <input
+                type="number"
+                min="1"
+                placeholder="المبلغ (د.ل)"
+                value={withdrawAmount}
+                onChange={(e) => setWithdrawAmount(e.target.value)}
+                dir="ltr"
+              />
+              <input
+                type="text"
+                placeholder="رقم البطاقة"
+                value={cardNumber}
+                onChange={(e) => setCardNumber(e.target.value)}
+                dir="ltr"
+              />
+              <button
+                type="button"
+                className="wallet-recharge-btn"
+                onClick={handleWithdraw}
+                disabled={withdrawing || !withdrawAmount || !cardNumber}
+              >
+                {withdrawing ? 'جاري السحب...' : 'تأكيد السحب'}
+              </button>
+            </div>
+          )}
 
           <div className="wallet-transactions">
             <h3>آخر المعاملات</h3>

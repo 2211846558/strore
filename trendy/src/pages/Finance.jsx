@@ -15,7 +15,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import WalletModal from '../components/finance/WalletModal';
+import StatementModal from '../components/finance/StatementModal';
 import TransactionDetailModal from '../components/finance/TransactionDetailModal';
+import { fetchCustodyLogs } from '../api/custody';
 import { useWallet } from '../context/WalletContext';
 import { fetchCustodySummary } from '../api/custody';
 import {
@@ -51,6 +53,8 @@ const Finance = () => {
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [error, setError] = useState('');
   const [isWalletOpen, setIsWalletOpen] = useState(false);
+  const [isStatementOpen, setIsStatementOpen] = useState(false);
+  const [custodyLogs, setCustodyLogs] = useState([]);
   const [selectedTransaction, setSelectedTransaction] = useState(null);
   const [toast, setToast] = useState(null);
 
@@ -70,7 +74,7 @@ const Finance = () => {
     setLoading(true);
     setError('');
     try {
-      const [txResult, profit, chart, custody] = await Promise.all([
+      const [txResult, profit, chart, custody, logs] = await Promise.all([
         fetchAllTransactions({
           search: debouncedSearch,
           status: statusFilter !== 'all' ? statusFilter : undefined,
@@ -79,12 +83,14 @@ const Finance = () => {
         fetchProfitOverview(),
         fetchMonthlyRevenueChart(5),
         fetchCustodySummary().catch(() => null),
+        fetchCustodyLogs({ perPage: 20 }).catch(() => ({ data: [] })),
       ]);
 
       setTransactions(txResult.transactions);
       setProfitOverview(profit);
       setChartData(chart);
       setCustodySummary(custody);
+      setCustodyLogs(logs?.data ?? []);
     } catch (err) {
       setError(getApiErrorMessage(err, 'تعذّر تحميل البيانات المالية'));
       setTransactions([]);
@@ -246,6 +252,10 @@ const Finance = () => {
               <Wallet size={16} />
               المحفظة
             </button>
+            <button className="wallet-btn" onClick={() => setIsStatementOpen(true)} type="button">
+              <Landmark size={16} />
+              كشف الحساب
+            </button>
             <button className="export-btn" onClick={handleExportPDF} type="button">
               <Download size={16} />
               تصدير التقرير (PDF)
@@ -365,10 +375,49 @@ const Finance = () => {
         </div>
       </div>
 
+      {custodyLogs.length > 0 && (
+        <div className="transactions-section custody-logs-section">
+          <div className="transactions-header">
+            <div className="transactions-title-group">
+              <h3 className="section-title">سجل العهدة</h3>
+              <p className="section-subtitle">آخر حركات العهدة المالية للمتجر</p>
+            </div>
+          </div>
+          <div className="transaction-table-wrapper">
+            <table className="transaction-table">
+              <thead>
+                <tr>
+                  <th>التاريخ</th>
+                  <th>النوع</th>
+                  <th>المبلغ</th>
+                  <th>الوصف</th>
+                </tr>
+              </thead>
+              <tbody>
+                {custodyLogs.map((log) => (
+                  <tr key={log.id}>
+                    <td>{log.created_at?.slice(0, 10) ?? '—'}</td>
+                    <td>{log.type ?? log.action ?? '—'}</td>
+                    <td>{formatMoney(log.amount ?? 0)} د.ل</td>
+                    <td>{log.description ?? log.note ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       <WalletModal
         isOpen={isWalletOpen}
         onClose={() => setIsWalletOpen(false)}
         onToast={showToast}
+      />
+
+      <StatementModal
+        isOpen={isStatementOpen}
+        onClose={() => setIsStatementOpen(false)}
+        onExportToast={showToast}
       />
 
       <TransactionDetailModal

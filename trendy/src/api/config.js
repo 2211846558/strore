@@ -10,9 +10,14 @@ export const STORE_AUTH_ENDPOINTS = {
   login: '/v1/auth/store/login',
   verifyJoin: '/v1/auth/store/verify-join',
   logout: '/v1/auth/logout',
+  passwordForgot: '/v1/auth/password/forgot',
+  passwordVerifyOtp: '/v1/auth/password/verify-otp',
+  passwordReset: '/v1/auth/password/reset',
 };
 
 export const API_ENDPOINTS = {
+  // GET /api/user — المستخدم المسجّل (auth:sanctum)
+  currentUser: '/user',
   // POST /api/stores/join — تقديم طلب انضمام وإرسال رمز OTP لإيميل المتجر
   storesJoin: '/stores/join',
   // GET /api/zones — قائمة المناطق
@@ -41,10 +46,15 @@ export const API_ENDPOINTS = {
   walletLogs: '/wallet/logs',
   custodySummary: '/stores/custody/summary',
   custodyLogs: '/stores/custody/logs',
+  storeDashboardTotalNewOrders: '/stores/dashboard/total-new-orders',
+  storeDashboardTotalEmployees: '/stores/dashboard/total-employees',
+  storeRatings: (storeId) => `/stores/${storeId}/ratings`,
   inventory: '/inventory',
   inventoryShipments: '/inventory/shipments',
   inventoryShipment: (id) => `/inventory/shipments/${id}`,
   inventoryVariant: (variantId) => `/inventory/variants/${variantId}`,
+  inventoryVariantMovements: (variantId) => `/inventory/variants/${variantId}/movements`,
+  inventoryAdjust: '/inventory/adjust',
   financeRevenueOverview: '/finance/revenue-overview',
   financeProfitOverview: '/finance/profit-overview',
   financeTransactions: '/finance/transactions',
@@ -61,5 +71,14 @@ export const API_ENDPOINTS = {
   posExchange: '/pos/exchange',
   orders: '/orders',
   order: (id) => `/orders/${id}`,
+  orderStatus: (id) => `/orders/${id}/status`,
+  orderCancel: (id) => `/orders/${id}/cancel`,
+  orderPrepare: (id) => `/orders/${id}/prepare`,
+  orderConfirmDelivery: (id) => `/orders/${id}/confirm-delivery`,
+  ordersChat: '/orders/chat',
+  ordersChatMessages: (id) => `/orders/chat/${id}/messages`,
   updateStore: (storeId) => `/admin/stores/${storeId}`,
+  employees: '/employees',
+  employee: (id) => `/employees/${id}`,
+  employeeToggle: (id) => `/employees/${id}/toggle`,
 };

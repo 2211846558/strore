@@ -101,6 +101,56 @@ export async function fetchAttributes({ perPage = 50 } = {}) {
   }));
 }
 
+const DEFAULT_COLOR_DOTS = {
+  أزرق: '#3b82f6',
+  أبيض: '#e5e7eb',
+  أحمر: '#ef4444',
+  وردي: '#ec4899',
+  أسود: '#1f2937',
+  رمادي: '#9ca3af',
+  'أزرق داكن': '#1e40af',
+  أخضر: '#22c55e',
+  أصفر: '#eab308',
+  بني: '#92400e',
+  بنفسجي: '#8b5cf6',
+  برتقالي: '#f97316',
+};
+
+function hashColorLabel(label) {
+  let hash = 0;
+  for (let i = 0; i < label.length; i += 1) {
+    hash = label.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const hue = Math.abs(hash) % 360;
+  return `hsl(${hue}, 55%, 45%)`;
+}
+
+/**
+ * بناء خريطة ألوان من GET /catalog/attributes (خاصية اللون)
+ */
+export function buildColorDotsFromAttributes(attributes = []) {
+  const dots = { ...DEFAULT_COLOR_DOTS };
+  const colorAttr = attributes.find((attr) => /لون|color/i.test(String(attr.name ?? '')));
+
+  if (!colorAttr?.values?.length) return dots;
+
+  colorAttr.values.forEach((entry) => {
+    const label = String(entry.value ?? '').trim();
+    if (!label) return;
+    if (/^#[0-9a-f]{3,8}$/i.test(label)) {
+      dots[label] = label;
+      return;
+    }
+    if (entry.hex || entry.color_code) {
+      dots[label] = entry.hex || entry.color_code;
+      return;
+    }
+    if (!dots[label]) dots[label] = hashColorLabel(label);
+  });
+
+  return dots;
+}
+
 /**
  * POST /api/my-store/products/{productId}/variants
  * body: { sku, attribute_value_ids: number[] }

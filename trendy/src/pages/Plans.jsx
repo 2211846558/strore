@@ -16,7 +16,7 @@ import './Plans.css';
 
 const Plans = ({ onboarding = false }) => {
   const navigate = useNavigate();
-  const { store, storeId, updateStoreInSession } = useAuth();
+  const { store, storeId, updateStoreInSession, refreshSession } = useAuth();
   const [activeTab, setActiveTab] = useState('available');
   const [searchQuery, setSearchQuery] = useState('');
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
@@ -88,10 +88,30 @@ const Plans = ({ onboarding = false }) => {
         currentSubscription.planId === planId,
     );
 
-  const handleConfirmSubscription = (plan, apiResponse) => {
+  const handleConfirmSubscription = async (plan, apiResponse) => {
     const updatedStore = extractStoreFromSubscriptionResponse(apiResponse, plan);
+
     if (storeId) {
-      updateStoreInSession({ id: storeId, ...updatedStore });
+      updateStoreInSession({
+        id: storeId,
+        ...updatedStore,
+        status: 'active',
+        plan_id: updatedStore.plan_id ?? plan.id,
+      });
+    }
+
+    try {
+      await refreshSession();
+      if (storeId) {
+        updateStoreInSession({
+          id: storeId,
+          status: 'active',
+          plan_id: plan.id,
+          ...updatedStore,
+        });
+      }
+    } catch {
+      // الاشتراك نجح — نُبقي التحديث المحلي
     }
 
     const messages = {
@@ -102,8 +122,8 @@ const Plans = ({ onboarding = false }) => {
     showToast(messages[subscribeAction] || messages.subscribe);
     setIsWalletModalOpen(false);
 
-    if (onboarding && storeId) {
-      navigate('/');
+    if (onboarding) {
+      navigate('/', { replace: true });
     }
   };
 

@@ -40,14 +40,15 @@ export async function chargeStoreWallet({ storeId, amount, paymentMethodId }) {
 }
 
 /**
- * POST /api/stores/wallet/withdraw — body: { amount, payment_method_id }
+ * POST /api/stores/wallet/withdraw — body: { store_id, amount, card_number }
  */
-export async function withdrawStoreWallet({ amount, paymentMethodId }) {
+export async function withdrawStoreWallet({ storeId, amount, cardNumber }) {
   return apiRequest(API_ENDPOINTS.storeWalletWithdraw, {
     method: 'POST',
     body: {
+      store_id: storeId,
       amount: Number(amount),
-      payment_method_id: paymentMethodId,
+      card_number: String(cardNumber).replace(/\s/g, ''),
     },
   });
 }

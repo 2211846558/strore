@@ -1,5 +1,6 @@
 import { apiRequest } from './client';
 import { API_ENDPOINTS } from './config';
+import { fetchOrder as fetchOrderById } from './orders';
 import { fetchStoreProducts } from './products';
 import { fetchInventory } from './inventory';
 
@@ -295,8 +296,8 @@ export async function exchangePosItem({
  * GET /orders/{id}
  */
 export async function fetchOrderDetails(id) {
-  const res = await apiRequest(API_ENDPOINTS.order(id));
-  return res?.data ?? res;
+  const order = await fetchOrderById(id);
+  return order.raw ?? order;
 }
 
 /**

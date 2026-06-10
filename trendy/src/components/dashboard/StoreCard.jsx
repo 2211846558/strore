@@ -1,13 +1,50 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Phone, Mail, MapPin, Star } from 'lucide-react';
+import { productPlaceholderImage } from '../../api/media';
 import './StoreCard.css';
 
 const StoreCard = ({ store }) => {
+  const candidates = store.imageCandidates?.length
+    ? store.imageCandidates
+    : store.image
+      ? [store.image]
+      : [];
+  const [candidateIndex, setCandidateIndex] = useState(0);
+  const [usePlaceholder, setUsePlaceholder] = useState(false);
+
+  useEffect(() => {
+    setCandidateIndex(0);
+    setUsePlaceholder(false);
+  }, [store.image, store.imageCandidates]);
+
+  const imgSrc = usePlaceholder
+    ? productPlaceholderImage()
+    : candidateIndex < candidates.length
+      ? candidates[candidateIndex]
+      : store.image || productPlaceholderImage();
+
+  const handleImageError = () => {
+    if (candidateIndex < candidates.length - 1) {
+      setCandidateIndex((prev) => prev + 1);
+      return;
+    }
+    setUsePlaceholder(true);
+  };
+
   return (
     <div className="store-card store-card-wide">
       <div className="store-image-wrap">
-        <img src={store.image} alt={store.name} className="store-cover-image" />
-        <span className="open-badge">24 H</span>
+        <img
+          src={imgSrc}
+          alt={store.name}
+          className="store-cover-image"
+          onError={handleImageError}
+        />
+        {store.statusLabel && (
+          <span className={`open-badge status-${store.statusRaw || 'inactive'}`}>
+            {store.statusLabel}
+          </span>
+        )}
       </div>
 
       <div className="store-details">

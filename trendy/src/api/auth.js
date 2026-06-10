@@ -1,5 +1,5 @@
 import { apiRequest } from './client';
-import { API_ENDPOINTS } from './config';
+import { API_ENDPOINTS, STORE_AUTH_ENDPOINTS } from './config';
 
 const TOKEN_KEY = 'trendy_auth_token';
 const USER_KEY = 'trendy_auth_user';
@@ -26,8 +26,34 @@ export const getActiveStore = (user) => {
   if (user.store) return user.store;
   const owned = user.owned_stores || user.ownedStores || [];
   if (owned.length > 0) return owned[0];
+  if (user.store_id) {
+    return {
+      id: user.store_id,
+      status: user.store_status ?? 'inactive',
+      plan_id: user.plan_id ?? null,
+    };
+  }
   return null;
 };
+
+export function storeHasActivePlan(store) {
+  if (!store) return false;
+  if (store.status === 'active') return true;
+
+  const planId = store.plan_id ?? store.plan?.id ?? store.subscription?.plan_id;
+  if (!planId) return false;
+
+  const endRaw =
+    store.subscription_ends_at ??
+    store.plan_expires_at ??
+    store.subscription?.ends_at ??
+    store.subscription?.end_date ??
+    null;
+
+  if (endRaw) return new Date(endRaw).getTime() > Date.now();
+
+  return store.status !== 'inactive';
+}
 
 export const persistAuthSession = ({ token, user }) => {
   localStorage.setItem(TOKEN_KEY, token);
@@ -85,6 +111,95 @@ export async function verifyStoreJoin({ storeEmail, otp }) {
 /**
  * POST /api/v1/auth/logout
  */
+/**
+ * طلبات استعادة كلمة المرور تحتاج جلسة Laravel (Session + Cookies).
+ * في التطوير نمرّر عبر بروكسي Vite (/api) مع credentials.
+ */
+function getPasswordResetApiBase() {
+  if (import.meta.env.DEV) return '/api';
+  return import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') || '/api';
+}
+
+async function passwordResetRequest(path, { method = 'POST', body } = {}) {
+  const base = getPasswordResetApiBase();
+  const url = `${base}${path.startsWith('/') ? path : `/${path}`}`;
+
+  const response = await fetch(url, {
+    method,
+    credentials: 'include',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  }).catch(() => {
+    const error = new Error(
+      'تعذّر الاتصال بالخادم. تأكد من تشغيل الباكند وأن عنوان API صحيح في ملف .env',
+    );
+    error.isNetworkError = true;
+    throw error;
+  });
+
+  let data = null;
+  const contentType = response.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    data = await response.json();
+  } else {
+    const text = await response.text();
+    data = text ? { message: text } : null;
+  }
+
+  if (!response.ok) {
+    const error = new Error(data?.message || 'حدث خطأ أثناء معالجة الطلب');
+    error.status = response.status;
+    error.errors = data?.errors || null;
+    error.data = data;
+    throw error;
+  }
+
+  return data;
+}
+
+/**
+ * POST /api/v1/auth/password/forgot
+ */
+export async function forgotPassword({ email }) {
+  return passwordResetRequest(STORE_AUTH_ENDPOINTS.passwordForgot, {
+    body: { email: email.trim() },
+  });
+}
+
+/**
+ * POST /api/v1/auth/password/verify-otp
+ */
+export async function verifyPasswordOtp({ email, otp }) {
+  return passwordResetRequest(STORE_AUTH_ENDPOINTS.passwordVerifyOtp, {
+    body: { email: email.trim(), otp: String(otp) },
+  });
+}
+
+/**
+ * POST /api/v1/auth/password/reset
+ */
+export async function resetPassword({ email, otp, password, passwordConfirmation }) {
+  return passwordResetRequest(STORE_AUTH_ENDPOINTS.passwordReset, {
+    body: {
+      email: email.trim(),
+      otp: String(otp),
+      password,
+      password_confirmation: passwordConfirmation ?? password,
+    },
+  });
+}
+
+/**
+ * GET /api/user — بيانات المستخدم الحالي (للتحقق من التوكن وتحديث الجلسة)
+ */
+export async function fetchCurrentUser() {
+  const res = await apiRequest(API_ENDPOINTS.currentUser);
+  return res?.data ?? res;
+}
+
 export async function storeLogout() {
   const token = getAuthToken();
   if (token) {

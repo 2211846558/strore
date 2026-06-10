@@ -30,8 +30,12 @@ export function mapCampaignFromApi(campaign) {
     description: campaign.description || '',
     type: 'default',
     duration: String(durationDays),
-    productsCount: '10',
-    price: String(CAMPAIGN_SUBSCRIPTION_COST),
+    productsCount: String(
+      campaign.max_products ?? campaign.products_count ?? campaign.products_limit ?? 10,
+    ),
+    price: String(
+      campaign.subscription_cost ?? campaign.subscription_price ?? campaign.price ?? CAMPAIGN_SUBSCRIPTION_COST,
+    ),
     startDate: campaign.start_date,
     endDate: campaign.end_date,
     status: campaign.status,
@@ -106,8 +110,48 @@ export function loadMyCampaigns(storeId) {
   }
 }
 
+function mapSubscriptionFromApiResponse(res, campaign, selectedProducts) {
+  const data = res?.data ?? res ?? {};
+  const subscription = data.subscription ?? data.campaign_subscription ?? data;
+  const megaCampaignId =
+    subscription.mega_campaign_id ??
+    subscription.megaCampaignId ??
+    campaign.megaCampaignId ??
+    campaign.id;
+
+  return {
+    id: subscription.id ?? Date.now(),
+    megaCampaignId,
+    title: subscription.campaign_name ?? subscription.name ?? campaign.title,
+    description: subscription.description ?? campaign.description,
+    price: String(
+      subscription.subscription_cost ??
+        subscription.price ??
+        campaign.price ??
+        CAMPAIGN_SUBSCRIPTION_COST,
+    ),
+    duration: String(
+      subscription.duration_days ??
+        campaign.duration ??
+        calcDurationDays(campaign.startDate, campaign.endDate),
+    ),
+    productsCount: String(
+      subscription.products_count ??
+        selectedProducts.length ??
+        campaign.productsCount,
+    ),
+    status: subscription.status === 'inactive' ? 'منتهية' : 'نشطة',
+    dateRange: {
+      start: formatDate(subscription.start_date ?? campaign.startDate ?? new Date()),
+      end: formatDate(subscription.end_date ?? campaign.endDate ?? new Date()),
+    },
+    selectedProducts,
+    discountPercentage: subscription.discount_percentage ?? null,
+  };
+}
+
 export function saveMyCampaign(storeId, entry) {
-  if (!storeId) return;
+  if (!storeId) return [];
   const current = loadMyCampaigns(storeId);
   const normalized = {
     id: entry.id ?? Date.now(),
@@ -117,7 +161,7 @@ export function saveMyCampaign(storeId, entry) {
     price: entry.price,
     duration: entry.duration,
     productsCount: entry.productsCount,
-    status: 'active',
+    status: entry.status === 'inactive' ? 'منتهية' : entry.status ?? 'نشطة',
     dateRange: entry.dateRange,
     selectedProducts: entry.selectedProducts,
   };
@@ -129,7 +173,44 @@ export function saveMyCampaign(storeId, entry) {
   return next.map(mapStoredSubscription);
 }
 
-export function buildSubscriptionEntry(campaign, selectedProducts, discountPercentage) {
+/**
+ * تحديث حملاتي من GET /campaigns (لا يوجد GET للاشتراكات في api.md)
+ */
+export async function enrichMyCampaigns(storeId) {
+  const stored = loadMyCampaigns(storeId);
+  if (!stored.length) return [];
+
+  try {
+    const available = await fetchAvailableCampaigns();
+    return stored.map((sub) => {
+      const live = available.find((c) => c.megaCampaignId === sub.megaCampaignId);
+      if (!live) return sub;
+      return {
+        ...sub,
+        title: live.title,
+        description: live.description,
+        duration: live.duration,
+        price: live.price,
+        dateRange:
+          live.startDate && live.endDate
+            ? {
+                start: formatDate(live.startDate),
+                end: formatDate(live.endDate),
+              }
+            : sub.dateRange,
+        status: live.status === 'active' ? 'نشطة' : sub.status,
+      };
+    });
+  } catch {
+    return stored;
+  }
+}
+
+export function buildSubscriptionEntry(campaign, selectedProducts, discountPercentage, apiResponse = null) {
+  if (apiResponse) {
+    return mapSubscriptionFromApiResponse(apiResponse, campaign, selectedProducts);
+  }
+
   const today = new Date();
   const end = campaign.endDate ? new Date(campaign.endDate) : new Date(today);
   if (!campaign.endDate) {
