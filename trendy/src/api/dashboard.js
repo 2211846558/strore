@@ -117,17 +117,26 @@ export async function fetchStoreMonthlyRevenueChart(monthCount = 5) {
   );
 }
 
+async function safeDashboardCall(fn, fallback) {
+  try {
+    return await fn();
+  } catch (err) {
+    if (err?.status === 401 || err?.isUnauthorized) throw err;
+    return fallback;
+  }
+}
+
 /**
  * إحصائيات لوحة التحكم من الـ API الموجودة فقط
  */
 export async function fetchDashboardStats({ storeId } = {}) {
   const [newOrders, revenueOverview, profitOverview, activeProducts, totalEmployees] =
     await Promise.all([
-      fetchTotalNewOrders(),
-      fetchRevenueOverview(),
-      fetchProfitOverview(),
-      fetchActiveProductsCount({ storeId }),
-      fetchTotalEmployees().catch(() => 0),
+      safeDashboardCall(fetchTotalNewOrders, 0),
+      safeDashboardCall(() => fetchRevenueOverview(), {}),
+      safeDashboardCall(() => fetchProfitOverview(), {}),
+      safeDashboardCall(() => fetchActiveProductsCount({ storeId }), 0),
+      safeDashboardCall(fetchTotalEmployees, 0),
     ]);
 
   const totalRevenue = pickNumber(

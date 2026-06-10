@@ -5,6 +5,8 @@ const TOKEN_KEY = 'trendy_auth_token';
 const USER_KEY = 'trendy_auth_user';
 const STORE_ID_KEY = 'trendy_store_id';
 
+export const AUTH_UNAUTHORIZED_EVENT = 'trendy:unauthorized';
+
 export const getAuthToken = () => localStorage.getItem(TOKEN_KEY);
 
 export const getStoredUser = () => {
@@ -35,6 +37,83 @@ export const getActiveStore = (user) => {
   }
   return null;
 };
+
+export function getUserRoleNames(user) {
+  if (!user) return [];
+  const roles = user.roles;
+  if (!Array.isArray(roles)) return [];
+  return roles
+    .map((role) => (typeof role === 'string' ? role : role?.name))
+    .filter(Boolean);
+}
+
+export function userHasRole(user, roleName) {
+  return getUserRoleNames(user).includes(roleName);
+}
+
+export function userCanChargeStoreWallet(user) {
+  if (!user) return false;
+  if (userHasRole(user, 'store_manager') || userHasRole(user, 'super_admin')) return true;
+
+  const owned = user.owned_stores || user.ownedStores || [];
+  if (owned.length > 0) return true;
+
+  const roles = getUserRoleNames(user);
+  if (roles.length === 0) return true;
+
+  return !roles.includes('store_staff');
+}
+
+/**
+ * معرف المتجر الذي يملكه مدير المتجر — مطابق لمنطق الباكند resolveManagedStoreId
+ */
+export function resolveManagedStoreId(user, explicitStoreId = null) {
+  if (!user) return getStoredStoreId();
+
+  const owned = user.owned_stores || user.ownedStores || [];
+  const ownedIds = owned.map((store) => Number(store?.id)).filter((id) => !Number.isNaN(id) && id > 0);
+
+  if (explicitStoreId != null && explicitStoreId !== '') {
+    const id = Number(explicitStoreId);
+    if (!Number.isNaN(id) && id > 0) {
+      if (ownedIds.length === 0 || ownedIds.includes(id)) return id;
+    }
+  }
+
+  if (ownedIds.length === 1) return ownedIds[0];
+
+  const sessionStoreId = Number(user.store_id ?? getStoredStoreId());
+  if (!Number.isNaN(sessionStoreId) && sessionStoreId > 0) {
+    if (ownedIds.length === 0 || ownedIds.includes(sessionStoreId)) return sessionStoreId;
+  }
+
+  if (ownedIds.length > 0) return ownedIds[0];
+
+  const activeStoreId = Number(getActiveStore(user)?.id);
+  return !Number.isNaN(activeStoreId) && activeStoreId > 0 ? activeStoreId : null;
+}
+
+function mergeUserSession(freshUser) {
+  const stored = getStoredUser();
+  if (!stored) return freshUser;
+
+  const owned =
+    freshUser?.owned_stores ??
+    freshUser?.ownedStores ??
+    stored?.owned_stores ??
+    stored?.ownedStores ??
+    [];
+
+  return {
+    ...stored,
+    ...freshUser,
+    store_id: freshUser?.store_id ?? stored?.store_id ?? null,
+    store: freshUser?.store ?? stored?.store ?? null,
+    roles: freshUser?.roles ?? stored?.roles ?? [],
+    owned_stores: owned,
+    ownedStores: owned,
+  };
+}
 
 export function storeHasActivePlan(store) {
   if (!store) return false;
@@ -69,6 +148,11 @@ export const clearAuthSession = () => {
   localStorage.removeItem(USER_KEY);
   localStorage.removeItem(STORE_ID_KEY);
 };
+
+export function notifyUnauthorized() {
+  clearAuthSession();
+  window.dispatchEvent(new CustomEvent(AUTH_UNAUTHORIZED_EVENT));
+}
 
 /**
  * POST /api/v1/auth/store/login
@@ -197,7 +281,8 @@ export async function resetPassword({ email, otp, password, passwordConfirmation
  */
 export async function fetchCurrentUser() {
   const res = await apiRequest(API_ENDPOINTS.currentUser);
-  return res?.data ?? res;
+  const freshUser = res?.data ?? res;
+  return mergeUserSession(freshUser);
 }
 
 export async function storeLogout() {

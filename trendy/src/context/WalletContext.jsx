@@ -1,12 +1,14 @@
 import React, { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react';
 import { useAuth } from './AuthContext';
-import { getWalletBalance, chargeStoreWallet, withdrawStoreWallet } from '../api/wallet';
+import { getStoreWalletBalance, chargeStoreWallet, withdrawStoreWallet, resolveWalletChargeContext } from '../api/wallet';
+import { resolveManagedStoreId } from '../api/auth';
 import { fetchAllTransactions, mapToWalletLog } from '../api/finance';
 
 const WalletContext = createContext(null);
 
 export const WalletProvider = ({ children }) => {
-  const { isAuthenticated, storeId } = useAuth();
+  const { isAuthenticated, storeId, user, refreshSession } = useAuth();
+  const effectiveStoreId = resolveManagedStoreId(user, storeId) ?? storeId;
   const [balance, setBalance] = useState(0);
   const [status, setStatus] = useState('نشطة');
   const [transactions, setTransactions] = useState([]);
@@ -17,7 +19,7 @@ export const WalletProvider = ({ children }) => {
     setLoading(true);
     try {
       const [balanceRes, txResult] = await Promise.all([
-        getWalletBalance(),
+        getStoreWalletBalance({ storeId: effectiveStoreId }),
         fetchAllTransactions({ perPage: 50 }),
       ]);
       setBalance(Number(balanceRes?.balance ?? 0));
@@ -35,7 +37,7 @@ export const WalletProvider = ({ children }) => {
     } finally {
       setLoading(false);
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, effectiveStoreId]);
 
   useEffect(() => {
     refreshWallet();
@@ -49,11 +51,10 @@ export const WalletProvider = ({ children }) => {
     if (!cardNumber?.trim()) {
       throw new Error('يرجى إدخال رقم البطاقة');
     }
-    if (!storeId) {
-      throw new Error('لم يتم تحديد المتجر. يرجى تسجيل الدخول مرة أخرى.');
-    }
+    const chargeContext = await resolveWalletChargeContext(storeId);
+    const targetStoreId = chargeContext.storeId;
 
-    await withdrawStoreWallet({ storeId, amount: value, cardNumber: cardNumber.trim() });
+    await withdrawStoreWallet({ storeId: targetStoreId, amount: value, cardNumber: cardNumber.trim() });
     await refreshWallet();
     return value;
   }, [storeId, refreshWallet]);
@@ -66,10 +67,7 @@ export const WalletProvider = ({ children }) => {
     if (!value || value <= 0) {
       throw new Error('يرجى إدخال مبلغ صالح');
     }
-    if (!storeId) {
-      throw new Error('لم يتم تحديد المتجر. يرجى تسجيل الدخول مرة أخرى.');
-    }
-
+    await refreshSession?.();
     const res = await chargeStoreWallet({
       storeId,
       amount: value,
@@ -81,7 +79,7 @@ export const WalletProvider = ({ children }) => {
 
     await refreshWallet();
     return value;
-  }, [storeId, balance, refreshWallet]);
+  }, [storeId, balance, refreshWallet, refreshSession]);
 
   const value = useMemo(
     () => ({

@@ -4,24 +4,26 @@ import {
   getStoredUser,
   getStoredStoreId,
   getActiveStore,
+  resolveManagedStoreId,
   storeHasActivePlan,
   storeLogin as apiStoreLogin,
   storeLogout as apiStoreLogout,
   fetchCurrentUser,
   persistAuthSession,
+  AUTH_UNAUTHORIZED_EVENT,
 } from '../api/auth';
 
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(() => getStoredUser());
-  const [storeId, setStoreId] = useState(() => getStoredStoreId());
+  const [storeId, setStoreId] = useState(() => resolveManagedStoreId(getStoredUser()) ?? getStoredStoreId());
   const [isAuthenticated, setIsAuthenticated] = useState(() => Boolean(getAuthToken()));
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     const storedUser = getStoredUser();
-    const id = getStoredStoreId() || getActiveStore(storedUser)?.id || null;
+    const id = resolveManagedStoreId(storedUser) || null;
     if (id) setStoreId(id);
   }, []);
 
@@ -34,12 +36,25 @@ export const AuthProvider = ({ children }) => {
         if (!freshUser) return;
         persistAuthSession({ token, user: freshUser });
         setUser(freshUser);
-        const id = freshUser.store_id ?? getActiveStore(freshUser)?.id ?? null;
+        const id = resolveManagedStoreId(freshUser);
         if (id) setStoreId(id);
       })
       .catch(() => {
-        // التوكن منتهٍ — تبقى الجلسة المحلية حتى يفشل طلب لاحق
+        setUser(null);
+        setStoreId(null);
+        setIsAuthenticated(false);
       });
+  }, []);
+
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      setUser(null);
+      setStoreId(null);
+      setIsAuthenticated(false);
+    };
+
+    window.addEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized);
+    return () => window.removeEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized);
   }, []);
 
   const login = useCallback(async ({ email, password, storeCode }) => {
@@ -49,7 +64,7 @@ export const AuthProvider = ({ children }) => {
       const authUser = data.user;
       const store = getActiveStore(authUser);
       setUser(authUser);
-      setStoreId(authUser.store_id ?? store?.id ?? null);
+      setStoreId(resolveManagedStoreId(authUser) ?? store?.id ?? null);
       setIsAuthenticated(true);
       return data;
     } finally {
@@ -104,7 +119,7 @@ export const AuthProvider = ({ children }) => {
     persistAuthSession({ token, user: freshUser });
     setUser(freshUser);
 
-    const id = freshUser.store_id ?? getActiveStore(freshUser)?.id ?? null;
+    const id = resolveManagedStoreId(freshUser);
     if (id) setStoreId(id);
 
     return freshUser;

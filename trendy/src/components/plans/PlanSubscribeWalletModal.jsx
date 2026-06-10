@@ -38,15 +38,105 @@ const getStripeFieldStyle = () => ({
   },
 });
 
+const usePlanWalletState = (plan) => {
+  const { balance, refreshWallet } = useWallet();
+  const { storeId } = useAuth();
+  const planPrice = Number(plan?.price ?? 0);
+  const hasEnoughBalance = balance >= planPrice;
+  const missingAmount = Math.max(0, planPrice - balance);
+  return { balance, refreshWallet, storeId, planPrice, hasEnoughBalance, missingAmount };
+};
+
+const PlanWalletBalanceBox = ({ balance, hasEnoughBalance, missingAmount }) => (
+  <div className="plan-wallet-balance-box">
+    <span className="plan-wallet-balance-label">الرصيد الحالي</span>
+    <span className={`plan-wallet-balance-value ${hasEnoughBalance ? 'ok' : 'low'}`}>
+      {balance.toFixed(2)} د.ل
+    </span>
+    {!hasEnoughBalance && (
+      <span className="plan-wallet-missing">
+        ينقصك {missingAmount.toFixed(2)} د.ل للاشتراك
+      </span>
+    )}
+  </div>
+);
+
+const PlanSubscribeActions = ({
+  plan,
+  action = 'subscribe',
+  onClose,
+  onConfirm,
+  hasEnoughBalance,
+  storeId,
+  refreshWallet,
+}) => {
+  const [subscribeError, setSubscribeError] = useState('');
+  const [subscribeLoading, setSubscribeLoading] = useState(false);
+
+  const handleSubscribe = async () => {
+    setSubscribeError('');
+    if (!storeId) {
+      setSubscribeError('لم يتم تحديد المتجر. يرجى تسجيل الدخول مرة أخرى.');
+      return;
+    }
+    if (!hasEnoughBalance) {
+      setSubscribeError('رصيد المحفظة غير كافٍ. يرجى شحن المحفظة أولاً.');
+      return;
+    }
+
+    setSubscribeLoading(true);
+    try {
+      let res;
+      if (action === 'renew') {
+        res = await renewStorePlan(storeId);
+      } else if (action === 'change') {
+        res = await changeStorePlan(storeId, plan.id);
+      } else {
+        res = await subscribeToPlan({ planId: plan.id, storeId });
+      }
+      await refreshWallet();
+      onConfirm(plan, res);
+      onClose();
+    } catch (err) {
+      setSubscribeError(getApiErrorMessage(err, 'تعذّر إتمام الاشتراك'));
+    } finally {
+      setSubscribeLoading(false);
+    }
+  };
+
+  return (
+    <div className="plan-wallet-actions">
+      {subscribeError && <p className="plan-wallet-error">{subscribeError}</p>}
+      <button
+        type="button"
+        className="plan-wallet-btn subscribe"
+        onClick={handleSubscribe}
+        disabled={!hasEnoughBalance || subscribeLoading}
+      >
+        {subscribeLoading
+          ? 'جاري المعالجة...'
+          : action === 'renew'
+            ? 'تأكيد التجديد'
+            : action === 'change'
+              ? 'تأكيد تغيير الخطة'
+              : 'تأكيد الاشتراك'}
+      </button>
+      <button type="button" className="plan-wallet-btn back" onClick={onClose}>
+        <ArrowRight size={18} />
+        العودة للخطط
+      </button>
+    </div>
+  );
+};
+
 const PlanSubscribeWalletForm = ({ plan, action = 'subscribe', onClose, onConfirm, onToast }) => {
   const stripe = useStripe();
   const elements = useElements();
-  const { balance, rechargeViaStripe, refreshWallet } = useWallet();
-  const { storeId } = useAuth();
+  const { balance, refreshWallet, storeId, hasEnoughBalance, missingAmount } = usePlanWalletState(plan);
+  const { rechargeViaStripe } = useWallet();
   const [amount, setAmount] = useState('');
-  const [error, setError] = useState('');
+  const [rechargeError, setRechargeError] = useState('');
   const [rechargeLoading, setRechargeLoading] = useState(false);
-  const [subscribeLoading, setSubscribeLoading] = useState(false);
   const [rechargeSuccess, setRechargeSuccess] = useState(false);
   const [cardFields, setCardFields] = useState({
     number: false,
@@ -62,9 +152,9 @@ const PlanSubscribeWalletForm = ({ plan, action = 'subscribe', onClose, onConfir
   const handleFieldChange = (field) => (event) => {
     setCardFields((prev) => ({ ...prev, [field]: event.complete }));
     if (event.error) {
-      setError(translateStripeError(event.error.message));
-    } else if (error && !event.empty) {
-      setError('');
+      setRechargeError(translateStripeError(event.error.message));
+    } else if (rechargeError && !event.empty) {
+      setRechargeError('');
     }
   };
 
@@ -78,27 +168,23 @@ const PlanSubscribeWalletForm = ({ plan, action = 'subscribe', onClose, onConfir
     }
     setReadyCount(0);
     setCardFields({ number: false, expiry: false, cvc: false });
-    setError('');
+    setRechargeError('');
     setRechargeSuccess(false);
   }, [plan?.id, plan?.price]);
 
-  const planPrice = Number(plan.price);
-  const hasEnoughBalance = balance >= planPrice;
-  const missingAmount = Math.max(0, planPrice - balance);
-
   const handleRecharge = async (e) => {
     e.preventDefault();
-    setError('');
+    setRechargeError('');
     setRechargeSuccess(false);
 
     if (!stripe || !elements) {
-      setError('جاري تحميل بوابة الدفع. يرجى الانتظار ثم المحاولة مجدداً.');
+      setRechargeError('جاري تحميل بوابة الدفع. يرجى الانتظار ثم المحاولة مجدداً.');
       return;
     }
 
     const cardNumberElement = elements.getElement(CardNumberElement);
     if (!cardNumberElement) {
-      setError('حقول البطاقة غير متاحة. يرجى إعادة فتح النافذة.');
+      setRechargeError('حقول البطاقة غير متاحة. يرجى إعادة فتح النافذة.');
       return;
     }
 
@@ -117,56 +203,25 @@ const PlanSubscribeWalletForm = ({ plan, action = 'subscribe', onClose, onConfir
       setRechargeSuccess(true);
       onToast?.(`تم شحن المحفظة بمبلغ ${charged.toLocaleString()} د.ل بنجاح`);
     } catch (err) {
-      setError(getApiErrorMessage(err, 'تعذّر إتمام عملية الشحن'));
+      setRechargeError(getApiErrorMessage(err, 'تعذّر إتمام عملية الشحن'));
     } finally {
       setRechargeLoading(false);
     }
   };
 
-  const handleSubscribe = async () => {
-    setError('');
-    if (!storeId) {
-      setError('لم يتم تحديد المتجر. يرجى تسجيل الدخول مرة أخرى.');
-      return;
-    }
-    if (!hasEnoughBalance) {
-      setError('رصيد المحفظة غير كافٍ. يرجى شحن المحفظة أولاً.');
-      return;
-    }
-
-    setSubscribeLoading(true);
-    try {
-      let res;
-      if (action === 'renew') {
-        res = await renewStorePlan(storeId);
-      } else if (action === 'change') {
-        res = await changeStorePlan(storeId, plan.id);
-      } else {
-        res = await subscribeToPlan({ planId: plan.id, storeId });
-      }
-      await refreshWallet();
-      onConfirm(plan, res);
-      onClose();
-    } catch (err) {
-      setError(getApiErrorMessage(err, 'تعذّر إتمام الاشتراك'));
-    } finally {
-      setSubscribeLoading(false);
-    }
-  };
-
   return (
     <>
-      <div className="plan-wallet-balance-box">
-        <span className="plan-wallet-balance-label">الرصيد الحالي</span>
-        <span className={`plan-wallet-balance-value ${hasEnoughBalance ? 'ok' : 'low'}`}>
-          {balance.toFixed(2)} د.ل
-        </span>
-        {!hasEnoughBalance && (
-          <span className="plan-wallet-missing">
-            ينقصك {missingAmount.toFixed(2)} د.ل للاشتراك
-          </span>
-        )}
-      </div>
+      <PlanWalletBalanceBox
+        balance={balance}
+        hasEnoughBalance={hasEnoughBalance}
+        missingAmount={missingAmount}
+      />
+
+      {hasEnoughBalance && (
+        <p className="plan-wallet-success plan-wallet-ready-hint">
+          رصيدك كافٍ للاشتراك ({balance.toFixed(2)} د.ل). يمكنك تأكيد الاشتراك مباشرة، أو شحن المحفظة إضافياً عبر البطاقة.
+        </p>
+      )}
 
       <form onSubmit={handleRecharge} className="plan-wallet-form">
         <label className="plan-wallet-field-label">
@@ -235,8 +290,8 @@ const PlanSubscribeWalletForm = ({ plan, action = 'subscribe', onClose, onConfir
           required
         />
 
-        {error && <p className="plan-wallet-error">{error}</p>}
-        {rechargeSuccess && !error && (
+        {rechargeError && <p className="plan-wallet-error">{rechargeError}</p>}
+        {rechargeSuccess && !rechargeError && (
           <p className="plan-wallet-success">تم الشحن بنجاح. يمكنك الآن إتمام الاشتراك.</p>
         )}
 
@@ -249,26 +304,15 @@ const PlanSubscribeWalletForm = ({ plan, action = 'subscribe', onClose, onConfir
         </button>
       </form>
 
-      <div className="plan-wallet-actions">
-        <button
-          type="button"
-          className="plan-wallet-btn subscribe"
-          onClick={handleSubscribe}
-          disabled={!hasEnoughBalance || subscribeLoading}
-        >
-          {subscribeLoading
-            ? 'جاري المعالجة...'
-            : action === 'renew'
-              ? 'تأكيد التجديد'
-              : action === 'change'
-                ? 'تأكيد تغيير الخطة'
-                : 'تأكيد الاشتراك'}
-        </button>
-        <button type="button" className="plan-wallet-btn back" onClick={onClose}>
-          <ArrowRight size={18} />
-          العودة للخطط
-        </button>
-      </div>
+      <PlanSubscribeActions
+        plan={plan}
+        action={action}
+        onClose={onClose}
+        onConfirm={onConfirm}
+        hasEnoughBalance={hasEnoughBalance}
+        storeId={storeId}
+        refreshWallet={refreshWallet}
+      />
     </>
   );
 };
@@ -282,6 +326,7 @@ const PlanSubscribeWalletModal = ({
   onToast,
 }) => {
   const { refreshWallet } = useWallet();
+  const walletState = usePlanWalletState(plan);
   const stripeReady = isStripeConfigured();
 
   useEffect(() => {
@@ -312,8 +357,9 @@ const PlanSubscribeWalletModal = ({
           )}
         </p>
 
-        {!stripeReady ? (
+        {!stripeReady && !walletState.hasEnoughBalance ? (
           <div className="plan-wallet-stripe-missing">
+            <PlanWalletBalanceBox {...walletState} />
             <p className="plan-wallet-error">
               مفتاح Stripe Publishable Key غير مُعدّ في الواجهة.
             </p>
@@ -327,7 +373,25 @@ const PlanSubscribeWalletModal = ({
                 استخدمي نفس قيمة <code>STRIPE_KEY</code> من الباكند.
               </p>
             )}
+            <button type="button" className="plan-wallet-btn back" onClick={onClose}>
+              <ArrowRight size={18} />
+              العودة للخطط
+            </button>
           </div>
+        ) : !stripeReady && walletState.hasEnoughBalance ? (
+          <>
+            <PlanWalletBalanceBox {...walletState} />
+            <p className="plan-wallet-success plan-wallet-ready-hint">
+              رصيدك كافٍ للاشتراك ({walletState.balance.toFixed(2)} د.ل). اضغط «تأكيد الاشتراك» مباشرة.
+            </p>
+            <PlanSubscribeActions
+              plan={plan}
+              action={action}
+              onClose={onClose}
+              onConfirm={onConfirm}
+              {...walletState}
+            />
+          </>
         ) : (
           <PlanSubscribeWalletForm
             plan={plan}
@@ -336,13 +400,6 @@ const PlanSubscribeWalletModal = ({
             onConfirm={onConfirm}
             onToast={onToast}
           />
-        )}
-
-        {!stripeReady && (
-          <button type="button" className="plan-wallet-btn back" onClick={onClose}>
-            <ArrowRight size={18} />
-            العودة للخطط
-          </button>
         )}
       </div>
     </div>

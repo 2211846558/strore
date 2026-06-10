@@ -243,6 +243,14 @@
   font-weight: 600;
 }
 
+.plan-wallet-ready-hint {
+  margin: 12px 0 16px;
+  padding: 12px 14px;
+  background: rgba(22, 163, 74, 0.1);
+  border-radius: 10px;
+  line-height: 1.5;
+}
+
 .plan-wallet-actions {
   display: flex;
   flex-direction: column;

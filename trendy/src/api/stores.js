@@ -214,6 +214,12 @@ export function getApiErrorMessage(error, fallback = 'تعذّر إرسال ال
   }
   if (error?.message) {
     const msg = error.message.replace(/^\./, '').trim();
+    if (error?.isUnauthorized || /unauthenticated/i.test(msg) || /bearer token/i.test(msg)) {
+      return 'انتهت جلستك. يرجى تسجيل الدخول مرة أخرى.';
+    }
+    if (error?.status === 403 || /insufficient permissions/i.test(msg)) {
+      return 'شحن المحفظة متاح لمدير المتجر فقط. سجّل الخروج ثم ادخل بحساب المدير (ليس حساب الموظف).';
+    }
     if (/no such paymentmethod/i.test(msg)) {
       return 'طريقة الدفع غير صالحة. استخدم بطاقة بنكية عبر Stripe (ليس سداد).';
     }

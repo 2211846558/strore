@@ -15,7 +15,6 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import WalletModal from '../components/finance/WalletModal';
-import StatementModal from '../components/finance/StatementModal';
 import TransactionDetailModal from '../components/finance/TransactionDetailModal';
 import { fetchCustodyLogs } from '../api/custody';
 import { useWallet } from '../context/WalletContext';
@@ -53,7 +52,6 @@ const Finance = () => {
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [error, setError] = useState('');
   const [isWalletOpen, setIsWalletOpen] = useState(false);
-  const [isStatementOpen, setIsStatementOpen] = useState(false);
   const [custodyLogs, setCustodyLogs] = useState([]);
   const [selectedTransaction, setSelectedTransaction] = useState(null);
   const [toast, setToast] = useState(null);
@@ -252,10 +250,6 @@ const Finance = () => {
               <Wallet size={16} />
               المحفظة
             </button>
-            <button className="wallet-btn" onClick={() => setIsStatementOpen(true)} type="button">
-              <Landmark size={16} />
-              كشف الحساب
-            </button>
             <button className="export-btn" onClick={handleExportPDF} type="button">
               <Download size={16} />
               تصدير التقرير (PDF)
@@ -412,12 +406,6 @@ const Finance = () => {
         isOpen={isWalletOpen}
         onClose={() => setIsWalletOpen(false)}
         onToast={showToast}
-      />
-
-      <StatementModal
-        isOpen={isStatementOpen}
-        onClose={() => setIsStatementOpen(false)}
-        onExportToast={showToast}
       />
 
       <TransactionDetailModal

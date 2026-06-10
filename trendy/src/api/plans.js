@@ -138,7 +138,10 @@ export async function fetchPlans() {
 export async function subscribeToPlan({ planId, storeId }) {
   return apiRequest(API_ENDPOINTS.storeSubscribe, {
     method: 'POST',
-    body: { plan_id: planId, store_id: storeId },
+    body: {
+      plan_id: Number(planId),
+      store_id: Number(storeId),
+    },
   });
 }
 

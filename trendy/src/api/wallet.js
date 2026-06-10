@@ -1,13 +1,59 @@
 import { apiRequest } from './client';
 import { API_ENDPOINTS } from './config';
 import { extractListFromResponse } from './finance';
+import {
+  fetchCurrentUser,
+  getStoredUser,
+  persistAuthSession,
+  getAuthToken,
+  resolveManagedStoreId,
+  userCanChargeStoreWallet,
+} from './auth';
+
+function pickWalletBalance(walletPayload, storePayload) {
+  const store = storePayload?.data ?? storePayload ?? {};
+  const wallet = walletPayload?.data ?? walletPayload ?? {};
+  const candidates = [
+    wallet.balance,
+    wallet.store_balance,
+    wallet.store_wallet_balance,
+    store.wallet_balance,
+    store.wallet?.balance,
+    store.store_wallet_balance,
+  ];
+
+  for (const value of candidates) {
+    if (value == null || value === '') continue;
+    const num = Number(value);
+    if (!Number.isNaN(num)) return num;
+  }
+
+  return 0;
+}
 
 /**
- * GET /api/wallet/balance
+ * GET /api/wallet/balance — مع دمج رصيد محفظة المتجر إن وُجد
  */
 export async function getWalletBalance() {
   const res = await apiRequest(API_ENDPOINTS.walletBalance);
   return res?.data ?? res;
+}
+
+export async function getStoreWalletBalance({ storeId } = {}) {
+  const [walletRes, storeRes] = await Promise.all([
+    getWalletBalance().catch(() => ({})),
+    storeId
+      ? apiRequest(API_ENDPOINTS.storeShow(storeId)).catch(() => null)
+      : Promise.resolve(null),
+  ]);
+
+  const balance = pickWalletBalance(walletRes, storeRes);
+  const base = walletRes?.data ?? walletRes ?? {};
+
+  return {
+    ...base,
+    balance,
+  };
 }
 
 /**
@@ -24,15 +70,51 @@ export async function getWalletLogs({ perPage = 50, page = 1 } = {}) {
 }
 
 /**
+ * يحدّث الجلسة ويُعيد store_id الصحيح لشحن محفظة المتجر
+ */
+export async function resolveWalletChargeContext(preferredStoreId = null) {
+  let user = getStoredUser();
+  try {
+    const freshUser = await fetchCurrentUser();
+    const token = getAuthToken();
+    if (token && freshUser) {
+      persistAuthSession({ token, user: freshUser });
+      user = freshUser;
+    }
+  } catch {
+    // نستخدم الجلسة المخزّنة عند فشل التحديث
+  }
+
+  const storeId = resolveManagedStoreId(user, preferredStoreId);
+  if (!storeId) {
+    const error = new Error('لم يتم تحديد المتجر. يرجى تسجيل الدخول مرة أخرى.');
+    error.status = 422;
+    throw error;
+  }
+
+  if (!userCanChargeStoreWallet(user)) {
+    const error = new Error(
+      'شحن المحفظة متاح لمدير المتجر فقط. سجّل الخروج ثم ادخل بحساب المدير (ليس حساب الموظف).'
+    );
+    error.status = 403;
+    throw error;
+  }
+
+  return { storeId, user };
+}
+
+/**
  * POST /api/stores/wallet/charge — api.md
  * body: { store_id, amount, payment_method_id }
  * payment_method_id: معرّف Stripe (مثل pm_card_visa)
  */
 export async function chargeStoreWallet({ storeId, amount, paymentMethodId }) {
+  const { storeId: resolvedStoreId } = await resolveWalletChargeContext(storeId);
+
   return apiRequest(API_ENDPOINTS.storeWalletCharge, {
     method: 'POST',
     body: {
-      store_id: storeId,
+      store_id: Number(resolvedStoreId),
       amount: Number(amount),
       payment_method_id: paymentMethodId,
     },
@@ -46,7 +128,7 @@ export async function withdrawStoreWallet({ storeId, amount, cardNumber }) {
   return apiRequest(API_ENDPOINTS.storeWalletWithdraw, {
     method: 'POST',
     body: {
-      store_id: storeId,
+      store_id: Number(storeId),
       amount: Number(amount),
       card_number: String(cardNumber).replace(/\s/g, ''),
     },

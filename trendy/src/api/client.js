@@ -1,5 +1,5 @@
 import { API_BASE_URL } from './config';
-import { getAuthToken } from './auth';
+import { getAuthToken, notifyUnauthorized } from './auth';
 
 /**
  * طلب HTTP عام للـ API مع دعم JSON و FormData
@@ -46,6 +46,12 @@ export async function apiRequest(path, { method = 'GET', body, headers = {}, aut
     error.status = response.status;
     error.errors = data?.errors || null;
     error.data = data;
+    error.isUnauthorized = response.status === 401;
+
+    if (error.isUnauthorized && auth && token) {
+      notifyUnauthorized();
+    }
+
     throw error;
   }
 

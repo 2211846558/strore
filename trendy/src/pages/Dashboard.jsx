@@ -98,6 +98,12 @@ const Dashboard = () => {
       setStats(dashboardStats);
       setMonthlyRevenue(chart);
     } catch (err) {
+      if (err?.status === 401 || err?.isUnauthorized) {
+        setStatsError('');
+        setStats(null);
+        setMonthlyRevenue([]);
+        return;
+      }
       setStatsError(getApiErrorMessage(err, 'تعذّر تحميل إحصائيات لوحة التحكم'));
       setStats(null);
       setMonthlyRevenue([]);
