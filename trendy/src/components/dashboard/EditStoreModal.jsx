@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Upload, ImageIcon } from 'lucide-react';
+import { fetchZones } from '../../api/stores';
 import './EditStoreModal.css';
 
 const EditStoreModal = ({ isOpen, onClose, store, onSave, saving = false }) => {
   const [formData, setFormData] = useState({ ...store });
   const [logoFile, setLogoFile] = useState(null);
+  const [zones, setZones] = useState([]);
+  const [zonesLoading, setZonesLoading] = useState(false);
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -13,6 +16,15 @@ const EditStoreModal = ({ isOpen, onClose, store, onSave, saving = false }) => {
       setLogoFile(null);
     }
   }, [isOpen, store]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setZonesLoading(true);
+    fetchZones()
+      .then((list) => setZones(Array.isArray(list) ? list : []))
+      .catch(() => setZones([]))
+      .finally(() => setZonesLoading(false));
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -104,8 +116,23 @@ const EditStoreModal = ({ isOpen, onClose, store, onSave, saving = false }) => {
           </div>
 
           <div className="form-group">
-            <label htmlFor="location">الموقع الجغرافي</label>
-            <input type="text" id="location" name="location" value={formData.location} onChange={handleChange} className="form-input" />
+            <label htmlFor="zoneId">المنطقة</label>
+            <select
+              id="zoneId"
+              name="zoneId"
+              value={formData.zoneId ?? ''}
+              onChange={handleChange}
+              className="form-input form-select"
+              required
+              disabled={zonesLoading}
+            >
+              <option value="">{zonesLoading ? 'جاري تحميل المناطق...' : 'اختر المنطقة'}</option>
+              {zones.map((zone) => (
+                <option key={zone.id} value={zone.id}>
+                  {zone.name ?? zone.title ?? `منطقة ${zone.id}`}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="modal-footer">

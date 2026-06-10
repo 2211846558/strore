@@ -91,7 +91,10 @@ export async function submitStoreJoinRequest(form, logoFile) {
  */
 export async function fetchZones() {
   const res = await apiRequest(API_ENDPOINTS.zones, { auth: false });
-  return res?.data ?? res ?? [];
+  const payload = res?.data ?? res;
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.data)) return payload.data;
+  return [];
 }
 
 const translateValidationMessage = (message, field) => {
@@ -138,7 +141,7 @@ export function buildStoreUpdateFormData(formData, logoFile) {
   }
   if (formData.phone?.trim()) fd.append('phone', formData.phone.trim());
   if (formData.email?.trim()) fd.append('store_email', formData.email.trim());
-  if (formData.location?.trim()) fd.append('google_map_url', formData.location.trim());
+  if (formData.zoneId) fd.append('zone_id', String(Number(formData.zoneId)));
   if (logoFile instanceof File) fd.append('logo', logoFile);
 
   return fd;

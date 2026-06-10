@@ -43,7 +43,8 @@ const mapStoreToForm = (store, ratingAverage = null, user = null) => {
     description: store?.description || '',
     phone: store?.phone || '',
     email: resolveStoreEmail(store, user),
-    location: store?.google_map_url || '',
+    zoneId: String(store?.zone_id ?? store?.zone?.id ?? ''),
+    location: store?.zone?.name ?? store?.zone_name ?? '',
     rating,
     statusRaw,
     statusLabel: STORE_STATUS_LABELS[statusRaw] ?? store?.status ?? '—',
@@ -136,18 +137,16 @@ const Dashboard = () => {
         name: formData.name,
         description: formData.description,
         phone: formData.phone,
-        google_map_url: formData.location,
+        zone_id: formData.zoneId ? Number(formData.zoneId) : undefined,
         store_email: formData.email,
         ...(logoFile ? { logo: formData.image } : {}),
       };
-      const ratings = await fetchStoreRatings(storeId).catch(() => ({ average: 0 }));
-      const merged = mergeStoreProfile(updated, store, user);
-      const next = mapStoreToForm(merged, ratings.average, user);
-      setStoreData(next);
       updateStoreInSession({
-        ...merged,
-        store_email: formData.email || resolveStoreEmail(merged, user),
+        ...mergeStoreProfile(updated, store, user),
+        store_email: formData.email || resolveStoreEmail(updated, user),
+        zone_id: formData.zoneId ? Number(formData.zoneId) : undefined,
       });
+      await loadStoreProfile();
       showToast('تم تحديث بيانات المتجر بنجاح');
       return true;
     } catch (err) {
