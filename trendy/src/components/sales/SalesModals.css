@@ -1,4 +1,4 @@
-﻿.sales-modal-overlay {
+.sales-modal-overlay {
   position: fixed;
   inset: 0;
   background-color: rgba(0, 0, 0, 0.5);
@@ -106,6 +106,20 @@
 .sales-form-input:focus {
   border-color: var(--primary);
   background: var(--bg-card);
+}
+
+.sales-form-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 4px 0 0;
+  line-height: 1.5;
+}
+
+.sales-form-error {
+  font-size: 13px;
+  color: #ef4444;
+  margin: 0 0 12px;
+  text-align: right;
 }
 
 .sales-stock-box {

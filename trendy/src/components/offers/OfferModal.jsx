@@ -1,10 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
+import { getApiErrorMessage } from '../../api/stores';
 import './OfferModal.css';
 
 const DISCOUNT_TYPES = ['نسبة مئوية %', 'قيمة ثابتة'];
 
-const OfferModal = ({ isOpen, onClose, onSave, onValidationError, offer, availableProducts }) => {
+const OfferModal = ({
+  isOpen,
+  onClose,
+  onSave,
+  offer,
+  catalogProducts = [],
+  isSaving = false,
+}) => {
   const isEdit = !!offer;
 
   const [form, setForm] = useState({
@@ -13,36 +21,36 @@ const OfferModal = ({ isOpen, onClose, onSave, onValidationError, offer, availab
     value: '',
     startDate: '',
     endDate: '',
-    products: [],
+    productIds: [],
     active: false,
-    status: 'معطل',
   });
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    if (isOpen) {
-      if (offer) {
-        setForm({
-          name: offer.name || '',
-          type: offer.type || 'نسبة مئوية %',
-          value: offer.value || '',
-          startDate: offer.startDate || '',
-          endDate: offer.endDate || '',
-          products: offer.products || [],
-          active: offer.active || false,
-          status: offer.status || 'معطل',
-        });
-      } else {
-        setForm({
-          name: '',
-          type: 'نسبة مئوية %',
-          value: '',
-          startDate: '',
-          endDate: '',
-          products: [],
-          active: false,
-          status: 'معطل',
-        });
-      }
+    if (!isOpen) return;
+
+    setError('');
+    if (offer) {
+      setForm({
+        name: offer.name || '',
+        type: offer.type || 'نسبة مئوية %',
+        value: offer.value != null ? String(offer.value) : '',
+        startDate: offer.startDate || '',
+        endDate: offer.endDate || '',
+        productIds: offer.productIds || [],
+        active: offer.statusRaw === 'active',
+        statusRaw: offer.statusRaw,
+      });
+    } else {
+      setForm({
+        name: '',
+        type: 'نسبة مئوية %',
+        value: '',
+        startDate: '',
+        endDate: '',
+        productIds: [],
+        active: true,
+      });
     }
   }, [isOpen, offer]);
 
@@ -50,15 +58,17 @@ const OfferModal = ({ isOpen, onClose, onSave, onValidationError, offer, availab
 
   const handleChange = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }));
+    setError('');
   };
 
-  const toggleProduct = (product) => {
+  const toggleProduct = (productId) => {
     setForm((prev) => ({
       ...prev,
-      products: prev.products.includes(product)
-        ? prev.products.filter((p) => p !== product)
-        : [...prev.products, product],
+      productIds: prev.productIds.includes(productId)
+        ? prev.productIds.filter((id) => id !== productId)
+        : [...prev.productIds, productId],
     }));
+    setError('');
   };
 
   const numericValue = Number(form.value);
@@ -69,24 +79,27 @@ const OfferModal = ({ isOpen, onClose, onSave, onValidationError, offer, availab
     (form.type !== 'نسبة مئوية %' || numericValue <= 100);
 
   const isValidDates =
-    form.startDate &&
-    form.endDate &&
-    new Date(form.endDate) >= new Date(form.startDate);
+    form.startDate && form.endDate && new Date(form.endDate) >= new Date(form.startDate);
 
   const canSubmit =
     form.name.trim() !== '' &&
     isValidValue &&
     isValidDates &&
-    form.products.length > 0;
+    form.productIds.length > 0 &&
+    !isSaving;
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!canSubmit) {
-      onValidationError?.('يجب تعبئة جميع البيانات');
+      setError('يجب تعبئة جميع البيانات واختيار منتج واحد على الأقل');
       return;
     }
-    const status = form.active ? 'نشط' : 'معطل';
-    onSave({ ...form, status, value: numericValue });
-    onClose();
+
+    setError('');
+    try {
+      await onSave({ ...form, value: numericValue });
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'تعذّر حفظ الحملة'));
+    }
   };
 
   return (
@@ -94,7 +107,7 @@ const OfferModal = ({ isOpen, onClose, onSave, onValidationError, offer, availab
       <div className="modal-content offer-modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2 className="modal-title">{isEdit ? 'تعديل الخصم' : 'إنشاء حملة تخفيض جديدة'}</h2>
-          <button className="close-button" onClick={onClose}>
+          <button className="close-button" onClick={onClose} type="button" disabled={isSaving}>
             <X size={24} />
           </button>
         </div>
@@ -115,7 +128,9 @@ const OfferModal = ({ isOpen, onClose, onSave, onValidationError, offer, availab
               <label>نوع الخصم</label>
               <select value={form.type} onChange={(e) => handleChange('type', e.target.value)}>
                 {DISCOUNT_TYPES.map((t) => (
-                  <option key={t} value={t}>{t}</option>
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
                 ))}
               </select>
             </div>
@@ -151,27 +166,40 @@ const OfferModal = ({ isOpen, onClose, onSave, onValidationError, offer, availab
 
           <div className="form-group">
             <label>المنتجات المشمولة بالحملة</label>
-            <div className="products-selection">
-              {availableProducts.map((product) => (
-                <button
-                  key={product}
-                  type="button"
-                  className={`product-select-btn ${form.products.includes(product) ? 'selected' : ''}`}
-                  onClick={() => toggleProduct(product)}
-                >
-                  {product}
-                </button>
-              ))}
-            </div>
+            {catalogProducts.length === 0 ? (
+              <p className="offer-catalog-empty">لا توجد منتجات نشطة. أضف منتجات أولاً.</p>
+            ) : (
+              <div className="products-selection">
+                {catalogProducts.map((product) => (
+                  <button
+                    key={product.id}
+                    type="button"
+                    className={`product-select-btn ${
+                      form.productIds.includes(product.id) ? 'selected' : ''
+                    }`}
+                    onClick={() => toggleProduct(product.id)}
+                  >
+                    {product.name}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
+
+          {error && <p className="offer-form-error">{error}</p>}
         </div>
 
         <div className="modal-footer">
-          <button className="cancel-button" onClick={onClose}>
+          <button className="cancel-button" onClick={onClose} type="button" disabled={isSaving}>
             إلغاء
           </button>
-          <button type="button" className="save-button" onClick={handleSubmit}>
-            {isEdit ? 'حفظ التغييرات' : 'إنشاء الحملة'}
+          <button
+            type="button"
+            className="save-button"
+            onClick={handleSubmit}
+            disabled={!canSubmit}
+          >
+            {isSaving ? 'جاري الحفظ...' : isEdit ? 'حفظ التغييرات' : 'إنشاء الحملة'}
           </button>
         </div>
       </div>

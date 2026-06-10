@@ -1,79 +1,55 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   ShoppingCart,
   FileText,
   Search,
   Trash2,
   Plus,
-  Minus,
   CheckCircle2,
   RotateCcw,
   ArrowLeftRight,
 } from 'lucide-react';
+import { COLOR_DOTS } from '../data/salesProducts';
 import {
-  COLOR_DOTS,
-  getStock,
-  getTotalStock,
+  fetchPosCatalog,
+  fetchPosCart,
+  addToPosCart,
+  removeFromPosCart,
+  checkoutPosCart,
+  refundPosItem,
+  exchangePosItem,
+  fetchPosInvoices,
+  getProductStockInfo,
+  isProductAvailable,
+  getVariantStock,
+  resolveVariant,
   getExchangePriceDiff,
-  createProductsWithStock,
-  adjustProductStock,
-  applyStockDeductions,
-} from '../data/salesProducts';
+} from '../api/pos';
+import { getApiErrorMessage } from '../api/stores';
+import { useAuth } from '../context/AuthContext';
 import VariantModal from '../components/sales/VariantModal';
 import CreateInvoiceModal from '../components/sales/CreateInvoiceModal';
 import RefundModal from '../components/sales/RefundModal';
 import ExchangeModal from '../components/sales/ExchangeModal';
 import './Sales.css';
 
-const today = new Date().toISOString().slice(0, 10);
-
-const initialInvoices = [
-  {
-    id: 'INV-001',
-    date: '2026-05-17',
-    customer: 'أحمد محمد',
-    status: 'مكتملة',
-    items: [
-      { lineId: 'l1', productId: 4, name: 'بنطلون جينز', color: 'أزرق داكن', size: 'L', quantity: 1, price: 120 },
-    ],
-  },
-  {
-    id: 'INV-002',
-    date: '2026-05-17',
-    customer: 'سارة علي',
-    status: 'مكتملة',
-    items: [
-      { lineId: 'l2', productId: 1, name: 'قميص قطني', color: 'أبيض', size: 'M', quantity: 1, price: 85 },
-    ],
-  },
-  {
-    id: 'INV-003',
-    date: '2026-05-18',
-    customer: 'شششش',
-    status: 'مكتملة',
-    items: [
-      { lineId: 'l3', productId: 3, name: 'شورت رياضي', color: 'أسود', size: 'XL', quantity: 1, price: 60 },
-      { lineId: 'l4', productId: 2, name: 'فستان صيفي', color: 'أحمر', size: 'M', quantity: 1, price: 150 },
-    ],
-  },
-];
-
-const cartKey = (productId, color, size) => `${productId}-${color}-${size}`;
-
 const calcInvoiceTotal = (items) =>
   items.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
-const buildInitialProducts = () => {
-  const soldItems = initialInvoices.flatMap((inv) => inv.items);
-  return applyStockDeductions(createProductsWithStock(), soldItems);
-};
-
 const Sales = () => {
+  const { storeId } = useAuth();
   const [activeTab, setActiveTab] = useState('cart');
-  const [products, setProducts] = useState(buildInitialProducts);
+  const [products, setProducts] = useState([]);
   const [cart, setCart] = useState([]);
-  const [invoices, setInvoices] = useState(initialInvoices);
+  const [cartTotal, setCartTotal] = useState(0);
+  const [invoices, setInvoices] = useState([]);
   const [invoiceSearch, setInvoiceSearch] = useState('');
+  const [debouncedInvoiceSearch, setDebouncedInvoiceSearch] = useState('');
+  const [loadingProducts, setLoadingProducts] = useState(true);
+  const [loadingCart, setLoadingCart] = useState(true);
+  const [loadingInvoices, setLoadingInvoices] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState('');
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [variantOpen, setVariantOpen] = useState(false);
   const [invoiceModalOpen, setInvoiceModalOpen] = useState(false);
@@ -87,8 +63,62 @@ const Sales = () => {
     setTimeout(() => setToast(null), 2800);
   };
 
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedInvoiceSearch(invoiceSearch), 400);
+    return () => clearTimeout(timer);
+  }, [invoiceSearch]);
+
+  const loadProducts = useCallback(async () => {
+    setLoadingProducts(true);
+    try {
+      const catalog = await fetchPosCatalog({ storeId });
+      setProducts(catalog);
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'تعذّر تحميل المنتجات'));
+      setProducts([]);
+    } finally {
+      setLoadingProducts(false);
+    }
+  }, [storeId]);
+
+  const loadCart = useCallback(async () => {
+    setLoadingCart(true);
+    try {
+      const result = await fetchPosCart();
+      setCart(result.items);
+      setCartTotal(result.total);
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'تعذّر تحميل السلة'));
+      setCart([]);
+      setCartTotal(0);
+    } finally {
+      setLoadingCart(false);
+    }
+  }, []);
+
+  const loadInvoices = useCallback(async () => {
+    setLoadingInvoices(true);
+    try {
+      const list = await fetchPosInvoices({ search: debouncedInvoiceSearch });
+      setInvoices(list);
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'تعذّر تحميل الفواتير'));
+      setInvoices([]);
+    } finally {
+      setLoadingInvoices(false);
+    }
+  }, [debouncedInvoiceSearch]);
+
+  useEffect(() => {
+    loadProducts();
+    loadCart();
+  }, [loadProducts, loadCart]);
+
+  useEffect(() => {
+    if (activeTab === 'invoices') loadInvoices();
+  }, [activeTab, loadInvoices]);
+
   const cartCount = cart.reduce((s, i) => s + i.quantity, 0);
-  const cartTotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
 
   const filteredInvoices = useMemo(() => {
     const q = invoiceSearch.trim().toLowerCase();
@@ -96,16 +126,12 @@ const Sales = () => {
     return invoices.filter((inv) => inv.id.toLowerCase().includes(q));
   }, [invoices, invoiceSearch]);
 
-  const nextInvoiceId = () => {
-    const nums = invoices
-      .map((inv) => parseInt(inv.id.replace('INV-', ''), 10))
-      .filter((n) => !Number.isNaN(n));
-    const next = nums.length ? Math.max(...nums) + 1 : 1;
-    return `INV-${String(next).padStart(3, '0')}`;
+  const refreshAll = async () => {
+    await Promise.all([loadProducts(), loadCart(), activeTab === 'invoices' ? loadInvoices() : Promise.resolve()]);
   };
 
   const openProduct = (product) => {
-    if (getTotalStock(product) <= 0) {
+    if (!isProductAvailable(product)) {
       showToast('هذا المنتج غير متوفر حالياً');
       return;
     }
@@ -117,180 +143,114 @@ const Sales = () => {
     ? products.find((p) => p.id === selectedProduct.id) ?? selectedProduct
     : null;
 
-  const handleAddToCart = ({ product, color, size, price }) => {
+  const handleAddToCart = async ({ product, color, size, price, variant }) => {
+    const resolved = variant ?? resolveVariant(product, color, size);
+    if (!resolved) {
+      showToast('تعذّر تحديد التنوع — اختر لوناً ومقاساً صحيحين');
+      return;
+    }
+
     if (pendingExchange) {
-      const { invoiceId, lineId, oldProductId, oldColor, oldSize, quantity } = pendingExchange;
-      setInvoices((prev) =>
-        prev.map((inv) => {
-          if (inv.id !== invoiceId) return inv;
-          const items = inv.items.map((line) =>
-            line.lineId === lineId
-              ? {
-                  ...line,
-                  productId: product.id,
-                  name: product.name,
-                  color,
-                  size,
-                  price,
-                }
-              : line
-          );
-          return { ...inv, items };
-        })
-      );
-      const liveProduct = products.find((p) => p.id === product.id) ?? product;
-      const available = getStock(liveProduct, color, size);
-      if (available < quantity) {
-        showToast('الكمية غير متوفرة للمنتج البديل');
-        return;
-      }
-      setProducts((prev) => {
-        let next = adjustProductStock(prev, oldProductId, oldColor, oldSize, quantity);
-        next = adjustProductStock(next, product.id, color, size, -quantity);
-        return next;
-      });
-      const qty = pendingExchange.quantity || 1;
-      const diffInfo = getExchangePriceDiff(pendingExchange.oldPrice, qty, price);
-      setPendingExchange(null);
-      setSelectedProduct(null);
-      let msg = `تم تبديل المنتج إلى «${product.name}» (${color} | ${size}) بنجاح`;
-      if (diffInfo.type === 'refund') {
-        msg += ` — يُسترد للعميل ${diffInfo.amount} د.ل`;
-      } else if (diffInfo.type === 'pay') {
-        msg += ` — مبلغ إضافي على العميل ${diffInfo.amount} د.ل`;
-      }
-      showToast(msg);
-      return;
-    }
+      setIsSaving(true);
+      try {
+        await exchangePosItem({
+          oldOrderId: pendingExchange.orderId,
+          oldVariantId: pendingExchange.variantId,
+          oldQuantity: pendingExchange.quantity,
+          newVariantId: resolved.id,
+          newQuantity: pendingExchange.quantity,
+        });
 
-    const liveProduct = products.find((p) => p.id === product.id) ?? product;
-    const available = getStock(liveProduct, color, size);
-    if (available <= 0) {
-      showToast('الكمية غير متوفرة لهذا المتغير');
-      return;
-    }
-
-    setProducts((prev) => adjustProductStock(prev, product.id, color, size, -1));
-
-    const key = cartKey(product.id, color, size);
-    setCart((prev) => {
-      const existing = prev.find((i) => i.key === key);
-      if (existing) {
-        return prev.map((i) =>
-          i.key === key ? { ...i, quantity: i.quantity + 1 } : i
+        const diffInfo = getExchangePriceDiff(
+          pendingExchange.oldPrice,
+          pendingExchange.quantity,
+          price ?? resolved.price,
         );
+        let msg = `تم تبديل المنتج إلى «${product.name}» بنجاح`;
+        if (diffInfo.type === 'refund') msg += ` — يُسترد للعميل ${diffInfo.amount} د.ل`;
+        else if (diffInfo.type === 'pay') msg += ` — مبلغ إضافي ${diffInfo.amount} د.ل`;
+        showToast(msg);
+        setPendingExchange(null);
+        setSelectedProduct(null);
+        await refreshAll();
+      } catch (err) {
+        showToast(getApiErrorMessage(err, 'تعذّر إتمام التبديل'));
+      } finally {
+        setIsSaving(false);
       }
-      return [
-        ...prev,
-        {
-          key,
-          productId: product.id,
-          name: product.name,
-          color,
-          size,
-          price,
-          quantity: 1,
-        },
-      ];
-    });
-    showToast(`تمت إضافة «${product.name}» إلى السلة`);
-  };
-
-  const updateQty = (key, delta) => {
-    const item = cart.find((i) => i.key === key);
-    if (!item) return;
-
-    if (delta > 0) {
-      const liveProduct = products.find((p) => p.id === item.productId);
-      const available = getStock(liveProduct, item.color, item.size);
-      if (available <= 0) {
-        showToast('لا توجد كمية إضافية متوفرة');
-        return;
-      }
-      setProducts((prev) =>
-        adjustProductStock(prev, item.productId, item.color, item.size, -1)
-      );
-    } else {
-      setProducts((prev) =>
-        adjustProductStock(prev, item.productId, item.color, item.size, 1)
-      );
+      return;
     }
 
-    setCart((prev) =>
-      prev
-        .map((i) =>
-          i.key === key ? { ...i, quantity: i.quantity + delta } : i
-        )
-        .filter((i) => i.quantity > 0)
-    );
-  };
-
-  const removeFromCart = (key) => {
-    const item = cart.find((i) => i.key === key);
-    if (item) {
-      setProducts((prev) =>
-        adjustProductStock(prev, item.productId, item.color, item.size, item.quantity)
-      );
+    if (getVariantStock(product, color, size) <= 0) {
+      showToast('الكمية غير متوفرة لهذا التنوع');
+      return;
     }
-    setCart((prev) => prev.filter((i) => i.key !== key));
-    showToast('تم حذف المنتج من السلة');
+
+    setIsSaving(true);
+    try {
+      await addToPosCart({ variantId: resolved.id, quantity: 1 });
+      await loadCart();
+      showToast(`تمت إضافة «${product.name}» إلى السلة`);
+    } catch (err) {
+      showToast(getApiErrorMessage(err, 'تعذّر إضافة المنتج للسلة'));
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleCreateInvoice = (customerName) => {
-    const items = cart.map((item, idx) => ({
-      lineId: `line-${Date.now()}-${idx}`,
-      productId: item.productId,
-      name: item.name,
-      color: item.color,
-      size: item.size,
-      quantity: item.quantity,
-      price: item.price,
-    }));
-
-    const newInvoice = {
-      id: nextInvoiceId(),
-      date: today,
-      customer: customerName,
-      status: 'مكتملة',
-      items,
-    };
-
-    setInvoices((prev) => [newInvoice, ...prev]);
-    setCart([]);
-    setActiveTab('invoices');
-    showToast(`تم إنشاء الفاتورة ${newInvoice.id} بنجاح`);
+  const removeFromCart = async (cartItemId) => {
+    setIsSaving(true);
+    try {
+      await removeFromPosCart(cartItemId);
+      await loadCart();
+      showToast('تم حذف المنتج من السلة');
+    } catch (err) {
+      showToast(getApiErrorMessage(err, 'تعذّر حذف المنتج'));
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleRefund = () => {
+  const handleCreateInvoice = async (customerId) => {
+    setIsSaving(true);
+    try {
+      const invoice = await checkoutPosCart({ customerId });
+      await loadCart();
+      await loadInvoices();
+      setActiveTab('invoices');
+      showToast(`تم إنشاء الفاتورة ${invoice.id} بنجاح`);
+    } catch (err) {
+      throw err;
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleRefund = async () => {
     if (!refundTarget) return;
-    const { invoiceId, line } = refundTarget;
-
-    setInvoices((prev) => {
-      const updated = prev
-        .map((inv) => {
-          if (inv.id !== invoiceId) return inv;
-          const items = inv.items.filter((i) => i.lineId !== line.lineId);
-          return { ...inv, items };
-        })
-        .filter((inv) => inv.items.length > 0);
-      return updated;
-    });
-
-    setProducts((prev) =>
-      adjustProductStock(prev, line.productId, line.color, line.size, line.quantity || 1)
-    );
-    showToast(`تم استرداد «${line.name}» بنجاح — أُعيدت الكمية للمخزون`);
-    setRefundTarget(null);
+    const { line } = refundTarget;
+    setIsSaving(true);
+    try {
+      await refundPosItem({
+        orderId: line.orderId,
+        variantId: line.variantId,
+        quantity: line.quantity || 1,
+      });
+      showToast(`تم استرداد «${line.name}» بنجاح`);
+      setRefundTarget(null);
+      await refreshAll();
+    } catch (err) {
+      showToast(getApiErrorMessage(err, 'تعذّر إتمام الاسترداد'));
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleExchangeSelect = (newProduct) => {
     if (!exchangeTarget) return;
     setPendingExchange({
-      invoiceId: exchangeTarget.invoiceId,
-      lineId: exchangeTarget.line.lineId,
-      oldProductId: exchangeTarget.line.productId,
-      oldColor: exchangeTarget.line.color,
-      oldSize: exchangeTarget.line.size,
+      orderId: exchangeTarget.line.orderId,
+      variantId: exchangeTarget.line.variantId,
       oldPrice: exchangeTarget.line.price,
       quantity: exchangeTarget.line.quantity || 1,
     });
@@ -326,6 +286,8 @@ const Sales = () => {
         </button>
       </div>
 
+      {error && <p className="sales-error">{error}</p>}
+
       {activeTab === 'cart' ? (
         <div className="sales-layout">
           <div className="sales-cart-panel">
@@ -334,7 +296,11 @@ const Sales = () => {
               السلة
             </h2>
 
-            {cart.length === 0 ? (
+            {loadingCart ? (
+              <div className="sales-cart-empty">
+                <p>جاري تحميل السلة...</p>
+              </div>
+            ) : cart.length === 0 ? (
               <div className="sales-cart-empty">
                 <ShoppingCart size={48} />
                 <p>السلة فارغة</p>
@@ -348,7 +314,7 @@ const Sales = () => {
                       <div>
                         <p className="sales-cart-item-name">{item.name}</p>
                         <p className="sales-cart-item-variant">
-                          {item.size} | {item.color}
+                          {item.sku || item.variantLabel}
                         </p>
                       </div>
                       <span className="sales-cart-item-price">
@@ -356,29 +322,12 @@ const Sales = () => {
                       </span>
                     </div>
                     <div className="sales-cart-item-actions">
-                      <div className="sales-qty-control">
-                        <button
-                          type="button"
-                          className="sales-qty-btn"
-                          onClick={() => updateQty(item.key, -1)}
-                          aria-label="تقليل الكمية"
-                        >
-                          <Minus size={16} />
-                        </button>
-                        <span className="sales-qty-value">{item.quantity}</span>
-                        <button
-                          type="button"
-                          className="sales-qty-btn"
-                          onClick={() => updateQty(item.key, 1)}
-                          aria-label="زيادة الكمية"
-                        >
-                          <Plus size={16} />
-                        </button>
-                      </div>
+                      <span className="sales-qty-value">× {item.quantity}</span>
                       <button
                         type="button"
                         className="sales-remove-btn"
-                        onClick={() => removeFromCart(item.key)}
+                        onClick={() => removeFromCart(item.cartItemId)}
+                        disabled={isSaving}
                         aria-label="حذف"
                       >
                         <Trash2 size={16} />
@@ -396,6 +345,7 @@ const Sales = () => {
                   type="button"
                   className="sales-create-invoice-btn"
                   onClick={() => setInvoiceModalOpen(true)}
+                  disabled={isSaving}
                 >
                   <Plus size={18} />
                   إنشاء فاتورة
@@ -406,56 +356,63 @@ const Sales = () => {
 
           <div className="sales-products-panel">
             <h3>منتجات المتجر</h3>
-            <div className="sales-products-grid">
-              {products.map((product) => {
-                const totalStock = getTotalStock(product);
-                const outOfStock = totalStock <= 0;
-                return (
-                <div
-                  key={product.id}
-                  className={`sales-product-card${outOfStock ? ' out-of-stock' : ''}`}
-                  role="button"
-                  tabIndex={outOfStock ? -1 : 0}
-                  onClick={() => !outOfStock && openProduct(product)}
-                  onKeyDown={(e) => e.key === 'Enter' && !outOfStock && openProduct(product)}
-                >
-                  <img
-                    className="sales-product-image"
-                    src={product.image}
-                    alt={product.name}
-                    loading="lazy"
-                  />
-                  <div className="sales-product-body">
-                    <p className="sales-product-name">{product.name}</p>
-                    <div className="sales-product-colors">
-                      {product.colors.map((c) => (
-                        <span key={c} className="sales-color-dot">
-                          <span
-                            className="sales-color-circle"
-                            style={{ background: COLOR_DOTS[c] || '#ccc' }}
-                          />
-                          {c}
-                        </span>
-                      ))}
+            {loadingProducts ? (
+              <p className="sales-loading">جاري تحميل المنتجات...</p>
+            ) : (
+              <div className="sales-products-grid">
+                {products.map((product) => {
+                  const stockInfo = getProductStockInfo(product);
+                  const totalStock = stockInfo.unknown && stockInfo.total === 0
+                    ? null
+                    : stockInfo.total;
+                  const outOfStock = !isProductAvailable(product);
+                  return (
+                    <div
+                      key={product.id}
+                      className={`sales-product-card${outOfStock ? ' out-of-stock' : ''}`}
+                      role="button"
+                      tabIndex={outOfStock ? -1 : 0}
+                      onClick={() => !outOfStock && openProduct(product)}
+                      onKeyDown={(e) => e.key === 'Enter' && !outOfStock && openProduct(product)}
+                    >
+                      <img
+                        className="sales-product-image"
+                        src={product.image}
+                        alt={product.name}
+                        loading="lazy"
+                      />
+                      <div className="sales-product-body">
+                        <p className="sales-product-name">{product.name}</p>
+                        <div className="sales-product-colors">
+                          {product.colors.map((c) => (
+                            <span key={c} className="sales-color-dot">
+                              <span
+                                className="sales-color-circle"
+                                style={{ background: COLOR_DOTS[c] || '#ccc' }}
+                              />
+                              {c}
+                            </span>
+                          ))}
+                        </div>
+                        <div className="sales-product-sizes">
+                          {product.sizes.map((s) => (
+                            <span key={s} className="sales-size-pill">
+                              {s}
+                            </span>
+                          ))}
+                        </div>
+                        <div className="sales-product-footer">
+                          <span className="sales-product-stock">
+                            {totalStock == null ? '—' : totalStock}
+                          </span>
+                          <span className="sales-product-price">{product.price} د.ل</span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="sales-product-sizes">
-                      {product.sizes.map((s) => (
-                        <span key={s} className="sales-size-pill">
-                          {s}
-                        </span>
-                      ))}
-                    </div>
-                    <div className="sales-product-footer">
-                      <span className="sales-product-stock">
-                        {totalStock}
-                      </span>
-                      <span className="sales-product-price">{product.price} د.ل</span>
-                    </div>
-                  </div>
-                </div>
-              );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       ) : (
@@ -470,13 +427,17 @@ const Sales = () => {
             />
           </div>
 
-          {filteredInvoices.length === 0 ? (
+          {loadingInvoices ? (
+            <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 40 }}>
+              جاري تحميل الفواتير...
+            </p>
+          ) : filteredInvoices.length === 0 ? (
             <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 40 }}>
               لا توجد فواتير مطابقة للبحث
             </p>
           ) : (
             filteredInvoices.map((invoice) => (
-              <div key={invoice.id} className="sales-invoice-card">
+              <div key={invoice.orderId} className="sales-invoice-card">
                 <div className="sales-invoice-header">
                   <div>
                     <p className="sales-invoice-number">فاتورة رقم: {invoice.id}</p>
@@ -492,8 +453,7 @@ const Sales = () => {
                     <div className="sales-invoice-line-info">
                       <p className="sales-invoice-line-name">{line.name}</p>
                       <p className="sales-invoice-line-detail">
-                        المقاس: {line.size} | اللون: {line.color} | الكمية:{' '}
-                        {line.quantity}
+                        SKU: {line.sku || '—'} | الكمية: {line.quantity}
                       </p>
                     </div>
                     <span className="sales-invoice-line-price">
@@ -503,9 +463,8 @@ const Sales = () => {
                       <button
                         type="button"
                         className="sales-line-btn"
-                        onClick={() =>
-                          setRefundTarget({ invoiceId: invoice.id, line })
-                        }
+                        onClick={() => setRefundTarget({ invoiceId: invoice.id, line })}
+                        disabled={isSaving}
                       >
                         <RotateCcw size={14} />
                         استرداد
@@ -513,9 +472,8 @@ const Sales = () => {
                       <button
                         type="button"
                         className="sales-line-btn"
-                        onClick={() =>
-                          setExchangeTarget({ invoiceId: invoice.id, line })
-                        }
+                        onClick={() => setExchangeTarget({ invoiceId: invoice.id, line })}
+                        disabled={isSaving}
                       >
                         <ArrowLeftRight size={14} />
                         تبديل
@@ -543,6 +501,7 @@ const Sales = () => {
         }}
         product={activeProduct}
         onAdd={handleAddToCart}
+        isSaving={isSaving}
         exchangeFrom={
           pendingExchange
             ? { oldPrice: pendingExchange.oldPrice, quantity: pendingExchange.quantity }
@@ -552,22 +511,25 @@ const Sales = () => {
 
       <CreateInvoiceModal
         isOpen={invoiceModalOpen}
-        onClose={() => setInvoiceModalOpen(false)}
+        onClose={() => !isSaving && setInvoiceModalOpen(false)}
         cart={cart}
         onConfirm={handleCreateInvoice}
+        isSaving={isSaving}
       />
 
       <RefundModal
         isOpen={!!refundTarget}
-        onClose={() => setRefundTarget(null)}
+        onClose={() => !isSaving && setRefundTarget(null)}
         item={refundTarget?.line}
         onConfirm={handleRefund}
+        isSaving={isSaving}
       />
 
       <ExchangeModal
         isOpen={!!exchangeTarget}
         onClose={() => setExchangeTarget(null)}
         item={exchangeTarget?.line}
+        products={products}
         onConfirm={handleExchangeSelect}
       />
 

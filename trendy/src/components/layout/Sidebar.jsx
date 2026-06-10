@@ -18,15 +18,9 @@ import {
 } from 'lucide-react';
 import './Sidebar.css';
 
-const mainMenuItems = [
+const navMenuItems = [
   { title: 'لوحة التحكم', icon: LayoutDashboard, path: '/' },
-];
-
-const plansMenuItems = [
   { title: 'خطط الاشتراك', icon: CreditCard, path: '/plans' },
-];
-
-const storeMenuItems = [
   { title: 'التسويق والمحتوى', icon: Megaphone, path: '/marketing' },
   { title: 'المنتجات', icon: Package, path: '/products' },
   { title: 'المخزون', icon: Box, path: '/inventory' },
@@ -73,17 +67,7 @@ const Sidebar = ({ onLogout }) => {
       </div>
 
       <nav className="sidebar-nav">
-        <ul className="nav-list">{renderNavItems(mainMenuItems)}</ul>
-
-        <div className="nav-section">
-          <p className="nav-section-title">إدارة الخطط</p>
-          <ul className="nav-list">{renderNavItems(plansMenuItems)}</ul>
-        </div>
-
-        <div className="nav-section">
-          <p className="nav-section-title">إدارة المتجر</p>
-          <ul className="nav-list">{renderNavItems(storeMenuItems)}</ul>
-        </div>
+        <ul className="nav-list">{renderNavItems(navMenuItems)}</ul>
       </nav>
 
       <div className="sidebar-footer">

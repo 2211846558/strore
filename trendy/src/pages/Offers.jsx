@@ -1,52 +1,29 @@
-import React, { useState } from 'react';
-import { Search, Plus, Trash2, Edit2, CheckCircle2 } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Plus, Trash2, Edit2, CheckCircle2 } from 'lucide-react';
 import OfferModal from '../components/offers/OfferModal';
+import {
+  fetchAllPromotions,
+  createPromotion,
+  updatePromotion,
+  deletePromotion,
+  togglePromotion,
+  buildPromotionPayload,
+  buildPromotionUpdatePayload,
+} from '../api/promotions';
+import { fetchStoreProducts } from '../api/products';
+import { getApiErrorMessage } from '../api/stores';
+import { useAuth } from '../context/AuthContext';
 import './Offers.css';
 
-const AVAILABLE_PRODUCTS = [
-  'قميص قطني أزرق', 'قميص قطني أبيض', 'فستان صيفي', 'فستان شتوي',
-  'شورت رياضي', 'بنطلون جينز', 'بنطلون كاجوال', 'جاكيت شتوي', 'حذاء رياضي'
-];
-
-const initialOffers = [
-  {
-    id: 1,
-    name: 'عرض نهاية الموسم',
-    type: 'نسبة مئوية %',
-    value: 30,
-    startDate: '2026-04-01',
-    endDate: '2026-04-30',
-    status: 'معطل',
-    active: false,
-    products: ['جاكيت شتوي'],
-  },
-  {
-    id: 2,
-    name: 'تخفيضات الجمعة',
-    type: 'قيمة ثابتة',
-    value: 50,
-    startDate: '2026-05-10',
-    endDate: '2026-05-10',
-    status: 'مجدول',
-    active: false,
-    products: ['حذاء رياضي'],
-  },
-  {
-    id: 3,
-    name: 'خصم الصيف',
-    type: 'نسبة مئوية %',
-    value: 20,
-    startDate: '2026-05-01',
-    endDate: '2026-05-31',
-    status: 'نشط',
-    active: true,
-    products: ['قميص قطني', 'بنطال جينز'],
-  },
-];
-
 const Offers = () => {
-  const [offers, setOffers] = useState(initialOffers);
+  const { storeId } = useAuth();
+  const [offers, setOffers] = useState([]);
+  const [catalogProducts, setCatalogProducts] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [togglingId, setTogglingId] = useState(null);
+  const [error, setError] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingOffer, setEditingOffer] = useState(null);
   const [toast, setToast] = useState(null);
@@ -56,38 +33,80 @@ const Offers = () => {
     setTimeout(() => setToast(null), 2500);
   };
 
+  const loadOffers = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const [promotions, products] = await Promise.all([
+        fetchAllPromotions({ storeId }),
+        fetchStoreProducts({ storeId, status: 'active', perPage: 100 }),
+      ]);
+      setOffers(promotions);
+      setCatalogProducts(products.map((p) => ({ id: p.id, name: p.name })));
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'تعذّر تحميل الحملات'));
+      setOffers([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [storeId]);
+
+  useEffect(() => {
+    loadOffers();
+  }, [loadOffers]);
+
   const filteredOffers = offers.filter((o) =>
-    o.name.toLowerCase().includes(searchQuery.toLowerCase())
+    o.name.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
-  const handleAdd = (offer) => {
-    const newOffer = { ...offer, id: Date.now() };
-    setOffers((prev) => [...prev, newOffer]);
-    showToast('تم إنشاء الحملة بنجاح');
+  const handleSave = async (formData) => {
+    setIsSaving(true);
+    try {
+      const payload = editingOffer
+        ? buildPromotionUpdatePayload(formData, { storeId })
+        : buildPromotionPayload(formData, { storeId });
+
+      if (editingOffer) {
+        await updatePromotion(editingOffer.id, payload);
+        showToast('تم تحديث الحملة');
+      } else {
+        await createPromotion(payload);
+        showToast('تم إنشاء الحملة بنجاح');
+      }
+      setIsModalOpen(false);
+      setEditingOffer(null);
+      await loadOffers();
+    } catch (err) {
+      throw err;
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleEdit = (offer) => {
-    setOffers((prev) => prev.map((o) => (o.id === offer.id ? offer : o)));
-    showToast('تم تحديث الحملة');
+  const handleDelete = async (id) => {
+    setIsSaving(true);
+    try {
+      await deletePromotion(id);
+      showToast('تم حذف الحملة');
+      await loadOffers();
+    } catch (err) {
+      showToast(getApiErrorMessage(err, 'تعذّر حذف الحملة'));
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleDelete = (id) => {
-    setOffers((prev) => prev.filter((o) => o.id !== id));
-    showToast('تم حذف الحملة');
-  };
-
-  const handleToggleActive = (id) => {
-    setOffers((prev) =>
-      prev.map((o) => {
-        if (o.id !== id) return o;
-        const newActive = !o.active;
-        return {
-          ...o,
-          active: newActive,
-          status: newActive ? 'نشط' : 'معطل',
-        };
-      })
-    );
+  const handleToggleActive = async (id) => {
+    setTogglingId(id);
+    try {
+      await togglePromotion(id);
+      showToast('تم تحديث حالة الحملة');
+      await loadOffers();
+    } catch (err) {
+      showToast(getApiErrorMessage(err, 'تعذّر تغيير حالة الحملة'));
+    } finally {
+      setTogglingId(null);
+    }
   };
 
   const openAdd = () => {
@@ -100,17 +119,9 @@ const Offers = () => {
     setIsModalOpen(true);
   };
 
-  const handleSave = (offerData) => {
-    if (editingOffer) {
-      handleEdit({ ...offerData, id: editingOffer.id });
-    } else {
-      handleAdd(offerData);
-    }
-  };
-
   const getStatusClass = (status) => {
     if (status === 'نشط') return 'status-active';
-    if (status === 'معطل') return 'status-inactive';
+    if (status === 'معطل' || status === 'منتهي') return 'status-inactive';
     return 'status-scheduled';
   };
 
@@ -124,14 +135,18 @@ const Offers = () => {
       </header>
 
       <div className="offers-controls">
-        <button className="add-offer-btn" onClick={openAdd}>
+        <button className="add-offer-btn" onClick={openAdd} type="button" disabled={loading}>
           <Plus size={18} />
           إنشاء حملة تخفيض
         </button>
       </div>
 
+      {error && <p className="offers-error">{error}</p>}
+
       <div className="offers-grid">
-        {filteredOffers.length > 0 ? (
+        {loading ? (
+          <p className="no-results">جاري تحميل الحملات...</p>
+        ) : filteredOffers.length > 0 ? (
           filteredOffers.map((offer) => (
             <div key={offer.id} className="offer-card">
               <div className="offer-card-header">
@@ -160,27 +175,45 @@ const Offers = () => {
               <div className="offer-products">
                 <span className="products-label">المنتجات المشمولة</span>
                 <div className="products-tags">
-                  {offer.products.map((p, idx) => (
-                    <span key={idx} className="product-tag">{p}</span>
-                  ))}
+                  {offer.products.length > 0 ? (
+                    offer.products.map((p, idx) => (
+                      <span key={idx} className="product-tag">
+                        {p}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="product-tag">—</span>
+                  )}
                 </div>
               </div>
 
               <div className="offer-toggle-row">
                 <span className="toggle-label">تفعيل</span>
                 <button
-                  className={`toggle-switch ${offer.active ? 'active' : ''}`}
+                  type="button"
+                  className={`toggle-switch ${offer.statusRaw === 'active' ? 'active' : ''}`}
                   onClick={() => handleToggleActive(offer.id)}
+                  disabled={togglingId === offer.id || isSaving}
                 >
                   <span className="toggle-thumb" />
                 </button>
               </div>
 
               <div className="offer-actions">
-                <button className="offer-btn delete-btn" onClick={() => handleDelete(offer.id)}>
+                <button
+                  type="button"
+                  className="offer-btn delete-btn"
+                  onClick={() => handleDelete(offer.id)}
+                  disabled={isSaving}
+                >
                   <Trash2 size={16} />
                 </button>
-                <button className="offer-btn edit-btn" onClick={() => openEdit(offer)}>
+                <button
+                  type="button"
+                  className="offer-btn edit-btn"
+                  onClick={() => openEdit(offer)}
+                  disabled={isSaving}
+                >
                   <Edit2 size={16} />
                   تعديل
                 </button>
@@ -194,11 +227,16 @@ const Offers = () => {
 
       <OfferModal
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        onClose={() => {
+          if (!isSaving) {
+            setIsModalOpen(false);
+            setEditingOffer(null);
+          }
+        }}
         onSave={handleSave}
-        onValidationError={showToast}
         offer={editingOffer}
-        availableProducts={AVAILABLE_PRODUCTS}
+        catalogProducts={catalogProducts}
+        isSaving={isSaving}
       />
 
       {toast && (

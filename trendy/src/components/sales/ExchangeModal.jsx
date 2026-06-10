@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
-import { SALES_PRODUCTS } from '../../data/salesProducts';
 import ExchangePriceDiff from './ExchangePriceDiff';
 import './SalesModals.css';
 
-const ExchangeModal = ({ isOpen, onClose, item, onConfirm }) => {
+const ExchangeModal = ({ isOpen, onClose, item, products = [], onConfirm }) => {
   const [newProductId, setNewProductId] = useState('');
 
   useEffect(() => {
@@ -14,7 +13,7 @@ const ExchangeModal = ({ isOpen, onClose, item, onConfirm }) => {
   if (!isOpen || !item) return null;
 
   const quantity = item.quantity || 1;
-  const newProduct = SALES_PRODUCTS.find((p) => String(p.id) === newProductId);
+  const newProduct = products.find((p) => String(p.id) === newProductId);
 
   const handleConfirm = () => {
     if (!newProduct) return;
@@ -28,20 +27,31 @@ const ExchangeModal = ({ isOpen, onClose, item, onConfirm }) => {
       <div className="sales-modal" onClick={(e) => e.stopPropagation()}>
         <div className="sales-modal-header">
           <h2 className="sales-modal-title">تبديل منتج</h2>
-          <button type="button" className="sales-modal-close" onClick={onClose}><X size={24} /></button>
+          <button type="button" className="sales-modal-close" onClick={onClose}>
+            <X size={24} />
+          </button>
         </div>
         <div className="sales-old-product-box">
           <p className="sales-refund-label">المنتج القديم</p>
           <p className="sales-refund-name">{item.name}</p>
-          <p className="sales-refund-meta">{item.color} | {item.size} | الكمية: {quantity}</p>
+          <p className="sales-refund-meta">
+            SKU: {item.sku || item.color} | الكمية: {quantity}
+          </p>
           <p className="sales-refund-amount">{item.price * quantity} د.ل</p>
         </div>
         <div className="sales-form-group">
           <label htmlFor="new-product">المنتج الجديد</label>
-          <select id="new-product" className="sales-form-select" value={newProductId} onChange={(e) => setNewProductId(e.target.value)}>
+          <select
+            id="new-product"
+            className="sales-form-select"
+            value={newProductId}
+            onChange={(e) => setNewProductId(e.target.value)}
+          >
             <option value="">اختر المنتج</option>
-            {SALES_PRODUCTS.filter((p) => p.id !== item.productId).map((p) => (
-              <option key={p.id} value={p.id}>{p.name} — {p.price} د.ل</option>
+            {products.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name} — {p.price} د.ل
+              </option>
             ))}
           </select>
         </div>
@@ -53,8 +63,12 @@ const ExchangeModal = ({ isOpen, onClose, item, onConfirm }) => {
           />
         )}
         <div className="sales-modal-footer">
-          <button type="button" className="sales-btn-primary" onClick={handleConfirm} disabled={!newProductId}>تأكيد التبديل</button>
-          <button type="button" className="sales-btn-secondary" onClick={onClose}>إلغاء</button>
+          <button type="button" className="sales-btn-primary" onClick={handleConfirm} disabled={!newProductId}>
+            تأكيد التبديل
+          </button>
+          <button type="button" className="sales-btn-secondary" onClick={onClose}>
+            إلغاء
+          </button>
         </div>
       </div>
     </div>

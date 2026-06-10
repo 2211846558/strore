@@ -1,4 +1,4 @@
-﻿.modal-overlay {
+.modal-overlay {
   position: fixed;
   top: 0;
   left: 0;
@@ -199,4 +199,16 @@
   .products-selection {
     grid-template-columns: 1fr;
   }
+}
+
+.offer-form-error,
+.offer-catalog-empty {
+  margin: 0;
+  font-size: 13px;
+  color: #ef4444;
+  text-align: right;
+}
+
+.offer-catalog-empty {
+  color: var(--text-secondary);
 }

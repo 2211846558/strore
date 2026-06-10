@@ -1,5 +1,5 @@
 import React from 'react';
-import { getExchangePriceDiff } from '../../data/salesProducts';
+import { getExchangePriceDiff } from '../../api/pos';
 
 const ExchangePriceDiff = ({ oldUnitPrice, quantity, newUnitPrice }) => {
   const qty = quantity || 1;

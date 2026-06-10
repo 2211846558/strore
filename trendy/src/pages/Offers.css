@@ -1,4 +1,4 @@
-﻿.offers-page {
+.offers-page {
   padding-bottom: 40px;
 }
 
@@ -278,6 +278,12 @@
   padding: 60px 20px;
   color: var(--text-secondary);
   font-size: 16px;
+}
+
+.offers-error {
+  margin: 0 0 16px;
+  color: #ef4444;
+  font-size: 14px;
 }
 
 .toast-notification {
