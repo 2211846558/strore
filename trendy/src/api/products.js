@@ -292,18 +292,32 @@ export async function restoreProduct(id) {
  * يُعيد مصفوفة من التنوعات مع قيم الخصائص والسعر والكمية
  */
 export async function fetchProductVariants(productId) {
-  const res = await apiRequest(API_ENDPOINTS.product(productId));
+  const res = await apiRequest(`${API_ENDPOINTS.product(productId)}/variants`);
   const item = res?.data ?? res;
-  const rawVariants = Array.isArray(item?.variants) ? item.variants : [];
+  const rawVariants = Array.isArray(item)
+    ? item
+    : Array.isArray(item?.variants)
+      ? item.variants
+      : Array.isArray(item?.data)
+        ? item.data
+        : [];
 
   return rawVariants.map((v) => {
-    const attrValues = Array.isArray(v.attribute_values) ? v.attribute_values : [];
+    const attrValues = Array.isArray(v.attribute_values)
+      ? v.attribute_values
+      : Array.isArray(v.attributes)
+        ? v.attributes
+        : Array.isArray(v.attributeValues)
+          ? v.attributeValues
+          : Array.isArray(v.values)
+            ? v.values
+            : [];
     const label = attrValues.map((av) => av.value ?? av.name ?? String(av.id)).join(' / ');
     // قد يُعيد الـ API inventory_summary أو current_shipment
     const inventory = v.inventory_summary ?? v.current_inventory ?? {};
     const selections = {};
     attrValues.forEach((av) => {
-      const attrId = av.attribute_id ?? av.pivot?.attribute_id;
+      const attrId = av.attribute_id ?? av.attribute?.id ?? av.pivot?.attribute_id;
       if (attrId) {
         selections[attrId] = av.id;
       }
@@ -313,10 +327,11 @@ export async function fetchProductVariants(productId) {
       id: v.id,
       label: label || `تنوع #${v.id}`,
       attributeValueIds: attrValues.map((av) => av.id),
+      attributeValues: attrValues,
       selections,
       // خريطة attributeId → valueId للتحقق من التكرار
       selectionKey: attrValues
-        .map((av) => `${av.attribute_id ?? av.pivot?.attribute_id ?? '?'}:${av.id}`)
+        .map((av) => `${av.attribute_id ?? av.attribute?.id ?? av.pivot?.attribute_id ?? '?'}:${av.id}`)
         .sort()
         .join('|'),
       price: v.selling_price ?? v.price ?? inventory.selling_price ?? '',

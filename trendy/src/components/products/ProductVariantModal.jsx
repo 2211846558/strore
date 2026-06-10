@@ -84,11 +84,20 @@ function SavedRow({ variant, attributes, onDelete, disabled }) {
   return (
     <tr className="vt-row vt-row--saved">
       {attributes.map((attr) => {
+        const localAv = variant.attributeValues?.find(
+          (val) => String(val.attribute_id ?? val.pivot?.attribute_id ?? val.attribute?.id ?? '') === String(attr.id)
+        );
+        const localValue = localAv?.value ?? localAv?.name;
+
         const valId = variant.selections?.[attr.id];
         const valObj = attr.values.find((v) => String(v.id) === String(valId));
+        const catalogValue = valObj?.value;
+
+        const displayValue = localValue || catalogValue || '—';
+
         return (
           <td key={attr.id} className="vt-cell vt-cell--saved-value">
-            {valObj ? valObj.value : '—'}
+            {displayValue}
           </td>
         );
       })}
