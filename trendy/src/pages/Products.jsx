@@ -336,7 +336,10 @@ const Products = () => {
         onClose={() => setVariantProduct(null)}
         product={variantProduct}
         storeId={storeId}
-        onVariantAdded={() => showToast('تم إضافة التنوع بنجاح')}
+        onVariantAdded={() => {
+          showToast('تم إضافة التنوع بنجاح');
+          loadProducts();
+        }}
       />
 
       <ArchiveConfirmModal

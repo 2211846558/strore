@@ -286,3 +286,50 @@ export async function restoreProduct(id) {
   const item = res?.data ?? res;
   return mapProductFromDetails(item);
 }
+
+/**
+ * GET /api/products/{productId} — استخراج التنوعات المحفوظة من تفاصيل المنتج
+ * يُعيد مصفوفة من التنوعات مع قيم الخصائص والسعر والكمية
+ */
+export async function fetchProductVariants(productId) {
+  const res = await apiRequest(API_ENDPOINTS.product(productId));
+  const item = res?.data ?? res;
+  const rawVariants = Array.isArray(item?.variants) ? item.variants : [];
+
+  return rawVariants.map((v) => {
+    const attrValues = Array.isArray(v.attribute_values) ? v.attribute_values : [];
+    const label = attrValues.map((av) => av.value ?? av.name ?? String(av.id)).join(' / ');
+    // قد يُعيد الـ API inventory_summary أو current_shipment
+    const inventory = v.inventory_summary ?? v.current_inventory ?? {};
+    const selections = {};
+    attrValues.forEach((av) => {
+      const attrId = av.attribute_id ?? av.pivot?.attribute_id;
+      if (attrId) {
+        selections[attrId] = av.id;
+      }
+    });
+
+    return {
+      id: v.id,
+      label: label || `تنوع #${v.id}`,
+      attributeValueIds: attrValues.map((av) => av.id),
+      selections,
+      // خريطة attributeId → valueId للتحقق من التكرار
+      selectionKey: attrValues
+        .map((av) => `${av.attribute_id ?? av.pivot?.attribute_id ?? '?'}:${av.id}`)
+        .sort()
+        .join('|'),
+      price: v.selling_price ?? v.price ?? inventory.selling_price ?? '',
+      quantity: v.total_quantity ?? v.quantity ?? inventory.total_quantity ?? '',
+      currentShipment: v.current_shipment_id ?? inventory.current_shipment_id ?? '',
+    };
+  });
+}
+
+/**
+ * DELETE /api/my-store/products/{productId}/variants/{variantId}
+ */
+export async function deleteProductVariant(productId, variantId) {
+  const url = `${API_ENDPOINTS.myStoreProductVariants(productId)}/${variantId}`;
+  await apiRequest(url, { method: 'DELETE' });
+}

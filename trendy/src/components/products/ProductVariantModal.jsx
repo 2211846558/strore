@@ -1,227 +1,438 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { X, Layers, Plus } from 'lucide-react';
-import { fetchAttributes, createProductVariant } from '../../api/products';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { X, Plus, Layers, Save, Trash2, AlertCircle } from 'lucide-react';
+import {
+  fetchAttributes,
+  fetchProductVariants,
+  createProductVariant,
+  deleteProductVariant,
+} from '../../api/products';
 import { getApiErrorMessage } from '../../api/stores';
 import './ProductVariantModal.css';
 
-function buildSuggestedSku(product, selectedByAttribute, attributes) {
-  const parts = attributes
-    .map((attr) => {
-      const valueId = selectedByAttribute[attr.id];
-      const value = attr.values.find((v) => v.id === Number(valueId));
-      return value?.value?.replace(/\s+/g, '-');
-    })
-    .filter(Boolean);
-
-  const suffix = parts.length ? parts.join('-') : 'VAR';
-  return `P${product.id}-${suffix}`.slice(0, 255);
+/* ─── مُعرِّف فريد للتركيبة المحددة في صف معين ─── */
+function buildSelectionKey(selections, attributes) {
+  return attributes
+    .map((attr) => `${attr.id}:${selections[attr.id] ?? ''}`)
+    .sort()
+    .join('|');
 }
 
+/* ─── صف معلّق (قيد الإدخال) ─── */
+function PendingRow({
+  row,
+  attributes,
+  onChange,
+  onRemove,
+  rowError,
+  disabled,
+}) {
+  return (
+    <tr className={`vt-row vt-row--pending${rowError ? ' vt-row--error' : ''}`}>
+      {attributes.map((attr) => (
+        <td key={attr.id} className="vt-cell">
+          <select
+            className={`vt-select${!row.selections[attr.id] ? ' vt-select--empty' : ''}`}
+            value={row.selections[attr.id] || ''}
+            onChange={(e) => onChange(row.id, attr.id, e.target.value)}
+            disabled={disabled}
+          >
+            <option value="">— {attr.name} —</option>
+            {attr.values.map((v) => (
+              <option key={v.id} value={String(v.id)}>
+                {v.value}
+              </option>
+            ))}
+          </select>
+        </td>
+      ))}
+      {/* السعر — read only */}
+      <td className="vt-cell vt-cell--readonly">
+        <span className="vt-auto-badge">🔒 تلقائي</span>
+      </td>
+      {/* الكمية — read only */}
+      <td className="vt-cell vt-cell--readonly">
+        <span className="vt-auto-badge">🔒 تلقائي</span>
+      </td>
+      {/* الشحنة الحالية — read only */}
+      <td className="vt-cell vt-cell--readonly">
+        <span className="vt-auto-badge">🔒 تلقائي</span>
+      </td>
+      {/* حذف الصف */}
+      <td className="vt-cell vt-cell--action">
+        <button
+          type="button"
+          className="vt-remove-btn"
+          onClick={() => onRemove(row.id)}
+          disabled={disabled}
+          title="حذف الصف"
+        >
+          <X size={14} />
+        </button>
+        {rowError && (
+          <span className="vt-row-error" title={rowError}>
+            <AlertCircle size={13} />
+          </span>
+        )}
+      </td>
+    </tr>
+  );
+}
+
+
+/* ─── صف محفوظ ─── */
+function SavedRow({ variant, attributes, onDelete, disabled }) {
+  return (
+    <tr className="vt-row vt-row--saved">
+      {attributes.map((attr) => {
+        const valId = variant.selections?.[attr.id];
+        const valObj = attr.values.find((v) => String(v.id) === String(valId));
+        return (
+          <td key={attr.id} className="vt-cell vt-cell--saved-value">
+            {valObj ? valObj.value : '—'}
+          </td>
+        );
+      })}
+      <td className="vt-cell vt-cell--readonly">
+        {variant.price ? (
+          <>
+            <strong>{variant.price}</strong>{' '}
+            <span className="vt-currency">د.ل</span>
+          </>
+        ) : (
+          <span className="vt-dash">—</span>
+        )}
+      </td>
+      <td className="vt-cell vt-cell--readonly">
+        {variant.quantity != null && variant.quantity !== '' ? (
+          <span className="vt-qty-pill">{variant.quantity}</span>
+        ) : (
+          <span className="vt-dash">—</span>
+        )}
+      </td>
+      <td className="vt-cell vt-cell--readonly">
+        {variant.currentShipment ? (
+          <span className="vt-shipment-badge">#{variant.currentShipment}</span>
+        ) : (
+          <span className="vt-dash">—</span>
+        )}
+      </td>
+      <td className="vt-cell vt-cell--action">
+        <button
+          type="button"
+          className="vt-delete-btn"
+          onClick={() => onDelete(variant.id)}
+          disabled={disabled}
+          title="حذف التنوع"
+        >
+          <Trash2 size={14} />
+        </button>
+      </td>
+    </tr>
+  );
+}
+
+/* ════════════════════════════════════════════════════════ */
 const ProductVariantModal = ({ isOpen, onClose, product, storeId, onVariantAdded }) => {
   const [attributes, setAttributes] = useState([]);
-  const [loadingAttrs, setLoadingAttrs] = useState(false);
-  const [selectedByAttribute, setSelectedByAttribute] = useState({});
-  const [sku, setSku] = useState('');
-  const [addedVariants, setAddedVariants] = useState([]);
-  const [error, setError] = useState('');
+  const [savedVariants, setSavedVariants] = useState([]);
+  const [pendingRows, setPendingRows] = useState([]);
+  const [rowErrors, setRowErrors] = useState({});
+  const [loading, setLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [globalError, setGlobalError] = useState('');
 
+  /* مُعرِّف فريد لكل صف معلّق */
+  const nextId = useCallback(() => `row-${Date.now()}-${Math.random().toString(36).slice(2)}`, []);
+
+  /* إنشاء صف فارغ */
+  const makeEmptyRow = useCallback(
+    () => ({ id: nextId(), selections: {} }),
+    [nextId],
+  );
+
+  /* تحميل الخصائص والتنوعات المحفوظة */
   useEffect(() => {
     if (!isOpen || !product) return;
+    setLoading(true);
+    setGlobalError('');
+    setRowErrors({});
+    setPendingRows([makeEmptyRow()]);
 
-    setSelectedByAttribute({});
-    setSku('');
-    setAddedVariants([]);
-    setError('');
-    setLoadingAttrs(true);
-
-    fetchAttributes()
-      .then(setAttributes)
-      .catch(() => {
-        setAttributes([]);
-        setError('تعذّر تحميل الخصائص المتاحة.');
+    Promise.all([fetchAttributes(), fetchProductVariants(product.id)])
+      .then(([attrs, variants]) => {
+        setAttributes(attrs.filter((a) => a.values?.length > 0));
+        setSavedVariants(variants);
       })
-      .finally(() => setLoadingAttrs(false));
-  }, [isOpen, product?.id]);
+      .catch((err) => {
+        setGlobalError(getApiErrorMessage(err, 'تعذّر تحميل بيانات التنوعات.'));
+        setAttributes([]);
+        setSavedVariants([]);
+      })
+      .finally(() => setLoading(false));
+  }, [isOpen, product?.id, makeEmptyRow]);
 
-  const selectedValueIds = useMemo(
-    () =>
-      Object.values(selectedByAttribute)
-        .filter(Boolean)
-        .map((id) => Number(id)),
-    [selectedByAttribute],
-  );
 
-  const usableAttributes = useMemo(
-    () => attributes.filter((attr) => attr.values?.length > 0),
-    [attributes],
-  );
+  /* ─── Pending rows helpers ─── */
+  const addRow = () => setPendingRows((prev) => [...prev, makeEmptyRow()]);
 
-  const missingSelections = useMemo(
-    () => usableAttributes.filter((attr) => !selectedByAttribute[attr.id]),
-    [usableAttributes, selectedByAttribute],
-  );
-
-  const canSubmit = useMemo(() => {
-    if (!sku.trim() || !selectedValueIds.length) return false;
-    if (!usableAttributes.length) return false;
-    return usableAttributes.every((attr) => selectedByAttribute[attr.id]);
-  }, [sku, selectedValueIds, usableAttributes, selectedByAttribute]);
-
-  const submitHint = useMemo(() => {
-    if (loadingAttrs) return '';
-    if (!attributes.length) return 'لا توجد خصائص في الكتالوج. أضفها من لوحة الإدارة أولاً.';
-    if (!usableAttributes.length) {
-      return 'الخصائص موجودة لكن بدون قيم (مثل أحمر، XL). أضف القيم من لوحة الإدارة.';
-    }
-    if (missingSelections.length) {
-      const names = missingSelections.map((a) => a.name).join('، ');
-      return `اختر قيمة من القائمة: ${names}`;
-    }
-    if (!sku.trim()) return 'أدخل رمز SKU أو اختر كل الخصائص ليُولَّد تلقائياً.';
-    return '';
-  }, [loadingAttrs, attributes, usableAttributes, missingSelections, sku]);
-
-  useEffect(() => {
-    if (!product || !usableAttributes.length) return;
-    const allSelected = usableAttributes.every((attr) => selectedByAttribute[attr.id]);
-    if (allSelected) {
-      setSku(buildSuggestedSku(product, selectedByAttribute, usableAttributes));
-    }
-  }, [product, usableAttributes, selectedByAttribute]);
-
-  if (!isOpen || !product) return null;
-
-  const handleAttributeChange = (attributeId, valueId) => {
-    setSelectedByAttribute((prev) => ({ ...prev, [attributeId]: valueId }));
-    setError('');
+  const removeRow = (rowId) => {
+    setPendingRows((prev) => prev.filter((r) => r.id !== rowId));
+    setRowErrors((prev) => {
+      const next = { ...prev };
+      delete next[rowId];
+      return next;
+    });
   };
 
-  const handleAddVariant = async () => {
-    if (!canSubmit) {
-      setError('يرجى اختيار قيمة لكل خاصية وإدخال رمز SKU.');
-      return;
-    }
+  const updateSelection = (rowId, attrId, valueId) => {
+    setPendingRows((prev) =>
+      prev.map((r) =>
+        r.id === rowId
+          ? { ...r, selections: { ...r.selections, [attrId]: valueId } }
+          : r,
+      ),
+    );
+    setRowErrors((prev) => {
+      const next = { ...prev };
+      delete next[rowId];
+      return next;
+    });
+  };
+
+  /* ─── Validation ─── */
+  function validateRows() {
+    const errors = {};
+    const usedKeys = new Set(savedVariants.map((v) => v.selectionKey));
+
+    pendingRows.forEach((row) => {
+      // تحقق من اختيار جميع الخصائص
+      const missing = attributes.filter((attr) => !row.selections[attr.id]);
+      if (missing.length) {
+        errors[row.id] = `اختر قيمة لـ: ${missing.map((a) => a.name).join('، ')}`;
+        return;
+      }
+
+      // تحقق من عدم التكرار مع المحفوظات
+      const key = buildSelectionKey(row.selections, attributes);
+      if (usedKeys.has(key)) {
+        errors[row.id] = 'هذا التنوع موجود مسبقاً';
+      } else {
+        usedKeys.add(key); // حماية من التكرار بين الصفوف الجديدة أيضاً
+      }
+    });
+
+    return errors;
+  }
+
+  /* ─── حفظ جميع الصفوف دفعة واحدة ─── */
+  const handleSaveAll = async () => {
+    if (!pendingRows.length) return;
+
+    const errors = validateRows();
+    setRowErrors(errors);
+    if (Object.keys(errors).length) return;
 
     setIsSaving(true);
-    setError('');
+    setGlobalError('');
+
+    const newErrors = {};
+    const succeeded = [];
+
+    await Promise.all(
+      pendingRows.map(async (row) => {
+        const attributeValueIds = attributes.map((attr) => Number(row.selections[attr.id]));
+        try {
+          const created = await createProductVariant(product.id, {
+            storeId,
+            sku: `P${product.id}-${attributeValueIds.join('-')}`,
+            attributeValueIds,
+          });
+          succeeded.push(created);
+        } catch (err) {
+          newErrors[row.id] = getApiErrorMessage(err, 'تعذّر حفظ التنوع.');
+        }
+      }),
+    );
+
+    setRowErrors(newErrors);
+
+    if (succeeded.length) {
+      // إعادة جلب التنوعات المحدّثة
+      try {
+        const fresh = await fetchProductVariants(product.id);
+        setSavedVariants(fresh);
+      } catch {
+        /* ignore */
+      }
+      // إزالة الصفوف التي نجح حفظها
+      const failedIds = new Set(Object.keys(newErrors));
+      setPendingRows((prev) => prev.filter((r) => failedIds.has(r.id)));
+      succeeded.forEach((v) => onVariantAdded?.(v));
+
+      if (!Object.keys(newErrors).length) {
+        // إضافة صف فارغ جديد للاستمرار بالإضافة
+        setPendingRows([makeEmptyRow()]);
+      }
+    }
+
+    setIsSaving(false);
+  };
+
+  /* ─── حذف تنوع محفوظ ─── */
+  const handleDeleteSaved = async (variantId) => {
+    setIsSaving(true);
     try {
-      const created = await createProductVariant(product.id, {
-        storeId,
-        sku: sku.trim(),
-        attributeValueIds: selectedValueIds,
-      });
-
-      const label = created.attribute_values
-        ?.map((v) => v.value)
-        .join(' / ') || sku.trim();
-
-      setAddedVariants((prev) => [...prev, { id: created.id, sku: created.sku, label }]);
-      setSelectedByAttribute({});
-      setSku('');
-      onVariantAdded?.(created);
+      await deleteProductVariant(product.id, variantId);
+      setSavedVariants((prev) => prev.filter((v) => v.id !== variantId));
     } catch (err) {
-      setError(getApiErrorMessage(err, 'تعذّر إضافة التنوع.'));
+      setGlobalError(getApiErrorMessage(err, 'تعذّر حذف التنوع.'));
     } finally {
       setIsSaving(false);
     }
   };
 
+  /* ─── هل زر الحفظ مُفعَّل? ─── */
+  const canSave = useMemo(
+    () =>
+      !isSaving &&
+      pendingRows.length > 0 &&
+      attributes.length > 0 &&
+      pendingRows.some((r) =>
+        attributes.every((attr) => r.selections[attr.id]),
+      ),
+    [isSaving, pendingRows, attributes],
+  );
+
+  /* العناوين (أعمدة الخصائص + ثابتة) */
+  const attrHeaders = attributes.map((attr) => attr.name);
+
+  /* هل الجدول فارغ تماماً؟ */
+  const hasAnyData = savedVariants.length > 0 || pendingRows.length > 0;
+
+  if (!isOpen || !product) return null;
+
   return (
     <div className="modal-overlay variant-modal-overlay" onClick={onClose}>
-      <div className="modal-content product-variant-modal" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="modal-content product-variant-modal"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
         <div className="modal-header">
-          <h2 className="modal-title">إضافة تنوع المنتج</h2>
+          <div className="vm-title-wrap">
+            <Layers size={20} className="vm-icon" />
+            <div>
+              <h2 className="modal-title">تنوعات المنتج</h2>
+              <p className="vm-subtitle">{product.name}</p>
+            </div>
+          </div>
           <button className="close-button" onClick={onClose} type="button">
             <X size={24} />
           </button>
         </div>
 
+        {/* Body */}
         <div className="variant-modal-body">
-          <div className="variant-product-info">
-            <Layers size={18} />
-            <div>
-              <p className="variant-product-name">{product.name}</p>
-              <p className="variant-product-hint">
-                1) اختر من كل قائمة (لون، مقاس، ...) — 2) SKU يتولّد لوحده — 3) اضغط «إضافة التنوع»
-              </p>
-            </div>
-          </div>
-
-          {loadingAttrs ? (
-            <p className="variant-loading">جاري تحميل الخصائص...</p>
+          {loading ? (
+            <p className="variant-loading">جاري تحميل التنوعات والخصائص...</p>
           ) : attributes.length === 0 ? (
-            <p className="variant-empty">لا توجد خصائص متاحة في الكتالوج. أضف خصائص من لوحة الإدارة أولاً.</p>
+            <p className="variant-empty">
+              لا توجد خصائص متاحة بقيم. أضف خصائص (لون، مقاس، ...) من لوحة الإدارة أولاً.
+            </p>
           ) : (
             <>
-              {attributes.map((attr) => (
-                <div key={attr.id} className="form-group">
-                  <label>{attr.name}</label>
-                  {attr.values?.length ? (
-                    <select
-                      value={selectedByAttribute[attr.id] || ''}
-                      onChange={(e) => handleAttributeChange(attr.id, e.target.value)}
-                      className={!selectedByAttribute[attr.id] ? 'variant-select-required' : ''}
-                    >
-                      <option value="">— اختر {attr.name} —</option>
-                      {attr.values.map((v) => (
-                        <option key={v.id} value={String(v.id)}>
-                          {v.value}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <p className="variant-no-values">
-                      لا توجد قيم لهذه الخاصية. أضف قيم (مثل أحمر، M) من لوحة الإدارة.
-                    </p>
-                  )}
-                </div>
-              ))}
+              {globalError && (
+                <p className="form-error vm-global-error">{globalError}</p>
+              )}
 
-              <div className="form-group">
-                <label>رمز SKU (اختياري — يتولّد بعد اختيار الخصائص)</label>
-                <input
-                  type="text"
-                  value={sku}
-                  onChange={(e) => setSku(e.target.value)}
-                  placeholder="مثال: P12-أحمر-XL"
-                />
+              <div className="vt-table-wrapper">
+                <table className="vt-table">
+                  <thead>
+                    <tr>
+                      {/* عمود لكل خاصية */}
+                      {attrHeaders.map((name) => (
+                        <th key={name} className="vt-th">{name}</th>
+                      ))}
+                      <th className="vt-th">السعر</th>
+                      <th className="vt-th">الكمية الإجمالية</th>
+                      <th className="vt-th">الشحنة الحالية</th>
+                      <th className="vt-th"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {/* صفوف محفوظة */}
+                    {savedVariants.map((variant) => (
+                      <SavedRow
+                        key={variant.id}
+                        variant={variant}
+                        attributes={attributes}
+                        onDelete={handleDeleteSaved}
+                        disabled={isSaving}
+                      />
+                    ))}
+
+                    {/* فاصل إذا وجدت صفوف من النوعين */}
+                    {savedVariants.length > 0 && pendingRows.length > 0 && (
+                      <tr className="vt-separator">
+                        <td
+                          colSpan={attrHeaders.length + 4}
+                          className="vt-separator-cell"
+                        >
+                          — صفوف جديدة —
+                        </td>
+                      </tr>
+                    )}
+
+                    {/* صفوف معلّقة */}
+                    {pendingRows.map((row) => (
+                      <PendingRow
+                        key={row.id}
+                        row={row}
+                        attributes={attributes}
+                        onChange={updateSelection}
+                        onRemove={removeRow}
+                        rowError={rowErrors[row.id]}
+                        disabled={isSaving}
+                      />
+                    ))}
+                  </tbody>
+                </table>
               </div>
+
+              {/* أضف صف آخر */}
+              <button
+                type="button"
+                className="vt-add-row-btn"
+                onClick={addRow}
+                disabled={isSaving}
+              >
+                <Plus size={15} />
+                أضف صف آخر
+              </button>
             </>
           )}
-
-          {!loadingAttrs && submitHint && !error && (
-            <p className="variant-submit-hint">{submitHint}</p>
-          )}
-
-          {addedVariants.length > 0 && (
-            <div className="added-variants-list">
-              <p className="added-variants-title">التنوعات المضافة ({addedVariants.length})</p>
-              {addedVariants.map((v) => (
-                <div key={v.id} className="added-variant-item">
-                  <span>{v.label}</span>
-                  <span className="added-variant-sku">{v.sku}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {error && <p className="form-error">{error}</p>}
         </div>
 
+        {/* Footer */}
         <div className="modal-footer">
-          <button className="cancel-button" onClick={onClose} type="button" disabled={isSaving}>
-            {addedVariants.length ? 'تم' : 'تخطّي'}
+          <button
+            className="cancel-button"
+            onClick={onClose}
+            type="button"
+            disabled={isSaving}
+          >
+            {savedVariants.length || pendingRows.length ? 'إغلاق' : 'تخطّي'}
           </button>
-          {usableAttributes.length > 0 && (
+
+          {attributes.length > 0 && (
             <button
-              className="save-button variant-add-btn"
-              onClick={handleAddVariant}
+              className="save-button variant-save-btn"
+              onClick={handleSaveAll}
               type="button"
-              disabled={isSaving || !canSubmit}
+              disabled={!canSave}
             >
-              <Plus size={16} />
-              {isSaving ? 'جاري الإضافة...' : 'إضافة التنوع'}
+              <Save size={16} />
+              {isSaving ? 'جاري الحفظ...' : 'حفظ التنوعات'}
             </button>
           )}
         </div>
@@ -230,4 +441,76 @@ const ProductVariantModal = ({ isOpen, onClose, product, storeId, onVariantAdded
   );
 };
 
-export default ProductVariantModal;
+class ProductVariantModalErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, errorInfo) {
+    console.error("ProductVariantModal Error caught:", error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{
+          position: 'fixed',
+          top: '20px',
+          left: '20px',
+          right: '20px',
+          background: '#fee2e2',
+          border: '2px solid #ef4444',
+          color: '#991b1b',
+          padding: '24px',
+          borderRadius: '12px',
+          zIndex: 999999,
+          direction: 'ltr',
+          textAlign: 'left',
+          boxShadow: '0 10px 25px rgba(0,0,0,0.2)'
+        }}>
+          <h3 style={{ margin: '0 0 10px 0', fontSize: '18px', fontWeight: 'bold' }}>⚠️ ProductVariantModal Render Error:</h3>
+          <p style={{ margin: '0 0 15px 0', fontFamily: 'monospace', fontSize: '14px' }}>{this.state.error?.message}</p>
+          <pre style={{
+            background: 'rgba(0,0,0,0.05)',
+            padding: '12px',
+            borderRadius: '6px',
+            overflow: 'auto',
+            fontSize: '12px',
+            maxHeight: '300px',
+            margin: 0
+          }}>
+            {this.state.error?.stack}
+          </pre>
+          <button 
+            onClick={() => this.setState({ hasError: false, error: null })}
+            style={{
+              marginTop: '15px',
+              padding: '8px 16px',
+              background: '#ef4444',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontWeight: 'bold'
+            }}
+          >
+            حاول مجدداً
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+const ProductVariantModalSafe = (props) => {
+  return (
+    <ProductVariantModalErrorBoundary>
+      <ProductVariantModal {...props} />
+    </ProductVariantModalErrorBoundary>
+  );
+};
+
+export default ProductVariantModalSafe;
