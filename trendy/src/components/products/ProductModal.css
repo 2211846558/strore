@@ -1,4 +1,4 @@
-﻿.modal-overlay {
+.modal-overlay {
   position: fixed;
   top: 0;
   left: 0;
@@ -298,6 +298,20 @@
   color: #ef4444;
   font-size: 13px;
   margin-top: 4px;
+}
+
+.readonly-field {
+  background-color: var(--bg-main) !important;
+  color: var(--text-muted) !important;
+  cursor: not-allowed !important;
+  font-style: italic;
+  opacity: 0.75;
+}
+
+.field-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
 }
 
 .product-save-success {

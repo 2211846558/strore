@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, Plus, CheckCircle2 } from 'lucide-react';
-import ProductCard from '../components/products/ProductCard';
+import { Search, Plus, CheckCircle2, Archive, RefreshCw, Edit2 } from 'lucide-react';
+
 import ProductModal from '../components/products/ProductModal';
 import ProductVariantModal from '../components/products/ProductVariantModal';
 import ArchiveConfirmModal from '../components/products/ArchiveConfirmModal';
@@ -87,6 +87,7 @@ const Products = () => {
       const payload = {
         storeId,
         name: formData.name,
+        sku: formData.sku,
         description: formData.description,
         price: formData.price,
         categoryId: formData.categoryId,
@@ -215,22 +216,102 @@ const Products = () => {
 
       {error && <p className="products-error">{error}</p>}
 
-      <div className="products-grid">
-        {loading ? (
-          <p className="no-results">جاري تحميل المنتجات...</p>
-        ) : products.length > 0 ? (
-          products.map((product) => (
-            <ProductCard
-              key={product.id}
-              product={product}
-              onEdit={openEdit}
-              onArchive={openArchiveConfirm}
-              onAddVariant={openVariants}
-            />
-          ))
-        ) : (
-          <p className="no-results">لا توجد منتجات تطابق بحثك.</p>
-        )}
+      <div className="products-table-wrapper">
+        <table className="products-table">
+          <thead>
+            <tr>
+              <th>المنتج</th>
+              <th>SKU</th>
+              <th>السعر</th>
+              <th>الكمية الإجمالية</th>
+              <th>الحالة</th>
+              <th>إجراءات</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr>
+                <td colSpan={6} className="table-empty">جاري تحميل المنتجات...</td>
+              </tr>
+            ) : products.length > 0 ? (
+              products.map((product) => {
+                const isArchived = product.status === 'مؤرشف';
+                return (
+                  <tr key={product.id} className={isArchived ? 'row-archived' : ''}>
+                    <td className="td-product-name">
+                      <div className="product-name-cell">
+                        <img
+                          className="product-thumb"
+                          src={product.image}
+                          alt={product.name}
+                          onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                        />
+                        <div className="product-name-info">
+                          <span className="pn-name">{product.name}</span>
+                          {product.category && (
+                            <span className="pn-category">{product.category}</span>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="td-sku">
+                      <span className="sku-badge">{product.sku || '—'}</span>
+                    </td>
+                    <td className="td-price">
+                      {product.price
+                        ? <><strong>{product.price}</strong> <span className="price-currency">د.ل</span></>
+                        : '—'}
+                    </td>
+                    <td className="td-qty">
+                      {product.stock != null && product.stock !== ''
+                        ? <span className="qty-pill">{product.stock}</span>
+                        : <span className="qty-empty">—</span>}
+                    </td>
+                    <td className="td-status">
+                      <span className={`status-badge ${isArchived ? 'status-archived' : 'status-active'}`}>
+                        {product.status}
+                      </span>
+                    </td>
+                    <td className="td-actions">
+                      <div className="row-actions">
+                        {!isArchived && (
+                          <button
+                            type="button"
+                            className="row-btn btn-variant"
+                            onClick={() => openVariants(product)}
+                            title="التنوعات"
+                          >
+                            تنوع
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className="row-btn btn-edit"
+                          onClick={() => openEdit(product)}
+                          title="تعديل"
+                        >
+                          تعديل
+                        </button>
+                        <button
+                          type="button"
+                          className={`row-btn ${isArchived ? 'btn-restore' : 'btn-archive'}`}
+                          onClick={() => openArchiveConfirm(product)}
+                          title={isArchived ? 'استعادة' : 'أرشفة'}
+                        >
+                          {isArchived ? 'استعادة' : 'أرشفة'}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
+            ) : (
+              <tr>
+                <td colSpan={6} className="table-empty">لا توجد منتجات تطابق بحثك.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
 
       <ProductModal

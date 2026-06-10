@@ -37,6 +37,7 @@ export function mapProductFromList(item) {
   return {
     id: item.id,
     name: item.name,
+    sku: item.sku || '',
     description: '',
     price: String(item.base_price ?? ''),
     category: item.category?.name ?? '',
@@ -53,6 +54,7 @@ export function mapProductFromDetails(item) {
   return {
     id: item.id,
     name: item.name,
+    sku: item.sku || '',
     description: item.description || '',
     price: String(item.base_price ?? ''),
     category: item.category?.name ?? '',
@@ -224,10 +226,11 @@ export async function fetchProductDetails(id) {
   return mapProductFromDetails(item);
 }
 
-function buildProductFormData({ storeId, name, description, price, categoryId, stock, imageFiles }) {
+function buildProductFormData({ storeId, name, sku, description, price, categoryId, stock, imageFiles }) {
   const fd = new FormData();
   if (storeId) fd.append('store_id', String(storeId));
   fd.append('name', name);
+  if (sku) fd.append('sku', sku);
   if (description) fd.append('description', description);
   fd.append('base_price', String(price));
   fd.append('category_id', String(categoryId));

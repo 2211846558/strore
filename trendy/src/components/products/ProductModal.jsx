@@ -15,6 +15,7 @@ const ProductModal = ({
 
   const [form, setForm] = useState({
     name: '',
+    sku: '',
     description: '',
     price: '',
     categoryId: '',
@@ -40,6 +41,7 @@ const ProductModal = ({
     if (product) {
       setForm({
         name: product.name || '',
+        sku: product.sku || '',
         description: product.description || '',
         price: product.price || '',
         categoryId: product.categoryId ? String(product.categoryId) : '',
@@ -54,6 +56,7 @@ const ProductModal = ({
     } else {
       setForm({
         name: '',
+        sku: '',
         description: '',
         price: '',
         categoryId: '',
@@ -94,8 +97,8 @@ const ProductModal = ({
   const totalImages = existingImages.length + newImages.length;
 
   const handleSubmit = async () => {
-    if (!form.name || !form.price || !form.categoryId) {
-      setError('يرجى تعبئة اسم المنتج والسعر والتصنيف.');
+    if (!form.name || !form.sku || !form.categoryId) {
+      setError('يرجى تعبئة اسم المنتج وSKU والتصنيف.');
       return;
     }
     if (!isEdit && totalImages === 0) {
@@ -107,6 +110,7 @@ const ProductModal = ({
     try {
       const result = await onSave({
         name: form.name.trim(),
+        sku: form.sku.trim(),
         description: form.description.trim(),
         price: form.price,
         categoryId: form.categoryId,
@@ -196,11 +200,22 @@ const ProductModal = ({
           </div>
 
           <div className="form-group">
-            <label>اسم المنتج</label>
+            <label>اسم المنتج <span className="required-mark">*</span></label>
             <input
               type="text"
               value={form.name}
               onChange={(e) => handleChange('name', e.target.value)}
+              placeholder="مثال: قميص قطن"
+            />
+          </div>
+
+          <div className="form-group">
+            <label>SKU <span className="required-mark">*</span></label>
+            <input
+              type="text"
+              value={form.sku}
+              onChange={(e) => handleChange('sku', e.target.value)}
+              placeholder="مثال: SHIRT-001"
             />
           </div>
 
@@ -234,19 +249,23 @@ const ProductModal = ({
                 type="number"
                 min="0"
                 value={form.price}
-                onChange={(e) => handleChange('price', e.target.value)}
+                readOnly
+                className="readonly-field"
               />
+              <span className="field-hint">تلقائي من سعر بيع الشحنة الحالية</span>
             </div>
           </div>
 
           <div className="form-group">
-            <label>الكمية</label>
+            <label>الكمية الإجمالية</label>
             <input
               type="number"
               min="0"
               value={form.stock}
-              onChange={(e) => handleChange('stock', e.target.value)}
+              readOnly
+              className="readonly-field"
             />
+            <span className="field-hint">تلقائي من مجموع كميات التنوعات</span>
           </div>
 
           {error && <p className="form-error">{error}</p>}
