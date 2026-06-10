@@ -133,6 +133,68 @@ export function resolveStoreLogoUrl(logo, storeId) {
   return candidates[0] || null;
 }
 
+/**
+ * صورة بانر الحملة — GET /api/campaigns يُرجع banner_image
+ * (مسار storage/campaigns/... أو رابط asset كامل من Laravel)
+ */
+export function getCampaignBannerCandidates(url) {
+  if (!url || typeof url !== 'string') return [];
+  const trimmed = url.trim();
+  if (!trimmed) return [];
+  if (trimmed.startsWith('data:') || trimmed.startsWith('blob:')) return [trimmed];
+
+  const origin = getBackendOrigin();
+  const candidates = [];
+
+  const pushPath = (path) => {
+    if (!path) return;
+    const absolute = path.startsWith('http') ? path : `${origin}${path}`;
+    candidates.push(absolute);
+    if (import.meta.env.DEV && path.startsWith('/')) {
+      candidates.push(path);
+    }
+  };
+
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    pushPath(resolveMediaUrl(trimmed));
+    return [...new Set(candidates.filter(Boolean))];
+  }
+
+  if (trimmed.startsWith('/storage/')) {
+    pushPath(trimmed);
+    return [...new Set(candidates.filter(Boolean))];
+  }
+
+  if (trimmed.startsWith('campaigns/')) {
+    pushPath(`/storage/${trimmed}`);
+  }
+
+  pushPath(`/storage/${trimmed.replace(/^\/+/, '')}`);
+
+  const resolved = resolveMediaUrl(trimmed);
+  if (resolved) candidates.push(resolved);
+
+  return [...new Set(candidates.filter(Boolean))];
+}
+
+export function resolveCampaignBannerUrl(url) {
+  const candidates = getCampaignBannerCandidates(url);
+  return candidates[0] || null;
+}
+
+/** صورة بديلة للحملة */
+export function campaignPlaceholderImage() {
+  const svg =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">' +
+    '<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">' +
+    '<stop offset="0%" stop-color="#6366f1"/><stop offset="100%" stop-color="#8b5cf6"/>' +
+    '</linearGradient></defs>' +
+    '<rect fill="url(#g)" width="640" height="360"/>' +
+    '<path fill="rgba(255,255,255,0.25)" d="M280 180l60-35v70z"/>' +
+    '</svg>';
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
 /** صورة بديلة محلية */
 export function productPlaceholderImage() {
   const svg =

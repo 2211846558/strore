@@ -2,11 +2,12 @@
   background-color: var(--bg-card);
   border-radius: 16px;
   border: 1px solid var(--border-color);
-  padding: 30px;
+  padding: 0;
   display: flex;
   flex-direction: column;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
   height: 100%;
+  overflow: hidden;
 }
 
 .campaign-card:hover {
@@ -14,34 +15,65 @@
   box-shadow: var(--shadow-md);
 }
 
+.campaign-banner {
+  position: relative;
+  width: 100%;
+  height: 180px;
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  overflow: hidden;
+}
+
+.campaign-banner-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.campaign-status-badge {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(34, 197, 94, 0.95);
+  color: #14532d;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.campaign-info {
+  background: #1e293b;
+  padding: 16px 20px;
+  text-align: right;
+}
+
+.campaign-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: #fff;
+  margin: 0 0 6px;
+}
+
+.campaign-desc {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.75);
+  margin: 0;
+  line-height: 1.5;
+}
+
 .campaign-body {
   flex-grow: 1;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  margin-bottom: 24px;
-}
-
-.campaign-title {
-  font-size: 20px;
-  font-weight: 800;
-  color: var(--text-primary);
-  margin: 0;
-  text-align: center;
-}
-
-.campaign-desc {
-  font-size: 14px;
-  color: var(--text-secondary);
-  text-align: center;
-  line-height: 1.6;
+  padding: 20px 24px 0;
 }
 
 .campaign-stats {
   display: flex;
   justify-content: center;
   gap: 20px;
-  margin-top: 10px;
 }
 
 .stat {
@@ -57,6 +89,7 @@
   flex-direction: column;
   align-items: center;
   gap: 20px;
+  padding: 20px 24px 24px;
 }
 
 .campaign-price {

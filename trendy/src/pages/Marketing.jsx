@@ -9,6 +9,7 @@ import {
   saveMyCampaign,
   subscribeToCampaign,
   buildSubscriptionEntry,
+  resolveCampaignBanner,
 } from '../api/campaigns';
 import { getApiErrorMessage } from '../api/stores';
 import { useAuth } from '../context/AuthContext';
@@ -54,8 +55,11 @@ const Marketing = () => {
 
   useEffect(() => {
     if (!storeId) return;
-    enrichMyCampaigns(storeId).then(setMyCampaigns).catch(() => setMyCampaigns([]));
-  }, [storeId]);
+    enrichMyCampaigns(storeId, availableCampaigns).then(setMyCampaigns).catch(() => setMyCampaigns([]));
+  }, [storeId, availableCampaigns]);
+
+  const getCampaignBanner = (campaign) =>
+    resolveCampaignBanner(campaign, availableCampaigns);
 
   const subscribedIds = new Set(myCampaigns.map((c) => c.megaCampaignId ?? c.id));
   const visibleCampaigns = availableCampaigns.filter(
@@ -87,7 +91,12 @@ const Marketing = () => {
         discountPercentage,
       });
 
-      const entry = buildSubscriptionEntry(campaign, selectedProducts, discountPercentage, apiRes);
+      const entry = buildSubscriptionEntry(
+        { ...campaign, bannerImage: getCampaignBanner(campaign) ?? campaign.bannerImage },
+        selectedProducts,
+        discountPercentage,
+        apiRes,
+      );
       const updated = saveMyCampaign(storeId, entry);
       setMyCampaigns(updated);
       await refreshWallet();
@@ -151,6 +160,8 @@ const Marketing = () => {
                   duration={campaign.duration}
                   productsCount={campaign.productsCount}
                   price={campaign.price}
+                  bannerImage={getCampaignBanner(campaign)}
+                  status={campaign.status}
                   onSubscribe={() => handleSubscribeClick(campaign)}
                 />
               ))}
@@ -171,6 +182,7 @@ const Marketing = () => {
                   productsCount={campaign.productsCount}
                   dateRange={campaign.dateRange}
                   status={campaign.status}
+                  bannerImage={getCampaignBanner(campaign)}
                   selectedProducts={campaign.selectedProducts}
                 />
               ))

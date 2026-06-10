@@ -2,11 +2,12 @@
   background-color: var(--bg-card);
   border-radius: 16px;
   border: 1px solid var(--border-color);
-  padding: 30px;
+  padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 0;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
+  overflow: hidden;
 }
 
 .subscribed-campaign-card:hover {
@@ -14,43 +15,65 @@
   box-shadow: var(--shadow-md);
 }
 
-.sub-campaign-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  flex-wrap: wrap;
-  gap: 16px;
+.sub-campaign-banner {
+  position: relative;
+  width: 100%;
+  height: 180px;
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  overflow: hidden;
 }
 
-.sub-campaign-title-group {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.sub-campaign-title {
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin: 0;
+.sub-campaign-banner-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .sub-campaign-status {
-  align-self: flex-start;
+  position: absolute;
+  top: 12px;
+  left: 12px;
   font-size: 12px;
   padding: 4px 12px;
-  border-radius: 12px;
+  border-radius: 999px;
   font-weight: bold;
 }
 
 .sub-campaign-status.active {
-  background: var(--gradient-primary);
-  color: white;
+  background: rgba(34, 197, 94, 0.95);
+  color: #14532d;
 }
 
 .sub-campaign-status.expired {
-  background-color: var(--bg-input);
-  color: var(--text-secondary);
+  background-color: rgba(15, 23, 42, 0.75);
+  color: #e2e8f0;
+}
+
+.sub-campaign-info {
+  background: #1e293b;
+  padding: 16px 20px;
+  text-align: right;
+}
+
+.sub-campaign-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: #fff;
+  margin: 0 0 6px;
+}
+
+.sub-campaign-desc {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.75);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.sub-campaign-header {
+  display: flex;
+  justify-content: flex-end;
+  padding: 16px 20px 0;
 }
 
 .sub-campaign-date {
@@ -58,17 +81,12 @@
   color: var(--text-secondary);
 }
 
-.sub-campaign-desc {
-  font-size: 14px;
-  color: var(--text-secondary);
-  line-height: 1.6;
-}
-
 .sub-campaign-products {
   background: var(--primary-light);
   border: 1px solid var(--border-color);
   border-radius: 12px;
   padding: 14px 16px;
+  margin: 16px 20px 0;
 }
 
 .sub-campaign-products-header {
@@ -115,7 +133,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: 10px;
+  margin-top: 16px;
+  padding: 0 20px 20px;
   flex-wrap: wrap;
   gap: 12px;
 }

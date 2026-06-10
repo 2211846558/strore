@@ -1,11 +1,45 @@
 import { apiRequest } from './client';
 import { API_ENDPOINTS } from './config';
 import { fetchStoreProducts as fetchStoreProductsList } from './products';
+import { resolveCampaignBannerUrl } from './media';
 
 /** تكلفة الاشتراك في الحملة حسب الباكند (CampaignSubscriptionService) */
 export const CAMPAIGN_SUBSCRIPTION_COST = 50;
 
 const MY_CAMPAIGNS_KEY = (storeId) => `trendy_my_campaigns_${storeId}`;
+
+function readRawMyCampaigns(storeId) {
+  if (!storeId) return [];
+  try {
+    const raw = localStorage.getItem(MY_CAMPAIGNS_KEY(storeId));
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function findCampaignMatch(campaigns, entry) {
+  return campaigns.find(
+    (c) =>
+      Number(c.megaCampaignId) === Number(entry.megaCampaignId) ||
+      Number(c.id) === Number(entry.megaCampaignId) ||
+      Number(c.megaCampaignId) === Number(entry.id),
+  );
+}
+
+export function resolveCampaignBanner(campaign, availableCampaigns = []) {
+  const direct = resolveCampaignBannerUrl(
+    campaign?.bannerImage ??
+      campaign?.banner_image ??
+      campaign?.banner ??
+      campaign?.image,
+  );
+  if (direct) return direct;
+
+  const live = findCampaignMatch(availableCampaigns, campaign ?? {});
+  return live?.bannerImage ?? null;
+}
 
 function calcDurationDays(startDate, endDate) {
   if (!startDate || !endDate) return 30;
@@ -39,7 +73,14 @@ export function mapCampaignFromApi(campaign) {
     startDate: campaign.start_date,
     endDate: campaign.end_date,
     status: campaign.status,
-    bannerImage: campaign.banner_image,
+    bannerImage: resolveCampaignBannerUrl(
+      campaign.banner_image ??
+        campaign.bannerImage ??
+        campaign.media?.[0]?.url ??
+        (campaign.media?.[0]?.file_name
+          ? `campaigns/${campaign.media[0].file_name}`
+          : null),
+    ),
   };
 }
 
@@ -55,6 +96,7 @@ function mapStoredSubscription(entry) {
     status: entry.status === 'active' ? 'نشطة' : entry.status,
     dateRange: entry.dateRange,
     selectedProducts: entry.selectedProducts || [],
+    bannerImage: resolveCampaignBannerUrl(entry.bannerImage ?? entry.banner_image),
   };
 }
 
@@ -100,14 +142,7 @@ export async function subscribeToCampaign({
  * (لا يوجد GET مخصص في api.md)
  */
 export function loadMyCampaigns(storeId) {
-  if (!storeId) return [];
-  try {
-    const raw = localStorage.getItem(MY_CAMPAIGNS_KEY(storeId));
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed.map(mapStoredSubscription) : [];
-  } catch {
-    return [];
-  }
+  return readRawMyCampaigns(storeId).map(mapStoredSubscription);
 }
 
 function mapSubscriptionFromApiResponse(res, campaign, selectedProducts) {
@@ -147,12 +182,18 @@ function mapSubscriptionFromApiResponse(res, campaign, selectedProducts) {
     },
     selectedProducts,
     discountPercentage: subscription.discount_percentage ?? null,
+    bannerImage: resolveCampaignBannerUrl(
+      subscription.banner_image ??
+        subscription.bannerImage ??
+        campaign.bannerImage ??
+        campaign.banner_image,
+    ),
   };
 }
 
 export function saveMyCampaign(storeId, entry) {
   if (!storeId) return [];
-  const current = loadMyCampaigns(storeId);
+  const current = readRawMyCampaigns(storeId);
   const normalized = {
     id: entry.id ?? Date.now(),
     megaCampaignId: entry.megaCampaignId,
@@ -164,10 +205,11 @@ export function saveMyCampaign(storeId, entry) {
     status: entry.status === 'inactive' ? 'منتهية' : entry.status ?? 'نشطة',
     dateRange: entry.dateRange,
     selectedProducts: entry.selectedProducts,
+    bannerImage: entry.bannerImage ?? entry.banner_image ?? null,
   };
   const next = [
     normalized,
-    ...current.filter((c) => c.megaCampaignId !== normalized.megaCampaignId),
+    ...current.filter((c) => Number(c.megaCampaignId) !== Number(normalized.megaCampaignId)),
   ];
   localStorage.setItem(MY_CAMPAIGNS_KEY(storeId), JSON.stringify(next));
   return next.map(mapStoredSubscription);
@@ -176,15 +218,20 @@ export function saveMyCampaign(storeId, entry) {
 /**
  * تحديث حملاتي من GET /campaigns (لا يوجد GET للاشتراكات في api.md)
  */
-export async function enrichMyCampaigns(storeId) {
+export async function enrichMyCampaigns(storeId, availableCampaigns = null) {
   const stored = loadMyCampaigns(storeId);
   if (!stored.length) return [];
 
   try {
-    const available = await fetchAvailableCampaigns();
-    return stored.map((sub) => {
-      const live = available.find((c) => c.megaCampaignId === sub.megaCampaignId);
-      if (!live) return sub;
+    const available = availableCampaigns ?? (await fetchAvailableCampaigns());
+    const enriched = stored.map((sub) => {
+      const live = findCampaignMatch(available, sub);
+      if (!live) {
+        return {
+          ...sub,
+          bannerImage: resolveCampaignBanner(sub, available),
+        };
+      }
       return {
         ...sub,
         title: live.title,
@@ -199,8 +246,21 @@ export async function enrichMyCampaigns(storeId) {
               }
             : sub.dateRange,
         status: live.status === 'active' ? 'نشطة' : sub.status,
+        bannerImage: live.bannerImage ?? resolveCampaignBanner(sub, available),
       };
     });
+
+    const raw = readRawMyCampaigns(storeId);
+    const syncedRaw = raw.map((entry) => {
+      const match = enriched.find(
+        (item) => Number(item.megaCampaignId) === Number(entry.megaCampaignId),
+      );
+      if (!match?.bannerImage) return entry;
+      return { ...entry, bannerImage: match.bannerImage };
+    });
+    localStorage.setItem(MY_CAMPAIGNS_KEY(storeId), JSON.stringify(syncedRaw));
+
+    return enriched;
   } catch {
     return stored;
   }
@@ -230,5 +290,6 @@ export function buildSubscriptionEntry(campaign, selectedProducts, discountPerce
     },
     selectedProducts,
     discountPercentage,
+    bannerImage: campaign.bannerImage ?? null,
   };
 }
