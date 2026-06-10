@@ -15,8 +15,11 @@ import {
   Moon,
   Sun,
   LogOut,
+  Sliders,
 } from 'lucide-react';
 import TrendyBrandLogo from '../brand/TrendyBrandLogo';
+import { useAuth } from '../../context/AuthContext';
+import { userHasRole } from '../../api/auth';
 import './Sidebar.css';
 
 const navMenuItems = [
@@ -34,12 +37,20 @@ const navMenuItems = [
 ];
 
 const Sidebar = ({ onLogout }) => {
+  const { user } = useAuth();
   const location = useLocation();
   const [isDarkMode, setIsDarkMode] = useState(true);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', isDarkMode ? 'dark' : 'light');
   }, [isDarkMode]);
+
+  const activeMenuItems = [
+    ...navMenuItems,
+    ...(user && userHasRole(user, 'super_admin')
+      ? [{ title: 'إدارة الخصائص', icon: Sliders, path: '/attributes' }]
+      : []),
+  ];
 
   const isLinkActive = (path) =>
     location.pathname === path ||
@@ -68,8 +79,9 @@ const Sidebar = ({ onLogout }) => {
       </div>
 
       <nav className="sidebar-nav">
-        <ul className="nav-list">{renderNavItems(navMenuItems)}</ul>
+        <ul className="nav-list">{renderNavItems(activeMenuItems)}</ul>
       </nav>
+
 
       <div className="sidebar-footer">
         <button className="nav-link logout-btn" onClick={onLogout} type="button">

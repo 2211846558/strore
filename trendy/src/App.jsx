@@ -19,6 +19,7 @@ import Staff from './pages/Staff';
 import Orders from './pages/Orders';
 import Notifications from './pages/Notifications';
 import Chat from './pages/Chat';
+import Attributes from './pages/Attributes';
 import './App.css';
 
 function AppRoutes() {
@@ -101,6 +102,7 @@ function AppRoutes() {
         <Route path="notifications" element={<Notifications />} />
         <Route path="chat" element={<Chat />} />
         <Route path="plans" element={<Plans />} />
+        <Route path="attributes" element={<Attributes />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

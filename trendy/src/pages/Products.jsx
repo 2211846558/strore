@@ -4,6 +4,7 @@ import { Search, Plus, CheckCircle2, Archive, RefreshCw, Edit2 } from 'lucide-re
 import ProductModal from '../components/products/ProductModal';
 import ProductVariantModal from '../components/products/ProductVariantModal';
 import ArchiveConfirmModal from '../components/products/ArchiveConfirmModal';
+import ProductDetailModal from '../components/products/ProductDetailModal';
 import {
   fetchCategories,
   fetchStoreProducts,
@@ -40,6 +41,7 @@ const Products = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [isArchiving, setIsArchiving] = useState(false);
   const [variantProduct, setVariantProduct] = useState(null);
+  const [detailProduct, setDetailProduct] = useState(null);
   const [error, setError] = useState('');
 
   const showToast = (message) => {
@@ -238,22 +240,27 @@ const Products = () => {
                 const isArchived = product.status === 'مؤرشف';
                 return (
                   <tr key={product.id} className={isArchived ? 'row-archived' : ''}>
-                    <td className="td-product-name">
-                      <div className="product-name-cell">
-                        <img
-                          className="product-thumb"
-                          src={product.image}
-                          alt={product.name}
-                          onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                        />
-                        <div className="product-name-info">
-                          <span className="pn-name">{product.name}</span>
-                          {product.category && (
-                            <span className="pn-category">{product.category}</span>
-                          )}
-                        </div>
-                      </div>
-                    </td>
+                     <td className="td-product-name">
+                       <div 
+                         className="product-name-cell clickable-name-cell"
+                         onClick={() => setDetailProduct(product)}
+                         style={{ cursor: 'pointer' }}
+                         title="عرض التفاصيل وسجل الشحنات"
+                       >
+                         <img
+                           className="product-thumb"
+                           src={product.image}
+                           alt={product.name}
+                           onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                         />
+                         <div className="product-name-info">
+                           <span className="pn-name">{product.name}</span>
+                           {product.category && (
+                             <span className="pn-category">{product.category}</span>
+                           )}
+                         </div>
+                       </div>
+                     </td>
                     <td className="td-sku">
                       <span className="sku-badge">{product.sku || '—'}</span>
                     </td>
@@ -348,6 +355,13 @@ const Products = () => {
         onConfirm={() => archiveTarget && handleArchiveToggle(archiveTarget)}
         product={archiveTarget}
         action={archiveTarget?.status === 'مؤرشف' ? 'restore' : 'archive'}
+      />
+
+      <ProductDetailModal
+        isOpen={!!detailProduct}
+        onClose={() => setDetailProduct(null)}
+        product={detailProduct}
+        storeId={storeId}
       />
 
       {toast && (

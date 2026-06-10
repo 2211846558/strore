@@ -1,4 +1,4 @@
-﻿.modal-overlay {
+.modal-overlay {
   position: fixed;
   top: 0;
   left: 0;
@@ -409,3 +409,121 @@
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+/* New Styles for Redesigned AddShipmentModal */
+.price-warning-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background-color: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.shipment-variants-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.variants-table-wrapper {
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  overflow: hidden;
+  background-color: var(--bg-card);
+}
+
+.variants-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: right;
+}
+
+.variants-table th,
+.variants-table td {
+  padding: 12px 16px;
+  font-size: 14px;
+}
+
+.variants-table th {
+  background-color: var(--bg-main);
+  color: var(--text-secondary);
+  font-weight: 700;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.variants-table td {
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.variants-table tr:last-child td {
+  border-bottom: none;
+}
+
+.variants-table .variant-label {
+  font-weight: 700;
+}
+
+.variants-table .current-qty {
+  color: var(--text-secondary);
+}
+
+.variants-table .input-qty input {
+  width: 80px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-input);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 14px;
+  text-align: center;
+  outline: none;
+}
+
+.variants-table .input-qty input:focus {
+  border-color: var(--primary);
+}
+
+.shipment-summary-card {
+  background: var(--gradient-card, linear-gradient(135deg, var(--primary-light), rgba(59, 130, 246, 0.05)));
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: var(--shadow-sm);
+}
+
+.summary-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin: 0 0 4px 0;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 8px;
+}
+
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+}
+
+.summary-label {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.summary-value {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+

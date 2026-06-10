@@ -1,4 +1,4 @@
-﻿.inventory-page {
+.inventory-page {
   padding-bottom: 40px;
 }
 
@@ -8,7 +8,7 @@
 
 .inventory-stats {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 20px;
   margin-bottom: 24px;
 }
@@ -41,7 +41,7 @@
 }
 
 .stat-icon.green {
-  color: #4ade80;
+  color: #22c55e;
 }
 
 .stat-icon.blue {
@@ -59,11 +59,34 @@
 }
 
 .stat-value.green {
-  color: #4ade80;
+  color: #22c55e;
 }
 
 .stat-value.blue {
   color: var(--primary);
+}
+
+/* ── Table row hover ── */
+.shipment-table tbody tr.shipment-row:hover {
+  background: var(--bg-input);
+  transition: background 0.15s;
+}
+
+.shipment-date {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.products-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.products-icon {
+  color: var(--primary);
+  flex-shrink: 0;
 }
 
 .inventory-controls {
@@ -324,12 +347,18 @@
 
 @media (max-width: 768px) {
   .inventory-stats {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr);
   }
 
   .shipment-table th,
   .shipment-table td {
     padding: 10px 12px;
     font-size: 12px;
+  }
+}
+
+@media (max-width: 500px) {
+  .inventory-stats {
+    grid-template-columns: 1fr;
   }
 }

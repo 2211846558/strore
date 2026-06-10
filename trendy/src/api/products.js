@@ -348,3 +348,47 @@ export async function deleteProductVariant(productId, variantId) {
   const url = `${API_ENDPOINTS.myStoreProductVariants(productId)}/${variantId}`;
   await apiRequest(url, { method: 'DELETE' });
 }
+
+/**
+ * GET /api/v1/admin/attributes — قائمة الخصائص للإدارة
+ */
+export async function fetchAdminAttributes() {
+  const res = await apiRequest('/admin/attributes');
+  return extractList(res).map((attr) => ({
+    id: attr.id,
+    name: attr.name,
+    values: mapAttributeValues(attr),
+  }));
+}
+
+/**
+ * POST /api/v1/admin/attributes — إضافة خاصية جديدة مع قيمها
+ */
+export async function createAdminAttribute(data) {
+  const res = await apiRequest('/admin/attributes', {
+    method: 'POST',
+    body: data,
+  });
+  return res?.data ?? res;
+}
+
+/**
+ * PUT /api/v1/admin/attributes/{id} — تعديل خاصية
+ */
+export async function updateAdminAttribute(id, data) {
+  const res = await apiRequest(`/admin/attributes/${id}`, {
+    method: 'PUT',
+    body: data,
+  });
+  return res?.data ?? res;
+}
+
+/**
+ * DELETE /api/v1/admin/attributes/{id} — حذف خاصية
+ */
+export async function deleteAdminAttribute(id) {
+  await apiRequest(`/admin/attributes/${id}`, {
+    method: 'DELETE',
+  });
+}
+
