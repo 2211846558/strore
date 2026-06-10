@@ -5,11 +5,12 @@ import CampaignPaymentModal from '../components/marketing/CampaignPaymentModal';
 import ProductSelectionModal from '../components/marketing/ProductSelectionModal';
 import {
   fetchAvailableCampaigns,
-  enrichMyCampaigns,
+  fetchMyCampaigns,
   saveMyCampaign,
   subscribeToCampaign,
   buildSubscriptionEntry,
   resolveCampaignBanner,
+  isStoreSubscribedToCampaign,
 } from '../api/campaigns';
 import { getApiErrorMessage } from '../api/stores';
 import { useAuth } from '../context/AuthContext';
@@ -53,17 +54,28 @@ const Marketing = () => {
     loadCampaigns();
   }, [loadCampaigns]);
 
-  useEffect(() => {
-    if (!storeId) return;
-    enrichMyCampaigns(storeId, availableCampaigns).then(setMyCampaigns).catch(() => setMyCampaigns([]));
+  const loadMyCampaigns = useCallback(async () => {
+    if (!storeId) {
+      setMyCampaigns([]);
+      return;
+    }
+    try {
+      const list = await fetchMyCampaigns(storeId, availableCampaigns);
+      setMyCampaigns(list);
+    } catch {
+      setMyCampaigns([]);
+    }
   }, [storeId, availableCampaigns]);
+
+  useEffect(() => {
+    loadMyCampaigns();
+  }, [loadMyCampaigns]);
 
   const getCampaignBanner = (campaign) =>
     resolveCampaignBanner(campaign, availableCampaigns);
 
-  const subscribedIds = new Set(myCampaigns.map((c) => c.megaCampaignId ?? c.id));
   const visibleCampaigns = availableCampaigns.filter(
-    (c) => !subscribedIds.has(c.megaCampaignId ?? c.id),
+    (campaign) => !isStoreSubscribedToCampaign(campaign, storeId),
   );
 
   const handleSubscribeClick = (campaign) => {
@@ -97,8 +109,10 @@ const Marketing = () => {
         discountPercentage,
         apiRes,
       );
-      const updated = saveMyCampaign(storeId, entry);
-      setMyCampaigns(updated);
+      saveMyCampaign(storeId, entry);
+      const campaigns = await fetchAvailableCampaigns();
+      setAvailableCampaigns(campaigns);
+      setMyCampaigns(await fetchMyCampaigns(storeId, campaigns));
       await refreshWallet();
 
       setIsProductModalOpen(false);
@@ -174,7 +188,7 @@ const Marketing = () => {
             {myCampaigns.length > 0 ? (
               myCampaigns.map((campaign) => (
                 <SubscribedCampaignCard
-                  key={campaign.id}
+                  key={campaign.megaCampaignId ?? campaign.id}
                   title={campaign.title}
                   description={campaign.description}
                   price={campaign.price}
