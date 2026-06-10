@@ -1,6 +1,13 @@
 import { apiRequest } from './client';
 import { API_ENDPOINTS } from './config';
 import { fetchAllOrders } from './orders';
+import { getStoredUser } from './auth';
+
+/** معرّفات مستخدمي المتجر الحالي (المدير) لتمييز رسائل المتجر عن الزبون */
+function getCurrentUserId() {
+  const user = getStoredUser();
+  return user?.id ?? null;
+}
 
 function extractList(res) {
   const payload = res?.data ?? res;
@@ -47,6 +54,16 @@ function formatMessageTime(value) {
 }
 
 function resolveSender(row) {
+  // الباكند يُرجع sender ككائن مستخدم (MessageResource) — رسالتي = متجر
+  const senderObj = row.sender;
+  if (senderObj && typeof senderObj === 'object') {
+    const currentId = getCurrentUserId();
+    if (currentId && Number(senderObj.id) === Number(currentId)) return 'store';
+    const role = String(senderObj.role ?? '').toLowerCase();
+    if (['store', 'store_manager', 'store_staff'].includes(role)) return 'store';
+    return 'customer';
+  }
+
   const sender = String(row.sender_type ?? row.sender ?? row.from ?? '').toLowerCase();
   if (['store', 'store_manager', 'store_staff', 'merchant', 'admin'].includes(sender)) {
     return 'store';
@@ -56,28 +73,78 @@ function resolveSender(row) {
 
 export function mapMessage(row) {
   return {
-    id: row.id ?? `${row.created_at}-${row.message}`,
-    text: row.message ?? row.body ?? row.content ?? row.text ?? '',
+    id: row.id ?? `${row.created_at}-${row.message_text ?? row.message}`,
+    text:
+      row.message_text ??
+      row.message ??
+      row.body ??
+      row.content ??
+      row.text ??
+      '',
     sender: resolveSender(row),
     time: formatMessageTime(row.created_at ?? row.sent_at ?? row.time),
   };
 }
 
+/** الزبون = أول مشارك في المحادثة ليس المستخدم الحالي */
+function resolveCustomerParticipant(row) {
+  const participants = Array.isArray(row.participants) ? row.participants : [];
+  const currentId = getCurrentUserId();
+  return (
+    participants.find((p) => Number(p.id) !== Number(currentId)) ??
+    participants[0] ??
+    null
+  );
+}
+
+/** وصف سياق المحادثة (متجر أو طلب) من ConversationResource */
+function resolveChatContext(row) {
+  const context = row.context ?? row.contextable ?? null;
+  if (!context || typeof context !== 'object') return 'محادثة عامة';
+
+  // سياق طلب (Order)
+  if (context.order_number || context.total_price !== undefined || context.store_id) {
+    return `طلب #${context.order_number ?? context.id}`;
+  }
+
+  // سياق متجر (Store)
+  if (context.name) return `استفسار عام — ${context.name}`;
+
+  return 'محادثة عامة';
+}
+
 export function mapChat(row) {
   const lastMessage = row.last_message ?? row.latest_message ?? null;
+  const customer = resolveCustomerParticipant(row);
 
   return {
     id: Number(row.id ?? row.chat_id ?? row.order_id),
-    customerName: row.customer_name ?? row.customer?.name ?? row.user?.name ?? '—',
-    phone: row.customer_phone ?? row.customer?.phone ?? row.user?.phone ?? '',
-    avatar: row.customer?.avatar ?? row.avatar ?? '',
-    product: row.product_name ?? row.product?.name ?? row.subject ?? row.topic ?? '—',
+    customerName:
+      row.customer_name ??
+      row.customer?.name ??
+      row.user?.name ??
+      customer?.name ??
+      'زبون',
+    phone:
+      row.customer_phone ??
+      row.customer?.phone ??
+      row.user?.phone ??
+      customer?.phone ??
+      '',
+    avatar: row.customer?.avatar ?? row.avatar ?? customer?.avatar ?? '',
+    product:
+      row.product_name ??
+      row.product?.name ??
+      row.subject ??
+      row.topic ??
+      resolveChatContext(row),
     unread: Number(row.unread_count ?? row.unread ?? row.unread_messages ?? 0),
     lastTime: formatMessageTime(
       row.last_message_at ?? row.updated_at ?? lastMessage?.created_at ?? row.created_at,
     ),
     lastPreview:
       row.last_message_text ??
+      lastMessage?.message_text ??
       lastMessage?.message ??
       lastMessage?.body ??
       lastMessage?.content ??
@@ -132,14 +199,16 @@ export async function fetchChatMessages(chatId) {
 
 /**
  * POST /orders/chat/{id}/messages — إرسال رسالة
+ * الباكند (SendMessageRequest) يتطلب message_text
  */
 export async function sendChatMessage(chatId, message) {
   const id = normalizeChatId(chatId);
   const text = message.trim();
   const res = await apiRequest(API_ENDPOINTS.ordersChatMessages(id), {
     method: 'POST',
-    body: { message: text },
+    body: { message_text: text },
   });
   const row = res?.data ?? res;
-  return mapMessage(row?.message ?? row);
+  // المرسل هو المستخدم الحالي (المتجر) دائماً عند الإرسال من اللوحة
+  return { ...mapMessage(row?.message ?? row), sender: 'store', text };
 }
