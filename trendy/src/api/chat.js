@@ -180,11 +180,12 @@ export async function fetchChats({ storeId } = {}) {
     const res = await apiRequest(API_ENDPOINTS.ordersChat);
     return extractList(res).map((row) => mapChat(row));
   } catch (err) {
-    if (!isChatListRouteError(err)) throw err;
+    if (isChatListRouteError(err)) {
+      const orders = await fetchAllOrders({ storeId });
+      return orders.map(mapOrderToChat);
+    }
+    return [];
   }
-
-  const orders = await fetchAllOrders({ storeId });
-  return orders.map(mapOrderToChat);
 }
 
 /**

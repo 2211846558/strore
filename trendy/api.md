@@ -94,9 +94,14 @@ Route::prefix('v1/auth')->group(function () {
     // -------------------------------------------------------------------------
     Route::post('/stores/join', [\App\Http\Controllers\Api\V1\StoreJoinController::class, 'store']);
 
-    // عرض الحملات الترويجية النشطة للزبائن والزوار
-    // GET /api/v1/campaigns
+    // عرض الحملات الترويجية النشطة للزبائن والزوار (تتضمن المتاجر المشتركة)
+    // GET /api/campaigns
     Route::get('/campaigns', [\App\Http\Controllers\Api\V1\Public\CampaignController::class, 'index']);
+
+    // تفاصيل حملة نشطة مع المتاجر المشتركة
+    // GET /api/campaigns/{id}
+    Route::get('/campaigns/{campaign}', [\App\Http\Controllers\Api\V1\Public\CampaignController::class, 'show'])
+        ->whereNumber('campaign');
 
 
     // =========================================================================
@@ -573,6 +578,10 @@ Route::prefix('v1/auth')->group(function () {
         // 7. تصدير التقارير المالية
         // GET /api/v1/finance/export
         Route::get('/export', [\App\Http\Controllers\Api\V1\FinanceController::class, 'export']);
+
+        // 8. إحصائيات ونسب طرق الدفع
+        // GET /api/v1/finance/payment-method-percentages
+        Route::get('/payment-method-percentages', [\App\Http\Controllers\Api\V1\FinanceController::class, 'paymentMethodStats']);
     });
 
     // =========================================================================
@@ -722,6 +731,17 @@ Route::prefix('v1/auth')->group(function () {
     });
 
     // =========================================================================
+    // [14.5] الملف الشخصي للزبون (Customer Profile)
+    // ─────────────────────────────────────────────────────────────────────────
+    Route::prefix('customer')->middleware('role:customer')->group(function () {
+        // GET /api/customer/profile
+        Route::get('/profile', [\App\Http\Controllers\Api\V1\CustomerProfileController::class, 'show']);
+
+        // PATCH /api/customer/profile — body: name, email, phone, default_address?
+        Route::patch('/profile', [\App\Http\Controllers\Api\V1\CustomerProfileController::class, 'update']);
+    });
+
+    // =========================================================================
     // [15] إدارة عناوين الشحن (Shipping Addresses)
     // ─────────────────────────────────────────────────────────────────────────
     // تشمل: إضافة عنوان الشحن، عرض قائمة العناوين للزبون.
@@ -744,16 +764,21 @@ Route::prefix('v1/auth')->group(function () {
     Route::prefix('wallet')->middleware('auth:sanctum')->group(function () {
 
         // 1. عرض الرصيد المتاح
-        // GET /api/v1/wallet/balance
+        // GET /api/wallet/balance
         Route::get('/balance', [\App\Http\Controllers\Api\V1\WalletController::class, 'balance']);
 
-        // 2. شحن المحفظة
-        // POST /api/v1/wallet/top-up
+        // 2. إنشاء payment_method_id من بيانات البطاقة (Stripe) قبل الشحن
+        // POST /api/wallet/payment-method
+        Route::post('/payment-method', [\App\Http\Controllers\Api\V1\WalletController::class, 'createPaymentMethod'])
+            ->middleware('role:customer');
+
+        // 3. شحن المحفظة
+        // POST /api/wallet/top-up
         Route::post('/top-up', [\App\Http\Controllers\Api\V1\WalletController::class, 'topUp'])
             ->middleware('role:customer');
 
         // 4. عرض سجل الحركات المالية
-        // GET /api/v1/wallet/logs
+        // GET /api/wallet/logs
         Route::get('/logs', [\App\Http\Controllers\Api\V1\WalletController::class, 'logs']);
     });
 
@@ -797,28 +822,36 @@ Route::prefix('v1/auth')->group(function () {
     Route::prefix('orders')->middleware('auth:sanctum')->group(function () {
 
         // 1 & 5 & 6. عرض القائمة والبحث والفلترة
-        // GET /api/v1/orders
+        // GET /api/orders
         Route::get('/', [\App\Http\Controllers\Api\V1\OrderController::class, 'index']);
-
-        // 2. عرض تفاصيل الطلب
-        // GET /api/v1/orders/{id}
-        Route::get('/{id}', [\App\Http\Controllers\Api\V1\OrderController::class, 'show']);
 
         // =========================================================================
         // [17] نظام المحادثات (Unified Chat System)
         // ─────────────────────────────────────────────────────────────────────────
         // تشمل: قائمة المحادثات، عرض الرسائل، وإرسال الرسائل.
+        // يجب أن تسبق /{id} حتى لا يُفسَّر "chat" كمعرّف طلب.
         // =========================================================================
         Route::prefix('chat')->group(function () {
-            // GET /api/v1/orders/chat
+            // GET /api/orders/chat
             Route::get('/', [\App\Http\Controllers\Api\V1\ChatController::class, 'index']);
 
-            // GET /api/v1/orders/chat/{id}/messages
+            // POST /api/orders/chat/store — بدء محادثة زبون ↔ متجر
+            Route::post('/store', [\App\Http\Controllers\Api\V1\ChatController::class, 'startStoreChat']);
+
+            // POST /api/orders/chat/support
+            Route::post('/support', [\App\Http\Controllers\Api\V1\ChatController::class, 'startSupportChat']);
+
+            // GET /api/orders/chat/{id}/messages
             Route::get('/{id}/messages', [\App\Http\Controllers\Api\V1\ChatController::class, 'showMessages']);
 
-            // POST /api/v1/orders/chat/{id}/messages
+            // POST /api/orders/chat/{id}/messages
             Route::post('/{id}/messages', [\App\Http\Controllers\Api\V1\ChatController::class, 'storeMessage']);
         });
+
+        // 2. عرض تفاصيل الطلب
+        // GET /api/orders/{id}
+        Route::get('/{id}', [\App\Http\Controllers\Api\V1\OrderController::class, 'show'])
+            ->whereNumber('id');
 
         // 3. تحديث حالة الطلب
         // PATCH /api/v1/orders/{id}/status
@@ -915,12 +948,23 @@ Route::prefix('v1/auth')->group(function () {
     });
 
     // =========================================================================
-    // [20] إدارة توكنات Firebase (FCM)
+    // [20] إدارة الإشعارات (Notifications Management)
+    // ─────────────────────────────────────────────────────────────────────────
+    // تشمل: عرض القائمة، التفاصيل، تحديد كمقروء، وتحديد الكل كمقروء.
+    // =========================================================================
+    Route::middleware('auth:sanctum')->prefix('notifications')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Api\V1\NotificationController::class, 'index']);
+        Route::post('/read-all', [\App\Http\Controllers\Api\V1\NotificationController::class, 'markAllAsRead']);
+        Route::get('/{id}', [\App\Http\Controllers\Api\V1\NotificationController::class, 'show']);
+        Route::patch('/{id}/read', [\App\Http\Controllers\Api\V1\NotificationController::class, 'markAsRead']);
+    });
+
+    // =========================================================================
+    // [21] إدارة توكنات Firebase (FCM)
     // ─────────────────────────────────────────────────────────────────────────
     // هذه المسارات مسؤولة عن تسجيل وإلغاء تسجيل توكنات أجهزة المستخدمين
     // لإرسال الإشعارات (Push Notifications) عبر Firebase Cloud Messaging.
     // =========================================================================
     Route::middleware('auth:sanctum')->prefix('fcm')->group(function () {
         Route::post('/token', [\App\Http\Controllers\Api\V1\FcmTokenController::class, 'register']);
-        Route::post('/token/unregister', [\App\Http\Controllers\Api\V1\FcmTokenController::class, 'unregister']);
-    });
+        Route::post('/token/unregister', [\App\Http\Controllers\Api\V1\FcmTokenController::class, 'unregister'])
