@@ -65,29 +65,14 @@ export function formatRoleSelection(roleId, jobTitle) {
 /** خيارات الأدوار في النماذج والفلترة */
 export const EMPLOYEE_ROLE_OPTIONS = [
   {
-    value: formatRoleSelection(DEFAULT_ROLE_IDS.operations_admin, 'مسؤول عمليات'),
-    slug: 'operations_admin',
-    label: 'مسؤول عمليات',
-  },
-  {
-    value: formatRoleSelection(DEFAULT_ROLE_IDS.accountant, 'محاسب'),
-    slug: 'accountant',
-    label: 'محاسب',
-  },
-  {
-    value: formatRoleSelection(DEFAULT_ROLE_IDS.store_staff, 'موظف دعم فني'),
+    value: formatRoleSelection(DEFAULT_ROLE_IDS.store_staff, 'موظف متجر'),
     slug: 'store_staff',
-    label: 'موظف دعم فني',
+    label: 'موظف متجر',
   },
   {
     value: formatRoleSelection(DEFAULT_ROLE_IDS.store_manager, 'مدير متجر'),
     slug: 'store_manager',
     label: 'مدير متجر',
-  },
-  {
-    value: formatRoleSelection(DEFAULT_ROLE_IDS.store_staff, 'موظف متجر'),
-    slug: 'store_staff_store',
-    label: 'موظف متجر',
   },
 ];
 
@@ -191,25 +176,8 @@ export function mapEmployee(row) {
   };
 }
 
-/** دمج أدوار مكتشفة من الـ API مع الخيارات الافتراضية */
 export function buildRoleOptions(employees = []) {
-  const options = new Map();
-
-  EMPLOYEE_ROLE_OPTIONS.forEach((opt) => {
-    options.set(`${opt.value}-${opt.label}`, opt);
-  });
-
-  employees.forEach((emp) => {
-    if (emp.roleId) {
-      options.set(`${emp.roleId}-${emp.role}`, {
-        value: formatRoleSelection(emp.roleId, emp.role),
-        slug: emp.roleSlug,
-        label: emp.role,
-      });
-    }
-  });
-
-  return Array.from(options.values());
+  return EMPLOYEE_ROLE_OPTIONS;
 }
 
 export function buildEmployeePayload(form, { storeId, roleOptions } = {}) {
@@ -253,8 +221,12 @@ export async function fetchEmployees({
   if (storeId) query.set('store_id', String(storeId));
   if (search?.trim()) query.set('search', search.trim());
   if (role && role !== 'all') {
-    const { roleId } = parseRoleSelection(role);
-    if (roleId) query.set('role_id', String(roleId));
+    const opt = EMPLOYEE_ROLE_OPTIONS.find((o) => String(o.value) === String(role));
+    if (opt) {
+      query.set('role', opt.slug);
+    } else {
+      query.set('role', role);
+    }
   }
 
   const res = await apiRequest(`${API_ENDPOINTS.employees}?${query}`);
@@ -316,4 +288,14 @@ export async function updateEmployee(id, payload) {
 export async function toggleEmployee(id) {
   const res = await apiRequest(API_ENDPOINTS.employeeToggle(id), { method: 'POST' });
   return mapEmployee(res?.data ?? res);
+}
+
+/**
+ * DELETE /employees/{id} — حذف موظف
+ */
+export async function deleteEmployee(id) {
+  const res = await apiRequest(API_ENDPOINTS.employee(id), {
+    method: 'DELETE',
+  });
+  return res;
 }
