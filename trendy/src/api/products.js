@@ -44,7 +44,7 @@ export function mapProductFromList(item) {
     categoryId: item.category?.id ?? null,
     colors: [],
     sizes: [],
-    stock: null,
+    stock: item.total_quantity != null ? String(item.total_quantity) : '',
     status: item.status === 'archived' ? 'مؤرشف' : 'نشط',
     ...productImageFields(item),
   };
