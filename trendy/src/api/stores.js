@@ -232,6 +232,12 @@ export function getApiErrorMessage(error, fallback = 'تعذّر إرسال ال
     if (/no api key provided/i.test(msg) || /Stripe::setApiKey/i.test(msg)) {
       return 'بوابة الدفع غير مهيّأة على الخادم. يرجى التواصل مع الدعم الفني.';
     }
+    if (/Unknown column ['"]?sku['"]?/i.test(msg) || /column not found.*sku/i.test(msg)) {
+      return 'تعذّر حفظ المنتج: قاعدة البيانات تحتاج تحديث. شغّل php artisan migrate على الباكند ثم أعد المحاولة.';
+    }
+    if (/sku.*unique|unique.*sku/i.test(msg) || /sku مستخدم/i.test(msg)) {
+      return 'رمز SKU مستخدم مسبقاً. اختر رمزاً آخر.';
+    }
     if (/OrderController::show/i.test(msg) || /must be of type int, string given/i.test(msg)) {
       return 'تعذّر تحميل المحادثات. حاول مرة أخرى.';
     }

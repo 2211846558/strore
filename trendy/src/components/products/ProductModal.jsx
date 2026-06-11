@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Upload, ImageIcon, Layers } from 'lucide-react';
+import { getApiErrorMessage } from '../../api/stores';
 import './ProductModal.css';
 
 const ProductModal = ({
@@ -123,7 +124,7 @@ const ProductModal = ({
       }
       onClose();
     } catch (err) {
-      setError(err?.message || 'تعذّر حفظ المنتج.');
+      setError(getApiErrorMessage(err, 'تعذّر حفظ المنتج.'));
     }
   };
 

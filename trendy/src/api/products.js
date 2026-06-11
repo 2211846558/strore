@@ -155,11 +155,10 @@ export function buildColorDotsFromAttributes(attributes = []) {
 
 /**
  * POST /api/my-store/products/{productId}/variants
- * body: { sku, attribute_value_ids: number[] }
+ * body: { attribute_value_ids: number[] }
  */
-export async function createProductVariant(productId, { storeId, sku, attributeValueIds }) {
+export async function createProductVariant(productId, { storeId, attributeValueIds }) {
   const body = {
-    sku,
     attribute_value_ids: attributeValueIds,
   };
   if (storeId) body.store_id = storeId;
