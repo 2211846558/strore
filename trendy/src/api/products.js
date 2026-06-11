@@ -1,9 +1,20 @@
 import { apiRequest } from './client';
 import { API_ENDPOINTS } from './config';
+import { getStoredUser, resolveManagedStoreId } from './auth';
 import {
   getProductImageCandidates,
   productPlaceholderImage,
 } from './media';
+
+function resolveProductStoreId(storeId) {
+  return resolveManagedStoreId(getStoredUser(), storeId);
+}
+
+function normalizeProductPrice(price) {
+  const num = Number(price);
+  if (Number.isNaN(num) || num < 0) return 0;
+  return num;
+}
 
 function mapImageEntry(img, productId) {
   const raw = typeof img === 'string' ? img : img?.url;
@@ -155,14 +166,14 @@ export function buildColorDotsFromAttributes(attributes = []) {
 
 /**
  * POST /api/my-store/products/{productId}/variants
- * body: { sku, attribute_value_ids: number[] }
+ * body: { attribute_value_ids: number[] }
  */
-export async function createProductVariant(productId, { storeId, sku, attributeValueIds }) {
+export async function createProductVariant(productId, { storeId, attributeValueIds }) {
   const body = {
-    sku,
     attribute_value_ids: attributeValueIds,
   };
-  if (storeId) body.store_id = storeId;
+  const resolvedStoreId = resolveProductStoreId(storeId);
+  if (resolvedStoreId) body.store_id = resolvedStoreId;
 
   const res = await apiRequest(API_ENDPOINTS.myStoreProductVariants(productId), {
     method: 'POST',
@@ -207,7 +218,8 @@ export async function fetchStoreProducts({
   perPage = 50,
 } = {}) {
   const query = new URLSearchParams({ per_page: String(perPage) });
-  if (storeId) query.set('store_id', String(storeId));
+  const resolvedStoreId = resolveProductStoreId(storeId);
+  if (resolvedStoreId) query.set('store_id', String(resolvedStoreId));
   if (name?.trim()) query.set('name', name.trim());
   if (categoryId && categoryId !== 'all') query.set('category_id', String(categoryId));
   if (status && status !== 'all') query.set('status', status);
@@ -222,23 +234,163 @@ export async function fetchStoreProducts({
  */
 export async function fetchProductDetails(id) {
   const res = await apiRequest(API_ENDPOINTS.product(id));
-  const item = res?.data ?? res;
-  return mapProductFromDetails(item);
+  return mapProductFromDetails(unwrapApiEntity(res));
+}
+
+export function unwrapApiEntity(res) {
+  const payload = res?.data ?? res;
+  if (payload?.id != null) return payload;
+  if (payload?.data?.id != null) return payload.data;
+  return payload;
+}
+
+const COLOR_ATTR_RE = /لون|color/i;
+const SIZE_ATTR_RE = /مقاس|size/i;
+
+function readAttrValue(av) {
+  if (typeof av === 'string') return av;
+  return av?.value ?? av?.name ?? av?.label ?? av?.attribute_value?.value ?? null;
+}
+
+function readAttrName(av) {
+  return String(av?.attribute?.name ?? av?.attribute_name ?? '').trim();
+}
+
+/**
+ * استخراج اللون والمقاس من قيم الخصائص — GET /products/{id} → variants[].attribute_values
+ */
+export function parseVariantColorSize(attrValues, catalogAttributes = []) {
+  const list = Array.isArray(attrValues) ? attrValues : [];
+  let color = null;
+  let size = null;
+  const extras = [];
+
+  for (const av of list) {
+    const value = String(readAttrValue(av) ?? '').trim();
+    if (!value) continue;
+    const attrName = readAttrName(av);
+
+    if (COLOR_ATTR_RE.test(attrName)) color = value;
+    else if (SIZE_ATTR_RE.test(attrName)) size = value;
+    else extras.push(value);
+  }
+
+  if (!color && !size && list.length) {
+    const values = list.map(readAttrValue).filter(Boolean);
+    if (values.length === 1) {
+      color = values[0];
+      size = 'واحد';
+    } else if (values.length >= 2) {
+      [color, size] = values;
+    }
+  } else if (color && !size) {
+    size = 'واحد';
+  }
+
+  const label =
+    [color, size && size !== 'واحد' ? size : null].filter(Boolean).join(' / ') ||
+    extras.join(' / ');
+
+  return {
+    color: color ?? '—',
+    size: size ?? '—',
+    label,
+  };
+}
+
+/**
+ * تحليل نص الخصائص من GET /inventory — مثال: "أحمر / M"
+ */
+export function parseAttributesString(attrStr, catalogAttributes = []) {
+  const text = String(attrStr ?? '').trim();
+  if (!text || text === '—') {
+    return { color: '—', size: '—', label: '' };
+  }
+
+  const parts = text
+    .split('/')
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  let color = null;
+  let size = null;
+
+  for (const part of parts) {
+    for (const attr of catalogAttributes) {
+      const values = attr.values ?? [];
+      if (!values.some((entry) => entry.value === part)) continue;
+      if (COLOR_ATTR_RE.test(String(attr.name ?? ''))) color = part;
+      else if (SIZE_ATTR_RE.test(String(attr.name ?? ''))) size = part;
+    }
+  }
+
+  if (!color && !size) {
+    if (parts.length === 1) {
+      color = parts[0];
+      size = 'واحد';
+    } else if (parts.length >= 2) {
+      [color, size] = parts;
+    }
+  } else if (color && !size) {
+    size = 'واحد';
+  }
+
+  return {
+    color: color ?? '—',
+    size: size ?? '—',
+    label: parts.join(' / '),
+  };
+}
+
+export function buildVariantFallbackLabel(variant) {
+  const qty = variant.total_quantity ?? variant.quantity ?? variant.stock;
+  const qtyText = qty != null && qty !== '' ? ` (${qty} قطعة)` : '';
+  return `تنوع #${variant.id}${qtyText}`;
+}
+
+export function extractProductVariants(raw) {
+  const variantsRaw = raw?.variants ?? raw?.product_variants ?? [];
+  return Array.isArray(variantsRaw) ? variantsRaw : [];
 }
 
 function buildProductFormData({ storeId, name, sku, description, price, categoryId, stock, imageFiles }) {
   const fd = new FormData();
-  if (storeId) fd.append('store_id', String(storeId));
-  fd.append('name', name);
-  if (sku) fd.append('sku', sku);
+  const resolvedStoreId = resolveProductStoreId(storeId);
+  if (!resolvedStoreId) {
+    throw new Error('لم يتم تحديد المتجر. يرجى تسجيل الدخول مرة أخرى.');
+  }
+  fd.append('store_id', String(resolvedStoreId));
+  fd.append('name', String(name).trim());
+  if (sku) fd.append('sku', String(sku).trim());
   if (description) fd.append('description', description);
-  fd.append('base_price', String(price));
+  fd.append('base_price', String(normalizeProductPrice(price)));
   fd.append('category_id', String(categoryId));
   if (stock !== '' && stock != null) fd.append('total_quantity', String(stock));
   if (imageFiles?.length) {
     imageFiles.forEach((file, index) => fd.append(`images[${index}]`, file));
   }
   return fd;
+}
+
+function extractCreatedProduct(res) {
+  const item = unwrapApiEntity(res);
+  if (!item?.id) {
+    throw new Error('تعذّر إنشاء المنتج: لم يُرجع الخادم معرف المنتج. تحقق من رسالة الخطأ أو أعد المحاولة.');
+  }
+  return mapProductFromDetails(item);
+}
+
+async function verifyCreatedProduct(productId) {
+  try {
+    const verified = await fetchProductDetails(productId);
+    if (verified?.id) return verified;
+  } catch {
+    // fallback below
+  }
+
+  throw new Error(
+    'تم إرسال الطلب لكن تعذّر التأكد من حفظ المنتج في الخادم. تحقق من قائمة المنتجات أو أعد المحاولة.',
+  );
 }
 
 /**
@@ -250,8 +402,8 @@ export async function createProduct(payload) {
     method: 'POST',
     body: fd,
   });
-  const item = res?.data ?? res;
-  return mapProductFromDetails(item);
+  const created = extractCreatedProduct(res);
+  return verifyCreatedProduct(created.id);
 }
 
 /**
@@ -288,19 +440,12 @@ export async function restoreProduct(id) {
 }
 
 /**
- * GET /api/products/{productId} — استخراج التنوعات المحفوظة من تفاصيل المنتج
- * يُعيد مصفوفة من التنوعات مع قيم الخصائص والسعر والكمية
+ * GET /api/products/{productId} — استخراج التنوعات من تفاصيل المنتج [5.3]
  */
 export async function fetchProductVariants(productId) {
-  const res = await apiRequest(`${API_ENDPOINTS.product(productId)}/variants`);
-  const item = res?.data ?? res;
-  const rawVariants = Array.isArray(item)
-    ? item
-    : Array.isArray(item?.variants)
-      ? item.variants
-      : Array.isArray(item?.data)
-        ? item.data
-        : [];
+  const res = await apiRequest(API_ENDPOINTS.product(productId));
+  const item = unwrapApiEntity(res);
+  const rawVariants = extractProductVariants(item);
 
   return rawVariants.map((v) => {
     const attrValues = Array.isArray(v.attribute_values)
@@ -312,7 +457,7 @@ export async function fetchProductVariants(productId) {
           : Array.isArray(v.values)
             ? v.values
             : [];
-    const label = attrValues.map((av) => av.value ?? av.name ?? String(av.id)).join(' / ');
+    const { label } = parseVariantColorSize(attrValues);
     // قد يُعيد الـ API inventory_summary أو current_shipment
     const inventory = v.inventory_summary ?? v.current_inventory ?? {};
     const selections = {};

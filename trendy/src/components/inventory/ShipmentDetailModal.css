@@ -271,6 +271,22 @@
 .status-badge.pending   { background: var(--bg-input); color: var(--text-secondary); }
 .status-badge.cancelled { background: rgba(239,68,68,0.12); color: #ef4444; }
 
+.archive-button {
+  margin-inline-end: auto;
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: 1px solid #ef4444;
+  background: transparent;
+  color: #ef4444;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.archive-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 @media (max-width: 600px) {
   .sdm-meta-grid {
     grid-template-columns: 1fr 1fr;

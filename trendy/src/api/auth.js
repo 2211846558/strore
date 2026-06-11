@@ -64,19 +64,30 @@ export function userCanChargeStoreWallet(user) {
   return !roles.includes('store_staff');
 }
 
+function collectAccessibleStoreIds(user) {
+  const owned = user?.owned_stores || user?.ownedStores || [];
+  const employed = user?.employed_stores || user?.employedStores || [];
+  const ids = [...owned, ...employed]
+    .map((store) => Number(store?.id))
+    .filter((id) => !Number.isNaN(id) && id > 0);
+
+  return [...new Set(ids)];
+}
+
 /**
- * معرف المتجر الذي يملكه مدير المتجر — مطابق لمنطق الباكند resolveManagedStoreId
+ * معرف المتجر النشط — مطابق لمنطق الباكند resolveActiveStoreId (ملكية + توظيف)
  */
 export function resolveManagedStoreId(user, explicitStoreId = null) {
   if (!user) return getStoredStoreId();
 
+  const accessibleIds = collectAccessibleStoreIds(user);
   const owned = user.owned_stores || user.ownedStores || [];
   const ownedIds = owned.map((store) => Number(store?.id)).filter((id) => !Number.isNaN(id) && id > 0);
 
   if (explicitStoreId != null && explicitStoreId !== '') {
     const id = Number(explicitStoreId);
     if (!Number.isNaN(id) && id > 0) {
-      if (ownedIds.length === 0 || ownedIds.includes(id)) return id;
+      if (accessibleIds.length === 0 || accessibleIds.includes(id)) return id;
     }
   }
 
@@ -84,9 +95,10 @@ export function resolveManagedStoreId(user, explicitStoreId = null) {
 
   const sessionStoreId = Number(user.store_id ?? getStoredStoreId());
   if (!Number.isNaN(sessionStoreId) && sessionStoreId > 0) {
-    if (ownedIds.length === 0 || ownedIds.includes(sessionStoreId)) return sessionStoreId;
+    if (accessibleIds.length === 0 || accessibleIds.includes(sessionStoreId)) return sessionStoreId;
   }
 
+  if (accessibleIds.length === 1) return accessibleIds[0];
   if (ownedIds.length > 0) return ownedIds[0];
 
   const activeStoreId = Number(getActiveStore(user)?.id);
@@ -103,6 +115,12 @@ function mergeUserSession(freshUser) {
     stored?.owned_stores ??
     stored?.ownedStores ??
     [];
+  const employed =
+    freshUser?.employed_stores ??
+    freshUser?.employedStores ??
+    stored?.employed_stores ??
+    stored?.employedStores ??
+    [];
 
   return {
     ...stored,
@@ -112,6 +130,8 @@ function mergeUserSession(freshUser) {
     roles: freshUser?.roles ?? stored?.roles ?? [],
     owned_stores: owned,
     ownedStores: owned,
+    employed_stores: employed,
+    employedStores: employed,
   };
 }
 

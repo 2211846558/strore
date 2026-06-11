@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Upload, ImageIcon, Layers } from 'lucide-react';
+import { getApiErrorMessage } from '../../api/stores';
 import './ProductModal.css';
 
 const ProductModal = ({
@@ -117,13 +118,17 @@ const ProductModal = ({
         stock: form.stock,
         imageFiles: newImages.map((img) => img.file),
       });
-      if (!isEdit && result) {
+      if (!isEdit && result?.id) {
         setSavedProduct(result);
+        return;
+      }
+      if (!isEdit && result && !result.id) {
+        setError('تعذّر إنشاء المنتج. تحقق من البيانات وحاول مرة أخرى.');
         return;
       }
       onClose();
     } catch (err) {
-      setError(err?.message || 'تعذّر حفظ المنتج.');
+      setError(getApiErrorMessage(err, 'تعذّر حفظ المنتج.'));
     }
   };
 

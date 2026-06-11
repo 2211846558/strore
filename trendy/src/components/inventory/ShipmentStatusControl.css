@@ -1,0 +1,17 @@
+.shipment-status-filter {
+  display: inline-flex;
+  min-width: 0;
+}
+
+.shipment-status-filter select {
+  min-width: 132px;
+  max-width: 170px;
+  padding: 8px 32px 8px 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.shipment-status-filter select:disabled {
+  opacity: 0.9;
+  cursor: default;
+}

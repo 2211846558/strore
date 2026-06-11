@@ -253,7 +253,6 @@ const ProductVariantModal = ({ isOpen, onClose, product, storeId, onVariantAdded
         try {
           const created = await createProductVariant(product.id, {
             storeId,
-            sku: `P${product.id}-${attributeValueIds.join('-')}`,
             attributeValueIds,
           });
           succeeded.push(created);

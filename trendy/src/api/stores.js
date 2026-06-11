@@ -23,6 +23,10 @@ const FIELD_LABELS = {
   batch_number: 'رقم الدفعة',
   selling_price: 'سعر البيع',
   unit_cost: 'سعر التكلفة',
+  base_price: 'السعر',
+  category_id: 'التصنيف',
+  sku: 'رمز SKU',
+  total_quantity: 'الكمية',
   role_id: 'الدور الوظيفي',
   job_title: 'المسمى الوظيفي',
   status: 'حالة الطلب',
@@ -226,11 +230,23 @@ export function getApiErrorMessage(error, fallback = 'تعذّر إرسال ال
     if (error?.status === 403 || /insufficient permissions/i.test(msg)) {
       return 'شحن المحفظة متاح لمدير المتجر فقط. سجّل الخروج ثم ادخل بحساب المدير (ليس حساب الموظف).';
     }
+    if (/store_inactive_subscription|يجب الاشتراك في خطة أولاً/i.test(msg)) {
+      return 'يجب الاشتراك في خطة نشطة قبل إضافة المنتجات.';
+    }
+    if (/name.*unique|اسم المنتج موجود/i.test(msg)) {
+      return 'اسم المنتج موجود مسبقاً في متجرك. اختر اسماً آخر.';
+    }
     if (/no such paymentmethod/i.test(msg)) {
       return 'طريقة الدفع غير صالحة. استخدم بطاقة بنكية عبر Stripe (ليس سداد).';
     }
     if (/no api key provided/i.test(msg) || /Stripe::setApiKey/i.test(msg)) {
       return 'بوابة الدفع غير مهيّأة على الخادم. يرجى التواصل مع الدعم الفني.';
+    }
+    if (/Unknown column ['"]?sku['"]?/i.test(msg) || /column not found.*sku/i.test(msg)) {
+      return 'تعذّر حفظ المنتج: قاعدة البيانات تحتاج تحديث. شغّل php artisan migrate على الباكند ثم أعد المحاولة.';
+    }
+    if (/sku.*unique|unique.*sku/i.test(msg) || /sku مستخدم/i.test(msg)) {
+      return 'رمز SKU مستخدم مسبقاً. اختر رمزاً آخر.';
     }
     if (/OrderController::show/i.test(msg) || /must be of type int, string given/i.test(msg)) {
       return 'تعذّر تحميل المحادثات. حاول مرة أخرى.';

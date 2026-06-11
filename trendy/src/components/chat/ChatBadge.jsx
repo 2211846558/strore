@@ -23,9 +23,9 @@ const ChatBadge = () => {
     try {
       const list = await fetchChats({ storeId });
       setChats(list);
-    } catch (err) {
-      setError(getApiErrorMessage(err, 'تعذّر تحميل المحادثات'));
+    } catch {
       setChats([]);
+      setError('');
     } finally {
       setLoading(false);
     }
@@ -143,11 +143,6 @@ const ChatBadge = () => {
               {loading ? (
                 <div className="chat-empty">
                   <p>جاري التحميل...</p>
-                </div>
-              ) : error ? (
-                <div className="chat-empty">
-                  <MessageCircle size={40} className="chat-empty-icon" />
-                  <p>تعذّر تحميل المحادثات</p>
                 </div>
               ) : chats.length === 0 ? (
                 <div className="chat-empty">

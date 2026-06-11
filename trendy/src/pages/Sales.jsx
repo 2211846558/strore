@@ -189,7 +189,13 @@ const Sales = () => {
       return;
     }
 
-    if (getVariantStock(product, color, size) <= 0) {
+    const availableStock = resolved.stockUnknown
+      ? 1
+      : Math.max(
+          Number(resolved.stock ?? 0),
+          Number(getVariantStock(product, color, size) ?? 0),
+        );
+    if (availableStock <= 0) {
       showToast('الكمية غير متوفرة لهذا التنوع');
       return;
     }
@@ -508,6 +514,7 @@ const Sales = () => {
           setPendingExchange(null);
         }}
         product={activeProduct}
+        storeId={storeId}
         onAdd={handleAddToCart}
         isSaving={isSaving}
         exchangeFrom={

@@ -84,6 +84,9 @@ const Products = () => {
   }, [loadProducts]);
 
   const handleSave = async (formData) => {
+    if (!storeId) {
+      throw new Error('لم يتم تحديد المتجر. يرجى تسجيل الدخول مرة أخرى.');
+    }
     setIsSaving(true);
     try {
       const payload = {
@@ -112,9 +115,28 @@ const Products = () => {
       }
 
       const created = await createProduct(payload);
-      setProducts((prev) => [created, ...prev]);
+
+      setSearchQuery('');
+      setDebouncedSearch('');
+      setCategoryFilter('all');
+      setStatusFilter('all');
+
+      const list = await fetchStoreProducts({
+        storeId,
+        name: '',
+        categoryId: 'all',
+        status: 'all',
+      });
+      setProducts(list);
+
+      const savedInList = list.some((p) => p.id === created.id);
+      if (!savedInList) {
+        throw new Error(
+          'تم حفظ المنتج لكنه لا يظهر في القائمة. تأكد من فلترة المتجر الصحيح في قاعدة البيانات (store_id).',
+        );
+      }
+
       showToast('تم إضافة المنتج بنجاح');
-      await loadProducts();
       return created;
     } finally {
       setIsSaving(false);

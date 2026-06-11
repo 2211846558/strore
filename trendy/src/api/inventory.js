@@ -1,6 +1,11 @@
 import { apiRequest } from './client';
 import { API_ENDPOINTS } from './config';
 import { fetchStoreProducts } from './products';
+import { getStoredUser, resolveManagedStoreId } from './auth';
+
+function resolveInventoryStoreId(storeId) {
+  return resolveManagedStoreId(getStoredUser(), storeId);
+}
 
 function extractList(res) {
   const payload = res?.data ?? res;
@@ -30,11 +35,43 @@ const STATUS_TO_AR = {
   received: 'مستلمة',
   cancelled: 'ملغاة',
   archived: 'مؤرشف',
+  finished: 'منتهية',
 };
+
+export const SHIPMENT_STATUS_FILTER_OPTIONS = [
+  { value: 'all', label: 'جميع الشحنات' },
+  { value: 'pending', label: 'قيد الانتظار' },
+  { value: 'received', label: 'مستلمة' },
+  { value: 'cancelled', label: 'ملغاة' },
+];
+
+/** خيارات تعديل الحالة — نفس فلتر الشحنات بدون «الكل» */
+export const SHIPMENT_STATUS_EDIT_OPTIONS = SHIPMENT_STATUS_FILTER_OPTIONS.filter(
+  (option) => option.value !== 'all',
+);
+
+export function resolveShipmentSelectStatus(statusRaw) {
+  const key = String(statusRaw ?? '').toLowerCase();
+  if (key === 'finished' || key === 'archived') return 'cancelled';
+  if (key === 'pending' || key === 'received' || key === 'cancelled') return key;
+  return 'pending';
+}
 
 function mapStatusToArabic(status) {
   const key = String(status ?? 'pending').toLowerCase();
   return STATUS_TO_AR[key] ?? status;
+}
+
+function resolveShipmentStatusRaw(row) {
+  const batchStatus = String(row?.status ?? '').toLowerCase();
+  const dynamicStatus = row?.dynamic_status;
+
+  if (batchStatus === 'cancelled' || dynamicStatus === 'ملغاة') return 'cancelled';
+  if (batchStatus === 'archived' || dynamicStatus === 'منتهية') return 'finished';
+  if (dynamicStatus === 'في الانتظار') return 'pending';
+  if (dynamicStatus === 'حالية') return 'received';
+  if (batchStatus === 'received') return 'received';
+  return 'pending';
 }
 
 function formatDate(value) {
@@ -44,14 +81,14 @@ function formatDate(value) {
   return date.toISOString().slice(0, 10);
 }
 
-function mapShipmentItem(item) {
+function mapShipmentItem(item, batchPrices = {}) {
   const variant = item.variant ?? item.product_variant ?? {};
   const product = variant.product ?? item.product ?? {};
   const attrs = variant.attribute_values ?? variant.attributes ?? item.attribute_values ?? [];
   const attrValues = attrs.map((a) => a.value ?? a.name).filter(Boolean);
 
   return {
-    id: item.id ?? `${variant.id}-${item.quantity}`,
+    id: item.id ?? null,
     variantId: item.variant_id ?? item.product_variant_id ?? variant.id ?? null,
     name: product.name ?? item.product_name ?? item.name ?? '—',
     category: product.category?.name ?? item.category ?? item.category_name ?? '—',
@@ -60,32 +97,47 @@ function mapShipmentItem(item) {
     variantLabel: item.variant_label ?? (attrValues.join(' / ') || variant.sku || '—'),
     quantity: Number(item.quantity ?? item.original_quantity ?? item.qty ?? 0),
     unitCost:
-      item.unit_cost ?? item.cost_price ?? item.unit_price ?? item.purchase_price ?? null,
+      item.unit_cost ??
+      item.cost_price ??
+      batchPrices.costPrice ??
+      item.unit_price ??
+      item.purchase_price ??
+      null,
     sellingPrice:
-      item.selling_price ?? item.sale_price ?? item.retail_price ?? null,
+      item.selling_price ??
+      item.sale_price ??
+      batchPrices.sellingPrice ??
+      item.retail_price ??
+      null,
+    variantStatus: item.status ?? null,
   };
 }
 
 export function mapShipment(row) {
-  const itemsRaw = row.items ?? row.lines ?? row.shipment_items ?? [];
-  const items = (Array.isArray(itemsRaw) ? itemsRaw : []).map(mapShipmentItem);
-  
-  let statusRaw = String(row.status ?? 'pending').toLowerCase();
-  if (row.dynamic_status === 'في الانتظار') {
-    statusRaw = 'pending';
-  } else if (row.dynamic_status === 'حالية') {
-    statusRaw = 'received';
-  }
+  const itemsRaw = row.items ?? row.lines ?? row.shipment_items ?? row.variant_shipments ?? [];
+  const batchPrices = {
+    costPrice: row.cost_price,
+    sellingPrice: row.selling_price,
+  };
+  const items = (Array.isArray(itemsRaw) ? itemsRaw : []).map((item) =>
+    mapShipmentItem(item, batchPrices),
+  );
+  const statusRaw = resolveShipmentStatusRaw(row);
 
   return {
     id: row.id,
-    code: row.shipment_number ?? row.code ?? row.reference ?? row.batch_number ?? `SH-${String(row.id).padStart(3, '0')}`,
+    code:
+      row.shipment_number ??
+      row.code ??
+      row.reference ??
+      row.batch_number ??
+      `SH-${String(row.id).padStart(3, '0')}`,
     batchNumber: row.batch_number ?? row.batchNumber ?? '',
-    productId: row.product_id ?? (items[0]?.variantId ? items[0].variantId : null),
+    productId: row.product_id ?? row.product?.id ?? null,
     costPrice: row.cost_price ?? '',
     sellingPrice: row.selling_price ?? '',
     supplierName: row.supplier_name ?? '',
-    date: formatDate(row.created_at ?? row.date ?? row.received_at),
+    date: formatDate(row.received_at ?? row.created_at ?? row.date),
     productsCount:
       row.products_count ??
       row.items_count ??
@@ -93,8 +145,10 @@ export function mapShipment(row) {
     totalQuantity:
       row.total_quantity ??
       items.reduce((sum, item) => sum + Number(item.quantity || 0), 0),
-    status: mapStatusToArabic(statusRaw),
+    status: mapStatusToArabic(resolveShipmentSelectStatus(statusRaw)),
     statusRaw,
+    dynamicStatus: row.dynamic_status ?? null,
+    batchStatus: row.status ?? null,
     items,
   };
 }
@@ -104,8 +158,6 @@ function buildShipmentItemsPayload(items) {
     const payloadItem = {
       variant_id: Number(item.variantId),
       quantity: Number(item.quantity),
-      cost_price: Number(item.unitCost),
-      selling_price: Number(item.sellingPrice),
     };
     if (item.id && /^\d+$/.test(String(item.id))) {
       payloadItem.id = Number(item.id);
@@ -114,16 +166,69 @@ function buildShipmentItemsPayload(items) {
   });
 }
 
-function buildShipmentBody({ storeId, items, batchNumber, supplierName, costPrice, sellingPrice }) {
+function buildShipmentBody({
+  storeId,
+  productId,
+  items,
+  batchNumber,
+  supplierName,
+  costPrice,
+  sellingPrice,
+}) {
+  const resolvedStoreId = resolveInventoryStoreId(storeId);
+  if (!resolvedStoreId) {
+    throw new Error('لم يتم تحديد المتجر. يرجى تسجيل الدخول مرة أخرى.');
+  }
+
   const body = {
+    store_id: resolvedStoreId,
     items: buildShipmentItemsPayload(items),
   };
-  if (storeId) body.store_id = storeId;
+
+  if (productId) body.product_id = Number(productId);
   if (batchNumber?.trim()) body.batch_number = batchNumber.trim();
   if (supplierName?.trim()) body.supplier_name = supplierName.trim();
-  if (costPrice !== undefined) body.cost_price = Number(costPrice);
-  if (sellingPrice !== undefined) body.selling_price = Number(sellingPrice);
+  if (costPrice !== undefined && costPrice !== '') body.cost_price = Number(costPrice);
+  if (sellingPrice !== undefined && sellingPrice !== '') body.selling_price = Number(sellingPrice);
+
   return body;
+}
+
+function normalizeShipmentStats(apiStats, fallbackShipments = []) {
+  const stats = apiStats || {};
+  return {
+    total: Number(stats.total ?? fallbackShipments.length ?? 0),
+    pending: Number(stats.pending ?? 0),
+    received: Number(stats.received ?? 0),
+    totalQty: Number(stats.total_qty ?? stats.totalQty ?? 0),
+  };
+}
+
+function matchesShipmentStatusFilter(shipment, status) {
+  if (!status || status === 'all') return true;
+
+  const uiStatus = resolveShipmentSelectStatus(shipment.statusRaw);
+  const batchStatus = String(shipment.batchStatus ?? '').toLowerCase();
+
+  if (status === 'cancelled') {
+    return (
+      uiStatus === 'cancelled' ||
+      shipment.statusRaw === 'finished' ||
+      batchStatus === 'archived' ||
+      batchStatus === 'cancelled'
+    );
+  }
+
+  if (status === 'pending' || status === 'received') {
+    return shipment.statusRaw === status;
+  }
+
+  return shipment.statusRaw === status || uiStatus === status;
+}
+
+function filterShipmentsByStatus(shipments, status) {
+  if (!status || status === 'all') return shipments;
+  return shipments.filter((shipment) => matchesShipmentStatusFilter(shipment, status));
 }
 
 function mapAttributeValues(attrs) {
@@ -187,37 +292,60 @@ export async function fetchInventory({
 }
 
 /**
- * GET /api/inventory/shipments
+ * GET /api/inventory/shipments — قائمة الشحنات مع البحث والفلترة
+ * query: store_id, search, status (cancelled|archived), per_page, page
  */
-export async function fetchShipments({ storeId, status = 'all', search } = {}) {
-  const query = new URLSearchParams();
-  if (storeId) query.set('store_id', String(storeId));
-  if (status && status !== 'all') query.set('status', String(status));
+export async function fetchShipments({
+  storeId,
+  status = 'all',
+  search,
+  perPage = 50,
+  page = 1,
+} = {}) {
+  const resolvedStoreId = resolveInventoryStoreId(storeId);
+  const query = new URLSearchParams({
+    per_page: String(perPage),
+    page: String(page),
+  });
+  if (resolvedStoreId) query.set('store_id', String(resolvedStoreId));
   if (search?.trim()) query.set('search', search.trim());
 
+  // الفلترة تتم من الواجهة — الباك يخزن الملغاة غالباً كـ archived وليس cancelled
   const res = await apiRequest(`${API_ENDPOINTS.inventoryShipments}?${query}`);
-  const payload = res?.data ?? res;
+  const shipmentsRaw = extractList(res);
+  const allShipments = shipmentsRaw.map(mapShipment);
+  const shipments = filterShipmentsByStatus(allShipments, status);
 
-  const shipmentsRaw = Array.isArray(payload.data) ? payload.data : (Array.isArray(payload) ? payload : []);
-  const shipments = shipmentsRaw.map(mapShipment);
-
-  const stats = payload.stats || {
-    total: shipments.length,
-    pending: shipments.filter((s) => s.statusRaw === 'pending').length,
-    received: shipments.filter((s) => s.statusRaw === 'received').length,
-    totalQty: shipments.reduce((sum, s) => sum + Number(s.totalQuantity || 0), 0),
+  return {
+    shipments,
+    stats: normalizeShipmentStats(res?.stats, allShipments),
+    meta: res?.meta ?? null,
   };
-
-  return { shipments, stats };
 }
 
 /**
  * POST /api/inventory/shipments
  */
-export async function createShipment({ storeId, items, batchNumber, supplierName, costPrice, sellingPrice }) {
+export async function createShipment({
+  storeId,
+  productId,
+  items,
+  batchNumber,
+  supplierName,
+  costPrice,
+  sellingPrice,
+}) {
   const res = await apiRequest(API_ENDPOINTS.inventoryShipments, {
     method: 'POST',
-    body: buildShipmentBody({ storeId, items, batchNumber, supplierName, costPrice, sellingPrice }),
+    body: buildShipmentBody({
+      storeId,
+      productId,
+      items,
+      batchNumber,
+      supplierName,
+      costPrice,
+      sellingPrice,
+    }),
   });
   const row = res?.data ?? res;
   return mapShipment(row);
@@ -226,28 +354,154 @@ export async function createShipment({ storeId, items, batchNumber, supplierName
 /**
  * PUT /api/inventory/shipments/{id}
  */
-export async function updateShipment(id, { storeId, items, batchNumber, supplierName, costPrice, sellingPrice }) {
+export async function updateShipment(
+  id,
+  { storeId, productId, items, batchNumber, supplierName, costPrice, sellingPrice },
+) {
   const res = await apiRequest(API_ENDPOINTS.inventoryShipment(id), {
     method: 'PUT',
-    body: buildShipmentBody({ storeId, items, batchNumber, supplierName, costPrice, sellingPrice }),
+    body: buildShipmentBody({
+      storeId,
+      productId,
+      items,
+      batchNumber,
+      supplierName,
+      costPrice,
+      sellingPrice,
+    }),
   });
   const row = res?.data ?? res;
   return mapShipment(row);
 }
 
-/**
- * إلغاء شحنة — لا يوجد DELETE في api.md، نستخدم PUT مع status=cancelled
- */
-export async function cancelShipment(id, { storeId } = {}) {
-  const body = { status: 'cancelled' };
-  if (storeId) body.store_id = storeId;
+async function refreshShipmentRow(shipment, { storeId } = {}) {
+  const resolvedStoreId = resolveInventoryStoreId(storeId);
+  const result = await fetchShipments({ storeId: resolvedStoreId, perPage: 100 });
+  return result.shipments.find((row) => row.id === shipment.id) ?? shipment;
+}
 
-  const res = await apiRequest(API_ENDPOINTS.inventoryShipment(id), {
-    method: 'PUT',
-    body,
-  });
-  const row = res?.data ?? res;
-  return mapShipment(row);
+/**
+ * استعادة شحنة مؤرشفة — POST /api/inventory/adjust (تبديل حالة الأصناف)
+ */
+export async function restoreShipment(shipment, { storeId } = {}) {
+  const resolvedStoreId = resolveInventoryStoreId(storeId);
+  const items = (shipment?.items || []).filter(
+    (item) => item.id && /^\d+$/.test(String(item.id)) && item.variantStatus === 'archived',
+  );
+
+  if (!items.length) {
+    throw new Error('لا توجد أصناف مؤرشفة لاستعادتها في هذه الشحنة.');
+  }
+
+  for (const item of items) {
+    await adjustInventory({
+      variantShipmentId: item.id,
+      reason: `استعادة شحنة ${shipment.code || shipment.batchNumber || shipment.id}`,
+      storeId: resolvedStoreId,
+    });
+  }
+
+  return refreshShipmentRow(shipment, { storeId: resolvedStoreId });
+}
+
+/**
+ * جعل الشحنة «مستلمة / حالية» — أرشفة الشحنة النشطة الأقدم لنفس المنتج عبر adjust
+ */
+async function promoteShipmentToActive(shipment, { storeId } = {}) {
+  const resolvedStoreId = resolveInventoryStoreId(storeId);
+  const productId = shipment.productId;
+
+  if (!productId) {
+    throw new Error('تعذّر تحديد المنتج المرتبط بالشحنة.');
+  }
+
+  if (shipment.statusRaw === 'finished') {
+    await restoreShipment(shipment, { storeId: resolvedStoreId });
+  }
+
+  const result = await fetchShipments({ storeId: resolvedStoreId, perPage: 100 });
+  const currentActive = result.shipments.find(
+    (row) => row.productId === productId && row.statusRaw === 'received' && row.id !== shipment.id,
+  );
+
+  if (currentActive) {
+    await archiveShipment(currentActive, { storeId: resolvedStoreId });
+  }
+
+  return refreshShipmentRow(shipment, { storeId: resolvedStoreId });
+}
+
+/**
+ * تعديل حالة الشحنة — يعتمد على POST /api/inventory/adjust وإدارة ترتيب FIFO
+ */
+export async function updateShipmentStatus(shipment, targetStatus, { storeId } = {}) {
+  if (!shipment?.id) {
+    throw new Error('الشحنة غير صالحة.');
+  }
+
+  const target = resolveShipmentSelectStatus(targetStatus);
+  const current = resolveShipmentSelectStatus(shipment.statusRaw);
+
+  if (current === target) {
+    return shipment;
+  }
+
+  if (target === 'cancelled') {
+    await archiveShipment(shipment, { storeId });
+    return refreshShipmentRow(shipment, { storeId });
+  }
+
+  if (target === 'received') {
+    let working = shipment;
+    const raw = String(shipment.statusRaw ?? '').toLowerCase();
+    if (raw === 'finished' || raw === 'cancelled') {
+      working = await restoreShipment(shipment, { storeId });
+    }
+    return promoteShipmentToActive(working, { storeId });
+  }
+
+  if (target === 'pending') {
+    const raw = String(shipment.statusRaw ?? '').toLowerCase();
+    if (raw === 'finished' || raw === 'cancelled') {
+      return restoreShipment(shipment, { storeId });
+    }
+    if (raw === 'received') {
+      await archiveShipment(shipment, { storeId });
+      return refreshShipmentRow(shipment, { storeId });
+    }
+    return shipment;
+  }
+
+  throw new Error('حالة الشحنة غير مدعومة.');
+}
+
+/** @deprecated استخدم SHIPMENT_STATUS_EDIT_OPTIONS */
+export function getShipmentStatusChangeOptions() {
+  return SHIPMENT_STATUS_EDIT_OPTIONS;
+}
+
+/**
+ * أرشفة شحنة عبر POST /api/inventory/adjust لكل تنوع داخلها
+ */
+export async function archiveShipment(shipment, { storeId } = {}) {
+  const resolvedStoreId = resolveInventoryStoreId(storeId);
+  const items = (shipment?.items || []).filter(
+    (item) => item.id && /^\d+$/.test(String(item.id)) && item.variantStatus !== 'archived',
+  );
+
+  if (!items.length) {
+    throw new Error('لا توجد أصناف نشطة في هذه الشحنة لأرشفتها.');
+  }
+
+  for (const item of items) {
+    await adjustInventory({
+      variantShipmentId: item.id,
+      reason: `أرشفة شحنة ${shipment.code || shipment.batchNumber || shipment.id}`,
+      storeId: resolvedStoreId,
+    });
+  }
+
+  return refreshShipmentRow(shipment, { storeId: resolvedStoreId });
 }
 
 /**
@@ -300,15 +554,15 @@ export function saveRecentShipment(storeId, shipment) {
 }
 
 /**
- * POST /inventory/adjust — تعديل المخزون يدوياً
+ * POST /inventory/adjust — أرشفة/استعادة صنف داخل شحنة
  */
-export async function adjustInventory({ variantId, quantity, reason, storeId }) {
+export async function adjustInventory({ variantShipmentId, reason, storeId }) {
+  const resolvedStoreId = resolveInventoryStoreId(storeId);
   const body = {
-    variant_id: Number(variantId),
-    quantity: Number(quantity),
+    variant_shipment_id: Number(variantShipmentId),
     reason: reason?.trim() || 'تعديل يدوي من لوحة المتجر',
   };
-  if (storeId) body.store_id = storeId;
+  if (resolvedStoreId) body.store_id = resolvedStoreId;
 
   const res = await apiRequest(API_ENDPOINTS.inventoryAdjust, {
     method: 'POST',
