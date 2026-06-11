@@ -68,7 +68,8 @@ function mapOrderItem(item) {
 function isPosOrder(row) {
   const number = String(row.order_number ?? row.code ?? '');
   const type = String(row.order_type ?? row.type ?? '').toLowerCase();
-  return number.includes('POS') || type === 'pos' || type === 'past';
+  const channel = String(row.sales_channel ?? '').toLowerCase();
+  return number.includes('POS') || type === 'pos' || type === 'past' || channel === 'pos';
 }
 
 export function mapOrder(row) {
@@ -76,13 +77,15 @@ export function mapOrder(row) {
   const products = (Array.isArray(itemsRaw) ? itemsRaw : []).map(mapOrderItem);
   const statusRaw = String(row.status ?? 'pending').toLowerCase();
   const status = mapStatusToArabic(statusRaw);
+  const isPos = isPosOrder(row);
 
   return {
     id: row.order_number ?? row.code ?? `ORD-${row.id}`,
     orderId: row.id,
     date: formatDate(row.created_at ?? row.date ?? row.ordered_at),
-    customerName:
-      row.customer_name ?? row.customer?.name ?? row.user?.name ?? row.buyer_name ?? '—',
+    customerName: isPos
+      ? (row.cashier_name ?? row.seller?.name ?? 'الموظف')
+      : (row.customer_name ?? row.customer?.name ?? row.user?.name ?? row.buyer_name ?? '—'),
     phone:
       row.customer_phone ??
       row.phone ??
@@ -101,6 +104,7 @@ export function mapOrder(row) {
     statusRaw,
     paymentMethod: row.payment_method ?? row.payment_method_name ?? null,
     notes: row.notes ?? row.cancellation_reason ?? null,
+    isPos,
     raw: row,
   };
 }

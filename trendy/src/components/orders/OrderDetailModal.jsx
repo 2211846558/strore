@@ -19,15 +19,19 @@ const OrderDetailModal = ({ isOpen, onClose, order, loading = false }) => {
           <div className="order-detail-loading">جاري تحميل التفاصيل...</div>
         ) : order ? (
           <div className="order-detail-body">
-            <div className="order-detail-row two-cols">
+            <div className={`order-detail-row ${order.isPos ? '' : 'two-cols'}`}>
               <div className="order-detail-field">
-                <span className="order-detail-label">اسم العميل</span>
+                <span className="order-detail-label">
+                  {order.isPos ? 'بواسطة الموظف' : 'اسم العميل'}
+                </span>
                 <strong>{order.customerName}</strong>
               </div>
-              <div className="order-detail-field">
-                <span className="order-detail-label">رقم الهاتف</span>
-                <strong>{order.phone}</strong>
-              </div>
+              {!order.isPos && (
+                <div className="order-detail-field">
+                  <span className="order-detail-label">رقم الهاتف</span>
+                  <strong>{order.phone}</strong>
+                </div>
+              )}
             </div>
 
             <div className="order-detail-field">
