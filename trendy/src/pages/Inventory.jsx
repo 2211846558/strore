@@ -73,7 +73,7 @@ const Inventory = () => {
 
   useEffect(() => {
     loadShipments();
-  }, [loadShipments]);
+  }, []);
 
   /* ── فلترة من خلال الخادم ── */
   const filteredShipments = allShipments;
