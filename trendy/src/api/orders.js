@@ -93,11 +93,20 @@ export function mapOrder(row) {
       row.user?.phone ??
       '—',
     address:
-      row.shipping_address ??
-      row.delivery_address ??
-      row.address ??
-      row.shipping_address_text ??
-      '—',
+      row.shipping_address && typeof row.shipping_address === 'object'
+        ? [
+            row.shipping_address.address_line_1,
+            row.shipping_address.address_line_2,
+            row.shipping_address.city,
+            row.shipping_address.zone_name ?? row.shipping_address.zone?.name,
+          ]
+            .filter(Boolean)
+            .join('، ') || '—'
+        : (row.shipping_address ??
+           row.delivery_address ??
+           row.address ??
+           row.shipping_address_text ??
+           '—'),
     products,
     total: Number(row.total ?? row.total_amount ?? row.grand_total ?? 0),
     status,
@@ -211,6 +220,7 @@ export async function confirmOrderDelivery(id) {
 }
 
 export function canPrepareOrder(order) {
+  if (order?.isPos) return false;
   const raw = String(order?.statusRaw ?? order?.status ?? '').toLowerCase();
   return ['pending', 'new', 'processing'].includes(raw) || order?.status === 'جديد';
 }

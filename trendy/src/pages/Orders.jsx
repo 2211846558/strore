@@ -8,10 +8,8 @@ import {
   updateOrderStatus,
   cancelOrder,
   prepareOrder,
-  confirmOrderDelivery,
   canCancelOrderStatus,
   canPrepareOrder,
-  canConfirmDelivery,
 } from '../api/orders';
 import { getApiErrorMessage } from '../api/stores';
 import { useAuth } from '../context/AuthContext';
@@ -50,12 +48,15 @@ const Orders = () => {
     setLoading(true);
     setError('');
     try {
-      const list = await fetchAllOrders({
+      let list = await fetchAllOrders({
         storeId,
         search: debouncedSearch,
         status: statusFilter,
         excludePos: false,
       });
+      if (statusFilter === 'جديد') {
+        list = list.filter((order) => !order.isPos);
+      }
       setOrders(list);
     } catch (err) {
       setError(getApiErrorMessage(err, 'تعذّر تحميل الطلبات'));
@@ -114,20 +115,6 @@ const Orders = () => {
       await loadOrders();
     } catch (err) {
       showToast(getApiErrorMessage(err, 'تعذّر تجهيز الطلب'));
-    } finally {
-      setActionId(null);
-    }
-  };
-
-  const handleConfirmDelivery = async (order) => {
-    if (!order || !canConfirmDelivery(order)) return;
-    setActionId(order.orderId);
-    try {
-      await confirmOrderDelivery(order.orderId);
-      showToast(`تم تأكيد تسليم الطلب ${order.id}`);
-      await loadOrders();
-    } catch (err) {
-      showToast(getApiErrorMessage(err, 'تعذّر تأكيد التسليم'));
     } finally {
       setActionId(null);
     }
@@ -203,8 +190,17 @@ const Orders = () => {
                   )}
                 </div>
                 <div className="order-detail-item">
-                  <span className="label">المنتجات</span>
-                  <span className="value">{order.products.length} منتج</span>
+                  <span className="label">المنتج</span>
+                  <span className="value">
+                    {(() => {
+                      const count = (order.products ?? []).reduce((sum, p) => sum + (p.quantity ?? 1), 0);
+                      if (count === 0) return 'لا توجد منتجات';
+                      if (count === 1) return 'منتج واحد';
+                      if (count === 2) return 'منتجان';
+                      if (count >= 3 && count <= 10) return `${count} منتجات`;
+                      return `${count} منتج`;
+                    })()}
+                  </span>
                 </div>
                 <div className="order-detail-item">
                   <span className="label">الإجمالي</span>
@@ -222,12 +218,21 @@ const Orders = () => {
                   عرض التفاصيل
                 </button>
 
-                <OrderDropdown
-                  className="compact"
-                  value={order.status}
-                  options={ORDER_STATUSES}
-                  onChange={(status) => handleStatusChange(order, status)}
-                />
+                {canPrepareOrder(order) ? (
+                  <OrderDropdown
+                    className="compact"
+                    value={order.status}
+                    options={ORDER_STATUSES}
+                    onChange={(status) => handleStatusChange(order, status)}
+                  />
+                ) : (
+                  <span
+                    className={`order-status-badge ${getStatusBadgeClass(order.status)}`}
+                    style={{ padding: '10px 16px', borderRadius: '10px', display: 'inline-flex', alignItems: 'center' }}
+                  >
+                    حالة الطلب: {order.status}
+                  </span>
+                )}
 
                 {canPrepareOrder(order) && (
                   <button
@@ -237,17 +242,6 @@ const Orders = () => {
                     disabled={actionId === order.orderId}
                   >
                     تجهيز الطلب
-                  </button>
-                )}
-
-                {canConfirmDelivery(order) && (
-                  <button
-                    type="button"
-                    className="order-btn-view"
-                    onClick={() => handleConfirmDelivery(order)}
-                    disabled={actionId === order.orderId}
-                  >
-                    تأكيد التسليم
                   </button>
                 )}
 
