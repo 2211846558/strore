@@ -212,7 +212,7 @@ export async function fetchStoreRatings(storeId) {
 
 export function getApiErrorMessage(error, fallback = 'تعذّر إرسال الطلب، حاول مرة أخرى') {
   if (error?.isNetworkError) {
-    return 'تعذّر الاتصال بالخادم. شغّل الباكند (php artisan serve) وتأكد أن VITE_API_BASE_URL=http://localhost:8000/api في ملف .env';
+    return 'تعذّر الاتصال بالخادم. تأكد من تشغيل الباكند على المنفذ 8000 ثم حدّث الصفحة.';
   }
   if (error?.errors && typeof error.errors === 'object') {
     const entries = Object.entries(error.errors);

@@ -4,7 +4,7 @@
  */
 export function getBackendOrigin() {
   const apiBase = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') || '';
-  if (apiBase) {
+  if (apiBase.startsWith('http://') || apiBase.startsWith('https://')) {
     return apiBase.replace(/\/api\/?$/, '') || apiBase;
   }
   return typeof window !== 'undefined' ? window.location.origin : '';
