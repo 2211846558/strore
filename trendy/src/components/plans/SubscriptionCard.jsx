@@ -2,7 +2,16 @@ import React from 'react';
 import { CreditCard } from 'lucide-react';
 import './SubscriptionCard.css';
 
-const SubscriptionCard = ({ title, price, status, dateRange, statusText, isExpired, onRenew }) => {
+const SubscriptionCard = ({
+  title,
+  price,
+  status,
+  durationDays,
+  remainingDays,
+  statusText,
+  isExpired,
+  onRenew,
+}) => {
   return (
     <div className={`subscription-card ${isExpired ? 'expired' : 'active'}`}>
       <div className="sub-header">
@@ -13,7 +22,10 @@ const SubscriptionCard = ({ title, price, status, dateRange, statusText, isExpir
           </span>
         </div>
         <div className="sub-date">
-          من {dateRange.start} إلى {dateRange.end}
+          <span>مدة الخطة: {durationDays} يوم</span>
+          {!isExpired && remainingDays != null && (
+            <span className="sub-remaining">متبقي {remainingDays} يوم</span>
+          )}
         </div>
       </div>
 

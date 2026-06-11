@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { X, AlertTriangle } from 'lucide-react';
 import ConfirmDialog from '../common/ConfirmDialog';
-import { fetchShipmentCatalog, suggestBatchNumber } from '../../api/inventory';
-import { fetchProductVariants } from '../../api/products';
+import {
+  fetchShipmentCatalog,
+  fetchEnrichedProductVariants,
+  suggestBatchNumber,
+} from '../../api/inventory';
 import { getApiErrorMessage } from '../../api/stores';
 import { ARCHIVE_SHIPMENT_CONFIRM } from './shipmentStatusConfirm';
 import './AddShipmentModal.css';
@@ -83,9 +86,26 @@ const AddShipmentModal = ({
 
     setLoadingVariants(true);
     setError('');
-    fetchProductVariants(selectedProductId)
-      .then((variants) => {
-        setVariantsList(variants);
+    fetchEnrichedProductVariants(selectedProductId, { storeId })
+      .then(({ variants }) => {
+        const enrichedVariants = variants.map((variant) => {
+          const fromInitial =
+            initialData && Array.isArray(initialData.items)
+              ? initialData.items.find(
+                  (item) => String(item.variantId) === String(variant.id),
+                )
+              : null;
+          const initialLabel = fromInitial?.variantLabel;
+          if (
+            initialLabel &&
+            initialLabel !== '—' &&
+            !/^تنوع #\d+$/.test(String(initialLabel).trim())
+          ) {
+            return { ...variant, label: initialLabel };
+          }
+          return variant;
+        });
+        setVariantsList(enrichedVariants);
         // Pre-fill quantities
         const initialQtys = {};
         variants.forEach((v) => {
@@ -102,7 +122,7 @@ const AddShipmentModal = ({
         setQuantities({});
       })
       .finally(() => setLoadingVariants(false));
-  }, [selectedProductId, initialData]);
+  }, [selectedProductId, initialData, storeId]);
 
   const selectedProduct = catalog.find((p) => String(p.id) === String(selectedProductId));
 

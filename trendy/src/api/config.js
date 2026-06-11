@@ -27,6 +27,7 @@ export const API_ENDPOINTS = {
   logout: STORE_AUTH_ENDPOINTS.logout,
   plans: '/plans',
   campaigns: '/campaigns',
+  campaign: (id) => `/campaigns/${id}`,
   catalogCategories: '/catalog/categories',
   catalogAttributes: '/catalog/attributes',
   myStoreProducts: '/my-store/products',

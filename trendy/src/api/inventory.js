@@ -1,6 +1,13 @@
 import { apiRequest } from './client';
 import { API_ENDPOINTS } from './config';
-import { fetchStoreProducts } from './products';
+import {
+  fetchStoreProducts,
+  fetchAttributes,
+  fetchProductVariants,
+  mapProductVariant,
+  getCachedVariantLabel,
+  parseAttributesString,
+} from './products';
 import { getStoredUser, resolveManagedStoreId } from './auth';
 
 function resolveInventoryStoreId(storeId) {
@@ -81,20 +88,46 @@ function formatDate(value) {
   return date.toISOString().slice(0, 10);
 }
 
-function mapShipmentItem(item, batchPrices = {}) {
+function mapShipmentItem(item, batchPrices = {}, enrichment = {}) {
   const variant = item.variant ?? item.product_variant ?? {};
   const product = variant.product ?? item.product ?? {};
+  const productId =
+    product.id ??
+    item.product_id ??
+    variant.product_id ??
+    enrichment.shipmentProductId ??
+    null;
+  const variantId = item.variant_id ?? item.product_variant_id ?? variant.id ?? null;
   const attrs = variant.attribute_values ?? variant.attributes ?? item.attribute_values ?? [];
   const attrValues = attrs.map((a) => a.value ?? a.name).filter(Boolean);
+  const catalogAttributes = enrichment.catalogAttributes ?? [];
+  const inventoryRow = enrichment.inventoryByVariantId?.[String(variantId)];
+
+  let variantLabel =
+    item.variant_label ??
+    (attrValues.length ? attrValues.join(' / ') : null) ??
+    (productId && variantId ? getCachedVariantLabel(productId, variantId, catalogAttributes) : null);
+
+  if (!variantLabel && inventoryRow?.attributes && inventoryRow.attributes !== '—') {
+    variantLabel = parseAttributesString(inventoryRow.attributes, catalogAttributes).label || inventoryRow.attributes;
+  }
+
+  if (!variantLabel) {
+    variantLabel = variant.sku || (variantId ? `تنوع #${variantId}` : '—');
+  }
+
+  const parsedAttrs = variantLabel.includes('/')
+    ? variantLabel.split('/').map((part) => part.trim())
+    : attrValues;
 
   return {
     id: item.id ?? null,
-    variantId: item.variant_id ?? item.product_variant_id ?? variant.id ?? null,
+    variantId,
     name: product.name ?? item.product_name ?? item.name ?? '—',
     category: product.category?.name ?? item.category ?? item.category_name ?? '—',
-    color: item.color ?? attrValues[0] ?? '—',
-    size: item.size ?? attrValues[1] ?? '—',
-    variantLabel: item.variant_label ?? (attrValues.join(' / ') || variant.sku || '—'),
+    color: item.color ?? parsedAttrs[0] ?? attrValues[0] ?? '—',
+    size: item.size ?? parsedAttrs[1] ?? attrValues[1] ?? '—',
+    variantLabel,
     quantity: Number(item.quantity ?? item.original_quantity ?? item.qty ?? 0),
     unitCost:
       item.unit_cost ??
@@ -113,14 +146,18 @@ function mapShipmentItem(item, batchPrices = {}) {
   };
 }
 
-export function mapShipment(row) {
+export function mapShipment(row, enrichment = {}) {
   const itemsRaw = row.items ?? row.lines ?? row.shipment_items ?? row.variant_shipments ?? [];
   const batchPrices = {
     costPrice: row.cost_price,
     sellingPrice: row.selling_price,
   };
+  const shipmentProductId = row.product_id ?? row.product?.id ?? null;
   const items = (Array.isArray(itemsRaw) ? itemsRaw : []).map((item) =>
-    mapShipmentItem(item, batchPrices),
+    mapShipmentItem(item, batchPrices, {
+      ...enrichment,
+      shipmentProductId,
+    }),
   );
   const statusRaw = resolveShipmentStatusRaw(row);
 
@@ -239,8 +276,15 @@ function mapShipmentStatusFilterToApi(status) {
 }
 
 function mapAttributeValues(attrs) {
+  if (typeof attrs === 'string' && attrs.trim()) {
+    return attrs
+      .split('/')
+      .map((part) => part.trim())
+      .filter(Boolean);
+  }
+
   return (Array.isArray(attrs) ? attrs : [])
-    .map((a) => a.value ?? a.name)
+    .map((a) => (typeof a === 'string' ? a : a.value ?? a.name))
     .filter(Boolean);
 }
 
@@ -248,15 +292,20 @@ function mapAttributeValues(attrs) {
  * GET /inventory — صف واحد = تنوع منتج + كمية المخزون (ليس شحنة)
  */
 export function mapInventoryRow(row) {
-  const attrValues = mapAttributeValues(row.attributes ?? row.attribute_values);
+  const rawAttrs = row.attributes ?? row.attribute_values ?? row.variant_attributes;
+  const attrValues = mapAttributeValues(rawAttrs);
   const statusAlert = String(row.status_alert ?? 'available').toLowerCase();
+  const attributesText =
+    attrValues.join(' / ') ||
+    (typeof rawAttrs === 'string' && rawAttrs.trim() ? rawAttrs.trim() : '—');
 
   return {
     id: row.variant_id ?? row.id,
     variantId: row.variant_id ?? row.id,
     productName: row.product_name ?? row.name ?? '—',
     sku: row.sku ?? '—',
-    attributes: attrValues.join(' / ') || '—',
+    attributes: attributesText,
+    attributeValues: rawAttrs,
     totalStock: Number(row.total_stock ?? row.total_current_stock ?? 0),
     displayPrice: Number(row.display_price ?? row.fifo_display_price ?? 0),
     cachedPrice: Number(row.cached_price ?? row.price ?? 0),
@@ -323,7 +372,8 @@ export async function fetchShipments({
 
   const res = await apiRequest(`${API_ENDPOINTS.inventoryShipments}?${query}`);
   const shipmentsRaw = extractList(res);
-  const allShipments = shipmentsRaw.map(mapShipment);
+  const enrichment = await loadVariantEnrichmentContext({ storeId: resolvedStoreId });
+  const allShipments = shipmentsRaw.map((row) => mapShipment(row, enrichment));
   const shipments = filterShipmentsByStatus(allShipments, status);
 
   return {
@@ -590,36 +640,91 @@ function resolveCategoryName(raw, product) {
   return '—';
 }
 
+export async function loadVariantEnrichmentContext({ storeId } = {}) {
+  const [attrs, inventoryResult] = await Promise.all([
+    fetchAttributes({ perPage: 100 }).catch(() => []),
+    fetchInventory({ perPage: 500, storeId }).catch(() => ({ items: [] })),
+  ]);
+
+  const catalogAttributes = attrs.filter((attr) => attr.values?.length > 0);
+  const inventoryByVariantId = Object.fromEntries(
+    (inventoryResult.items ?? []).map((row) => [
+      String(row.variantId ?? row.id),
+      row,
+    ]),
+  );
+
+  return { catalogAttributes, inventoryByVariantId };
+}
+
+function isFallbackVariantLabel(label) {
+  return /^تنوع #\d+$/.test(String(label ?? '').trim());
+}
+
+async function enrichUnresolvedVariantLabels(variants, catalogAttributes) {
+  const unresolved = variants.filter((variant) => isFallbackVariantLabel(variant.label));
+  if (!unresolved.length) return variants;
+
+  const resolved = await Promise.all(
+    unresolved.map(async (variant) => {
+      try {
+        const inv = await fetchInventoryVariant(variant.id);
+        const attributeText =
+          inv.attributes && inv.attributes !== '—'
+            ? inv.attributes
+            : mapAttributeValues(inv.attributeValues).join(' / ') || null;
+        if (!attributeText) return variant;
+
+        const remapped = mapProductVariant(
+          { id: variant.id, total_quantity: variant.quantity },
+          catalogAttributes,
+          { attributeText },
+        );
+        if (isFallbackVariantLabel(remapped.label)) return variant;
+        return { ...variant, ...remapped };
+      } catch {
+        return variant;
+      }
+    }),
+  );
+
+  const resolvedById = Object.fromEntries(resolved.map((variant) => [String(variant.id), variant]));
+  return variants.map((variant) => resolvedById[String(variant.id)] ?? variant);
+}
+
+export async function fetchEnrichedProductVariants(productId, { storeId } = {}) {
+  const enrichment = await loadVariantEnrichmentContext({ storeId });
+  let variants = await fetchProductVariants(productId, enrichment);
+  variants = await enrichUnresolvedVariantLabels(variants, enrichment.catalogAttributes);
+  return { variants, ...enrichment };
+}
+
 /**
  * جلب منتجات المتجر مع تنوعاتها لنموذج الشحنة
  */
 export async function fetchShipmentCatalog({ storeId } = {}) {
   const products = await fetchStoreProducts({ storeId, status: 'active', perPage: 100 });
+  const { catalogAttributes, inventoryByVariantId } = await loadVariantEnrichmentContext({ storeId });
   const catalog = [];
 
   for (const product of products) {
     try {
-      const res = await apiRequest(API_ENDPOINTS.product(product.id));
-      const raw = res?.data ?? res;
-      const variantsRaw = raw.variants ?? raw.product_variants ?? [];
-
-      const variants = (Array.isArray(variantsRaw) ? variantsRaw : []).map((variant) => {
-        const attrs = variant.attribute_values ?? variant.attributes ?? [];
-        const label = attrs.map((a) => a.value ?? a.name).filter(Boolean).join(' / ');
-        return {
-          id: variant.id,
-          sku: variant.sku ?? '',
-          label: label || variant.sku || `تنوع #${variant.id}`,
-        };
+      const variants = await fetchProductVariants(product.id, {
+        catalogAttributes,
+        inventoryByVariantId,
       });
 
       if (variants.length) {
         catalog.push({
           id: product.id,
-          name: raw.name ?? product.name,
-          category: resolveCategoryName(raw, product),
-          price: String(raw.base_price ?? product.price ?? ''),
-          variants,
+          name: product.name,
+          category: typeof product.category === 'string' ? product.category : '—',
+          price: String(product.price ?? ''),
+          variants: variants.map((variant) => ({
+            id: variant.id,
+            sku: variant.sku ?? '',
+            label: variant.label,
+          })),
         });
       }
     } catch {

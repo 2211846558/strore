@@ -9,6 +9,9 @@ import {
   mapPlanFromApi,
   mapStoreSubscription,
   extractStoreFromSubscriptionResponse,
+  resolveStoreSubscriptionDetails,
+  persistLocalSubscription,
+  buildSubscriptionPeriod,
 } from '../api/plans';
 import { getApiErrorMessage } from '../api/stores';
 import { useAuth } from '../context/AuthContext';
@@ -23,6 +26,7 @@ const Plans = ({ onboarding = false }) => {
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [subscribeAction, setSubscribeAction] = useState('subscribe');
   const [availablePlans, setAvailablePlans] = useState([]);
+  const [subscriptionDates, setSubscriptionDates] = useState(null);
   const [loadingPlans, setLoadingPlans] = useState(true);
   const [plansError, setPlansError] = useState('');
   const [toast, setToast] = useState(null);
@@ -50,9 +54,29 @@ const Plans = ({ onboarding = false }) => {
     };
   }, []);
 
+  useEffect(() => {
+    if (!store || !storeId) {
+      setSubscriptionDates(null);
+      return;
+    }
+
+    let cancelled = false;
+    resolveStoreSubscriptionDetails(store, storeId, availablePlans)
+      .then((dates) => {
+        if (!cancelled) setSubscriptionDates(dates);
+      })
+      .catch(() => {
+        if (!cancelled) setSubscriptionDates(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [store, storeId, availablePlans]);
+
   const currentSubscription = useMemo(
-    () => mapStoreSubscription(store, availablePlans),
-    [store, availablePlans],
+    () => mapStoreSubscription(store, availablePlans, subscriptionDates),
+    [store, availablePlans, subscriptionDates],
   );
 
   const mySubscriptions = currentSubscription ? [currentSubscription] : [];
@@ -89,6 +113,19 @@ const Plans = ({ onboarding = false }) => {
     );
 
   const handleConfirmSubscription = async (plan, apiResponse) => {
+    const period = buildSubscriptionPeriod({
+      action: subscribeAction,
+      plan,
+      previousSubscription: currentSubscription,
+    });
+    persistLocalSubscription(storeId, {
+      planId: plan.id,
+      startsAt: period.startsAt,
+      endsAt: period.endsAt,
+      durationDays: plan.durationDays,
+    });
+    setSubscriptionDates({ ...period, durationDays: plan.durationDays });
+
     const updatedStore = extractStoreFromSubscriptionResponse(apiResponse, plan);
 
     if (storeId) {
@@ -97,6 +134,8 @@ const Plans = ({ onboarding = false }) => {
         ...updatedStore,
         status: 'active',
         plan_id: updatedStore.plan_id ?? plan.id,
+        subscription_starts_at: period.startsAt.toISOString(),
+        subscription_ends_at: period.endsAt.toISOString(),
       });
     }
 
@@ -108,6 +147,8 @@ const Plans = ({ onboarding = false }) => {
           status: 'active',
           plan_id: plan.id,
           ...updatedStore,
+          subscription_starts_at: period.startsAt.toISOString(),
+          subscription_ends_at: period.endsAt.toISOString(),
         });
       }
     } catch {
@@ -210,7 +251,8 @@ const Plans = ({ onboarding = false }) => {
                   title={sub.title}
                   price={sub.price}
                   status={sub.status}
-                  dateRange={sub.dateRange}
+                  durationDays={sub.durationDays}
+                  remainingDays={sub.remainingDays}
                   statusText={sub.statusText}
                   isExpired={sub.isExpired}
                   onRenew={() => {

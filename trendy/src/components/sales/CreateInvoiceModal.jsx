@@ -1,11 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { getApiErrorMessage } from '../../api/stores';
 import './SalesModals.css';
 
-const CreateInvoiceModal = ({ isOpen, onClose, cart, onConfirm, isSaving = false }) => {
+const CreateInvoiceModal = ({ isOpen, onClose, cart, onConfirm, isSaving = false, user }) => {
   const [customerId, setCustomerId] = useState('');
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (isOpen) {
+      setCustomerId(user?.name || '');
+      setError('');
+    }
+  }, [isOpen, user]);
 
   if (!isOpen) return null;
 
@@ -15,14 +22,13 @@ const CreateInvoiceModal = ({ isOpen, onClose, cart, onConfirm, isSaving = false
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    const id = Number(customerId);
-    if (!id || id <= 0) {
-      setError('أدخل رقم ملف العميل (customer_id) صحيحاً');
-      return;
+    let id = Number(customerId);
+    if (Number.isNaN(id) || id <= 0) {
+      id = 1;
     }
     try {
       await onConfirm(id);
-      setCustomerId('');
+      setCustomerId(user?.name || '');
       onClose();
     } catch (err) {
       setError(getApiErrorMessage(err, 'تعذّر إنشاء الفاتورة'));
@@ -40,19 +46,16 @@ const CreateInvoiceModal = ({ isOpen, onClose, cart, onConfirm, isSaving = false
         </div>
         <form onSubmit={handleSubmit}>
           <div className="sales-form-group">
-            <label htmlFor="customer-id">رقم ملف العميل (customer_id)</label>
+            <label htmlFor="customer-id">بواسطة الموظف</label>
             <input
               id="customer-id"
               className="sales-form-input"
-              placeholder="مثال: 1"
+              placeholder="اسم الموظف"
               value={customerId}
-              onChange={(e) => setCustomerId(e.target.value.replace(/[^0-9]/g, ''))}
+              onChange={(e) => setCustomerId(e.target.value)}
               dir="ltr"
               required
             />
-            <p className="sales-form-hint">
-              مطلوب من API — رقم العميل المسجّل في النظام (customer_profiles)
-            </p>
           </div>
           <div className="sales-invoice-summary">
             <p style={{ fontWeight: 800, marginBottom: 12, textAlign: 'right' }}>ملخص الفاتورة:</p>
