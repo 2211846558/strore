@@ -58,7 +58,7 @@ function mapShipmentItem(item) {
     color: item.color ?? attrValues[0] ?? '—',
     size: item.size ?? attrValues[1] ?? '—',
     variantLabel: item.variant_label ?? (attrValues.join(' / ') || variant.sku || '—'),
-    quantity: Number(item.quantity ?? item.qty ?? 0),
+    quantity: Number(item.quantity ?? item.original_quantity ?? item.qty ?? 0),
     unitCost:
       item.unit_cost ?? item.cost_price ?? item.unit_price ?? item.purchase_price ?? null,
     sellingPrice:
@@ -69,12 +69,22 @@ function mapShipmentItem(item) {
 export function mapShipment(row) {
   const itemsRaw = row.items ?? row.lines ?? row.shipment_items ?? [];
   const items = (Array.isArray(itemsRaw) ? itemsRaw : []).map(mapShipmentItem);
-  const statusRaw = String(row.status ?? 'pending').toLowerCase();
+  
+  let statusRaw = String(row.status ?? 'pending').toLowerCase();
+  if (row.dynamic_status === 'في الانتظار') {
+    statusRaw = 'pending';
+  } else if (row.dynamic_status === 'حالية') {
+    statusRaw = 'received';
+  }
 
   return {
     id: row.id,
     code: row.shipment_number ?? row.code ?? row.reference ?? row.batch_number ?? `SH-${String(row.id).padStart(3, '0')}`,
     batchNumber: row.batch_number ?? row.batchNumber ?? '',
+    productId: row.product_id ?? (items[0]?.variantId ? items[0].variantId : null),
+    costPrice: row.cost_price ?? '',
+    sellingPrice: row.selling_price ?? '',
+    supplierName: row.supplier_name ?? '',
     date: formatDate(row.created_at ?? row.date ?? row.received_at),
     productsCount:
       row.products_count ??
@@ -90,20 +100,29 @@ export function mapShipment(row) {
 }
 
 function buildShipmentItemsPayload(items) {
-  return items.map((item) => ({
-    variant_id: Number(item.variantId),
-    quantity: Number(item.quantity),
-    cost_price: Number(item.unitCost),
-    selling_price: Number(item.sellingPrice),
-  }));
+  return items.map((item) => {
+    const payloadItem = {
+      variant_id: Number(item.variantId),
+      quantity: Number(item.quantity),
+      cost_price: Number(item.unitCost),
+      selling_price: Number(item.sellingPrice),
+    };
+    if (item.id && /^\d+$/.test(String(item.id))) {
+      payloadItem.id = Number(item.id);
+    }
+    return payloadItem;
+  });
 }
 
-function buildShipmentBody({ storeId, items, batchNumber }) {
+function buildShipmentBody({ storeId, items, batchNumber, supplierName, costPrice, sellingPrice }) {
   const body = {
     items: buildShipmentItemsPayload(items),
   };
   if (storeId) body.store_id = storeId;
   if (batchNumber?.trim()) body.batch_number = batchNumber.trim();
+  if (supplierName?.trim()) body.supplier_name = supplierName.trim();
+  if (costPrice !== undefined) body.cost_price = Number(costPrice);
+  if (sellingPrice !== undefined) body.selling_price = Number(sellingPrice);
   return body;
 }
 
@@ -143,7 +162,6 @@ export function suggestBatchNumber() {
 
 /**
  * GET /api/inventory — مخزون التنوعات (بحث بالمنتج/SKU)
- * ملاحظة: لا يوجد endpoint لقائمة الشحنات؛ الإضافة عبر POST /inventory/shipments
  */
 export async function fetchInventory({
   storeId,
@@ -168,20 +186,38 @@ export async function fetchInventory({
   };
 }
 
-/** @deprecated استخدم fetchInventory */
-export async function fetchShipments(options = {}) {
-  const { status, ...rest } = options;
-  const result = await fetchInventory({ ...rest, stockFilter: status ?? 'all' });
-  return { shipments: result.items, stats: result.stats };
+/**
+ * GET /api/inventory/shipments
+ */
+export async function fetchShipments({ storeId, status = 'all', search } = {}) {
+  const query = new URLSearchParams();
+  if (storeId) query.set('store_id', String(storeId));
+  if (status && status !== 'all') query.set('status', String(status));
+  if (search?.trim()) query.set('search', search.trim());
+
+  const res = await apiRequest(`${API_ENDPOINTS.inventoryShipments}?${query}`);
+  const payload = res?.data ?? res;
+
+  const shipmentsRaw = Array.isArray(payload.data) ? payload.data : (Array.isArray(payload) ? payload : []);
+  const shipments = shipmentsRaw.map(mapShipment);
+
+  const stats = payload.stats || {
+    total: shipments.length,
+    pending: shipments.filter((s) => s.statusRaw === 'pending').length,
+    received: shipments.filter((s) => s.statusRaw === 'received').length,
+    totalQty: shipments.reduce((sum, s) => sum + Number(s.totalQuantity || 0), 0),
+  };
+
+  return { shipments, stats };
 }
 
 /**
  * POST /api/inventory/shipments
  */
-export async function createShipment({ storeId, items, batchNumber }) {
+export async function createShipment({ storeId, items, batchNumber, supplierName, costPrice, sellingPrice }) {
   const res = await apiRequest(API_ENDPOINTS.inventoryShipments, {
     method: 'POST',
-    body: buildShipmentBody({ storeId, items, batchNumber }),
+    body: buildShipmentBody({ storeId, items, batchNumber, supplierName, costPrice, sellingPrice }),
   });
   const row = res?.data ?? res;
   return mapShipment(row);
@@ -190,10 +226,10 @@ export async function createShipment({ storeId, items, batchNumber }) {
 /**
  * PUT /api/inventory/shipments/{id}
  */
-export async function updateShipment(id, { storeId, items, batchNumber }) {
+export async function updateShipment(id, { storeId, items, batchNumber, supplierName, costPrice, sellingPrice }) {
   const res = await apiRequest(API_ENDPOINTS.inventoryShipment(id), {
     method: 'PUT',
-    body: buildShipmentBody({ storeId, items, batchNumber }),
+    body: buildShipmentBody({ storeId, items, batchNumber, supplierName, costPrice, sellingPrice }),
   });
   const row = res?.data ?? res;
   return mapShipment(row);

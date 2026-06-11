@@ -30,13 +30,31 @@ const AddShipmentModal = ({
     if (!isOpen) return;
 
     setError('');
-    setSelectedProductId('');
-    setPurchasePrice('');
-    setSellingPrice('');
-    setSupplierName('');
-    setVariantsList([]);
-    setQuantities({});
-    setBatchNumber(initialData?.batchNumber || suggestBatchNumber());
+    if (initialData) {
+      setSelectedProductId(initialData.productId ? String(initialData.productId) : '');
+      setPurchasePrice(initialData.costPrice !== undefined && initialData.costPrice !== null ? String(initialData.costPrice) : '');
+      setSellingPrice(initialData.sellingPrice !== undefined && initialData.sellingPrice !== null ? String(initialData.sellingPrice) : '');
+      setSupplierName(initialData.supplierName || '');
+      setBatchNumber(initialData.batchNumber || '');
+      
+      const initialQtys = {};
+      if (Array.isArray(initialData.items)) {
+        initialData.items.forEach((item) => {
+          if (item.variantId) {
+            initialQtys[item.variantId] = item.quantity;
+          }
+        });
+      }
+      setQuantities(initialQtys);
+    } else {
+      setSelectedProductId('');
+      setPurchasePrice('');
+      setSellingPrice('');
+      setSupplierName('');
+      setVariantsList([]);
+      setQuantities({});
+      setBatchNumber(suggestBatchNumber());
+    }
 
     setLoadingCatalog(true);
     fetchShipmentCatalog({ storeId })
@@ -64,7 +82,10 @@ const AddShipmentModal = ({
         // Pre-fill quantities
         const initialQtys = {};
         variants.forEach((v) => {
-          initialQtys[v.id] = '';
+          const existingItem = initialData && String(initialData.productId) === String(selectedProductId)
+            ? initialData.items.find(item => String(item.variantId) === String(v.id))
+            : null;
+          initialQtys[v.id] = existingItem ? existingItem.quantity : '';
         });
         setQuantities(initialQtys);
       })
@@ -74,7 +95,7 @@ const AddShipmentModal = ({
         setQuantities({});
       })
       .finally(() => setLoadingVariants(false));
-  }, [selectedProductId]);
+  }, [selectedProductId, initialData]);
 
   const selectedProduct = catalog.find((p) => String(p.id) === String(selectedProductId));
 
@@ -122,19 +143,30 @@ const AddShipmentModal = ({
       return;
     }
 
-    // Build items payload
+    // Build items payload — include real database `id` if editing an existing variant shipment
     const items = variantsList
       .filter((v) => Number(quantities[v.id]) > 0)
-      .map((v) => ({
-        id: `line-${v.id}`,
-        variantId: v.id,
-        name: selectedProduct?.name || '',
-        category: selectedProduct?.category || '',
-        variantLabel: v.label,
-        quantity: Number(quantities[v.id]),
-        unitCost: Number(purchasePrice),
-        sellingPrice: Number(sellingPrice),
-      }));
+      .map((v) => {
+        // Look for the existing variant shipment record id from initialData
+        const existingItem =
+          initialData && Array.isArray(initialData.items)
+            ? initialData.items.find((item) => String(item.variantId) === String(v.id))
+            : null;
+
+        return {
+          // Include the numeric database ID if editing so backend can match
+          ...(existingItem && existingItem.id && /^\d+$/.test(String(existingItem.id))
+            ? { id: existingItem.id }
+            : {}),
+          variantId: v.id,
+          name: selectedProduct?.name || '',
+          category: selectedProduct?.category || '',
+          variantLabel: v.label,
+          quantity: Number(quantities[v.id]),
+          unitCost: Number(purchasePrice),
+          sellingPrice: Number(sellingPrice),
+        };
+      });
 
     if (items.length === 0) {
       setError('يرجى إدخال كمية لواحد من التنوعات على الأقل.');
@@ -146,6 +178,8 @@ const AddShipmentModal = ({
       const payload = {
         batchNumber: batchNumber.trim(),
         supplierName: supplierName.trim(),
+        costPrice: Number(purchasePrice),
+        sellingPrice: Number(sellingPrice),
         items,
       };
       await onSave(payload);

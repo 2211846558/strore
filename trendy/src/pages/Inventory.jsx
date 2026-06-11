@@ -8,8 +8,7 @@ import ShipmentDetailModal from '../components/inventory/ShipmentDetailModal';
 import {
   createShipment,
   updateShipment,
-  loadRecentShipments,
-  saveRecentShipment,
+  fetchShipments,
 } from '../api/inventory';
 import { getApiErrorMessage } from '../api/stores';
 import { useAuth } from '../context/AuthContext';
@@ -32,9 +31,11 @@ const Inventory = () => {
   const { storeId } = useAuth();
 
   const [allShipments, setAllShipments] = useState([]);
+  const [stats, setStats] = useState({ total: 0, pending: 0, received: 0, totalQty: 0 });
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [isShipmentModalOpen, setIsShipmentModalOpen] = useState(false);
   const [editingShipment, setEditingShipment] = useState(null);
@@ -46,59 +47,58 @@ const Inventory = () => {
     setTimeout(() => setToast(null), 3500);
   };
 
-  const loadShipments = useCallback(() => {
+  const loadShipments = useCallback(async () => {
     if (!storeId) return;
-    const data = loadRecentShipments(storeId);
-    setAllShipments(data);
-  }, [storeId]);
+    setIsLoading(true);
+    setError('');
+    try {
+      const result = await fetchShipments({
+        storeId,
+        status: statusFilter,
+        search: searchQuery,
+      });
+      setAllShipments(result.shipments || []);
+      setStats({
+        total: result.stats?.total || 0,
+        pending: result.stats?.pending || 0,
+        received: result.stats?.received || 0,
+        totalQty: result.stats?.totalQty || 0,
+      });
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'تعذّر تحميل الشحنات من الخادم.'));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [storeId, statusFilter, searchQuery]);
 
   useEffect(() => {
     loadShipments();
   }, [loadShipments]);
 
-  /* ── فلترة محلية ── */
-  const filteredShipments = allShipments.filter((sh) => {
-    const matchSearch =
-      !searchQuery.trim() ||
-      sh.code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      sh.batchNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      sh.items?.some((item) =>
-        item.name?.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-    const matchStatus = statusFilter === 'all' || sh.statusRaw === statusFilter;
-    return matchSearch && matchStatus;
-  });
-
-  /* ── إحصائيات ── */
-  const stats = {
-    total: allShipments.length,
-    pending: allShipments.filter((s) => s.statusRaw === 'pending').length,
-    received: allShipments.filter((s) => s.statusRaw === 'received').length,
-    totalQty: allShipments.reduce((sum, s) => sum + Number(s.totalQuantity || 0), 0),
-  };
+  /* ── فلترة من خلال الخادم ── */
+  const filteredShipments = allShipments;
 
   /* ── حفظ شحنة ── */
   const handleSaveShipment = async (shipmentData) => {
     setIsSaving(true);
     try {
-      let result;
+      const payload = {
+        storeId,
+        items: shipmentData.items,
+        batchNumber: shipmentData.batchNumber,
+        supplierName: shipmentData.supplierName,
+        costPrice: shipmentData.items[0]?.unitCost,
+        sellingPrice: shipmentData.items[0]?.sellingPrice,
+      };
+
       if (editingShipment?.id) {
-        result = await updateShipment(editingShipment.id, {
-          storeId,
-          items: shipmentData.items,
-          batchNumber: shipmentData.batchNumber,
-        });
-        showToast(`تم تحديث الشحنة (${result.code || ''})`);
+        await updateShipment(editingShipment.id, payload);
+        showToast(`تم تحديث الشحنة بنجاح.`);
       } else {
-        result = await createShipment({
-          storeId,
-          items: shipmentData.items,
-          batchNumber: shipmentData.batchNumber,
-        });
-        showToast(`تمت إضافة الشحنة (${result.code || ''})`);
+        await createShipment(payload);
+        showToast(`تمت إضافة الشحنة بنجاح.`);
       }
 
-      saveRecentShipment(storeId, result);
       loadShipments();
       setIsShipmentModalOpen(false);
       setEditingShipment(null);
@@ -109,6 +109,7 @@ const Inventory = () => {
       setIsSaving(false);
     }
   };
+
 
   const handleOpenAdd = () => {
     setEditingShipment(null);
@@ -224,7 +225,13 @@ const Inventory = () => {
                 const statusInfo = STATUS_ICONS[shipment.statusRaw] || STATUS_ICONS.pending;
                 const StatusIcon = statusInfo.icon;
 
-                /* أسماء المنتجات من العناصر */
+                /* حساب الكمية الفعلية من مجموع تنوعات الشحنة */
+                const computedQty = (shipment.items || []).reduce(
+                  (sum, item) => sum + Number(item.quantity || 0),
+                  0
+                );
+
+                /* أسماء المنتجات الفريدة */
                 const productNames = [
                   ...new Set(
                     (shipment.items || [])
@@ -237,7 +244,7 @@ const Inventory = () => {
                     ? '—'
                     : productNames.length === 1
                     ? productNames[0]
-                    : `${productNames[0]} +${productNames.length - 1}`;
+                    : `${productNames[0]} +${productNames.length - 1} آخر`;
 
                 return (
                   <tr
@@ -252,11 +259,20 @@ const Inventory = () => {
                     <td className="shipment-products">
                       <div className="products-label">
                         <Package size={14} className="products-icon" />
-                        {productsLabel}
+                        <span className="products-label-text">{productsLabel}</span>
                       </div>
+                      {productNames.length > 1 && (
+                        <span className="products-sub-count">{productNames.length} منتجات</span>
+                      )}
                     </td>
                     <td className="quantity-cell">
-                      <span className="quantity-badge">{shipment.totalQuantity} قطعة</span>
+                      <span className="quantity-badge">{computedQty} قطعة</span>
+                      {computedQty !== Number(shipment.totalQuantity || 0) &&
+                        Number(shipment.totalQuantity || 0) > 0 && (
+                        <span className="quantity-sub">
+                          ({shipment.totalQuantity} مسجّل)
+                        </span>
+                      )}
                     </td>
                     <td>
                       <span className={`status-badge ${statusInfo.cls}`}>
@@ -274,16 +290,14 @@ const Inventory = () => {
                         >
                           <Eye size={16} />
                         </button>
-                        {shipment.statusRaw === 'pending' && (
-                          <button
-                            className="action-btn edit-btn"
-                            onClick={() => handleOpenEdit(shipment)}
-                            title="تعديل"
-                            type="button"
-                          >
-                            <Edit2 size={16} />
-                          </button>
-                        )}
+                        <button
+                          className="action-btn edit-btn"
+                          onClick={() => handleOpenEdit(shipment)}
+                          title="تعديل الشحنة"
+                          type="button"
+                        >
+                          <Edit2 size={16} />
+                        </button>
                       </div>
                     </td>
                   </tr>
