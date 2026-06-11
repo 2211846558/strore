@@ -3,10 +3,12 @@
   inset: 0;
   background: rgba(0, 0, 0, 0.55);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   z-index: 1100;
-  padding: 20px;
+  padding: 16px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   backdrop-filter: blur(4px);
 }
 
@@ -16,11 +18,27 @@
   border-radius: 20px;
   width: 100%;
   max-width: 440px;
+  max-height: calc(100dvh - 32px);
   padding: 28px 24px 24px;
+  margin: auto;
   text-align: center;
   position: relative;
   color: var(--text-primary);
   box-shadow: var(--shadow-lg);
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(139, 61, 255, 0.45) transparent;
+}
+
+.plan-wallet-modal::-webkit-scrollbar {
+  width: 6px;
+}
+
+.plan-wallet-modal::-webkit-scrollbar-thumb {
+  background: rgba(139, 61, 255, 0.35);
+  border-radius: 999px;
 }
 
 .plan-wallet-close {
