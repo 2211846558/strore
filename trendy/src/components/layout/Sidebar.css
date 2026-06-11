@@ -2,15 +2,15 @@
   width: 260px;
   min-width: 260px;
   max-width: 260px;
-  flex-shrink: 0;
-  position: relative;
+  position: fixed;
+  top: 0;
+  inset-inline-start: 0;
+  z-index: 200;
   background: var(--gradient-sidebar);
   border-left: none;
   display: flex;
   flex-direction: column;
   height: 100vh;
-  position: sticky;
-  top: 0;
   overflow-x: hidden;
   overflow-y: auto;
   scrollbar-width: none;
@@ -211,6 +211,8 @@ input:checked + .slider:before {
     max-width: 100%;
     height: auto;
     position: static;
+    inset-inline-start: auto;
+    z-index: auto;
   }
 
   .sidebar::before {
