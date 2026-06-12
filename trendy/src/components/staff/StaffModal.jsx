@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
-import { formatRoleSelection } from '../../api/employees';
+import { formatRoleSelection, validateEmployeeForm } from '../../api/employees';
 import { getApiErrorMessage } from '../../api/stores';
 import './StaffModal.css';
 

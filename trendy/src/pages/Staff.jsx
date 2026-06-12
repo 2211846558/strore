@@ -301,6 +301,7 @@ const Staff = () => {
         onSave={handleSave}
         member={editingStaff}
         roles={formRoleOptions}
+        existingStaff={staff}
         isSaving={isSaving}
       />
 
