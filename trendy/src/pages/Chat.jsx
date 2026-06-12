@@ -23,8 +23,7 @@ const Chat = () => {
     try {
       const list = await fetchChats({ storeId });
       setChats(list);
-    } catch (err) {
-      setError(getApiErrorMessage(err, 'تعذّر تحميل المحادثات'));
+    } catch {
       setChats([]);
     } finally {
       setLoading(false);
