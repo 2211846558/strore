@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Search, Plus, Edit2, Power, CheckCircle2, Eye } from 'lucide-react';
+import { Search, Plus, Edit2, Power, CheckCircle2, Eye, Trash2 } from 'lucide-react';
 import StaffModal from '../components/staff/StaffModal';
 import StaffDetailsModal from '../components/staff/StaffDetailsModal';
 import RoleFilterDropdown from '../components/staff/RoleFilterDropdown';
@@ -9,6 +9,7 @@ import {
   createEmployee,
   updateEmployee,
   toggleEmployee,
+  deleteEmployee,
   buildEmployeePayload,
   buildEmployeeUpdatePayload,
   buildRoleOptions,
@@ -121,6 +122,22 @@ const Staff = () => {
       await loadStaff();
     } catch (err) {
       showToast(getApiErrorMessage(err, 'تعذّر تغيير حالة الموظف'));
+    } finally {
+      setTogglingId(null);
+    }
+  };
+
+  const handleDeleteStaff = async (member) => {
+    if (!window.confirm(`هل أنت متأكد من رغبتك في حذف الموظف «${member.name}» نهائياً؟`)) {
+      return;
+    }
+    setTogglingId(member.id);
+    try {
+      await deleteEmployee(member.id);
+      showToast(`تم حذف الموظف «${member.name}» بنجاح`);
+      await loadStaff();
+    } catch (err) {
+      showToast(getApiErrorMessage(err, 'تعذّر حذف الموظف'));
     } finally {
       setTogglingId(null);
     }
@@ -243,11 +260,21 @@ const Staff = () => {
                         type="button"
                         className={`action-btn toggle-btn ${member.active ? 'active' : 'inactive'}`}
                         onClick={() => handleToggleActive(member)}
-                        disabled={togglingId === member.id}
+                        disabled={togglingId === member.id || member.roleSlug === 'store_manager'}
                         title={member.active ? 'تعطيل' : 'تفعيل'}
                         aria-label={member.active ? 'تعطيل' : 'تفعيل'}
                       >
                         <Power size={16} />
+                      </button>
+                      <button
+                        type="button"
+                        className="action-btn delete-btn"
+                        onClick={() => handleDeleteStaff(member)}
+                        disabled={togglingId === member.id}
+                        title="حذف"
+                        aria-label="حذف"
+                      >
+                        <Trash2 size={16} />
                       </button>
                     </div>
                   </td>

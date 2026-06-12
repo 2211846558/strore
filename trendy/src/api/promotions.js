@@ -29,7 +29,7 @@ export function mapPromotion(row) {
   const type = row.type === 'fixed' ? 'قيمة ثابتة' : 'نسبة مئوية %';
   const { status, active } = resolvePromotionDisplayStatus(row);
   const affected = row.affected_products ?? row.products ?? [];
-  const products = (Array.isArray(affected) ? affected : []).map((p) => ({
+  const productEntries = (Array.isArray(affected) ? affected : []).map((p) => ({
     id: p.product_id ?? p.id,
     name: p.name ?? '—',
   }));
@@ -46,9 +46,61 @@ export function mapPromotion(row) {
     status,
     statusRaw: row.status ?? 'inactive',
     active,
-    productIds: products.map((p) => p.id).filter(Boolean),
-    products: products.map((p) => p.name),
+    productEntries,
+    productIds: productEntries.map((p) => p.id).filter(Boolean),
+    products: productEntries.map((p) => p.name),
   };
+}
+
+export function calculatePromotionalPrice(originalPrice, promotion) {
+  const price = Number(originalPrice);
+  if (Number.isNaN(price) || price <= 0) return null;
+
+  const value = Number(promotion?.value ?? 0);
+  const isFixed = promotion?.typeRaw === 'fixed' || promotion?.type === 'قيمة ثابتة';
+
+  if (isFixed) {
+    return Math.max(0, price - value);
+  }
+
+  return Math.max(0, price * (1 - value / 100));
+}
+
+export function buildPromotionPricingRows(promotion, catalogProducts = []) {
+  const priceById = Object.fromEntries(
+    catalogProducts.map((product) => [String(product.id), Number(product.price ?? 0)]),
+  );
+
+  const entries =
+    promotion?.productEntries?.length > 0
+      ? promotion.productEntries
+      : (promotion?.productIds ?? []).map((id, index) => ({
+          id,
+          name: promotion?.products?.[index] ?? `منتج #${id}`,
+        }));
+
+  return entries.map((entry) => {
+    const originalPrice = priceById[String(entry.id)];
+    const hasPrice = originalPrice != null && !Number.isNaN(originalPrice) && originalPrice > 0;
+    const discountedPrice = hasPrice ? calculatePromotionalPrice(originalPrice, promotion) : null;
+
+    return {
+      id: entry.id,
+      name: entry.name,
+      originalPrice: hasPrice ? originalPrice : null,
+      discountedPrice,
+      savings:
+        hasPrice && discountedPrice != null ? Math.max(0, originalPrice - discountedPrice) : null,
+    };
+  });
+}
+
+export function formatPromotionMoney(value) {
+  if (value == null || Number.isNaN(Number(value))) return '—';
+  return Number(value).toLocaleString('ar-LY', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
 }
 
 function mapTypeToApi(type) {

@@ -262,6 +262,16 @@
   border-color: #3f1e1e;
 }
 
+.offer-btn.view-btn {
+  flex: 1;
+}
+
+.offer-btn.view-btn:hover {
+  background-color: rgba(139, 61, 255, 0.12);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
 .offer-btn.edit-btn {
   flex: 1;
 }

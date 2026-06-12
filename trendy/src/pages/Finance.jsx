@@ -6,7 +6,6 @@ import {
   Download,
   DollarSign,
   TrendingUp,
-  ArrowUpRight,
   CreditCard,
   Landmark,
   CheckCircle2,
@@ -109,7 +108,6 @@ const Finance = () => {
   const totalRevenue = Number(
     profitOverview?.net_profit ?? profitOverview?.total_revenue ?? 0,
   );
-  const platformFee = transactions.reduce((sum, t) => sum + Number(t.fee || 0), 0);
   const currentBalance = walletBalance;
 
   const handleViewTransaction = async (transaction) => {
@@ -179,14 +177,6 @@ const Finance = () => {
           </div>
           <span className="stat-value green">{formatMoney(totalRevenue)} د.ل</span>
           <span className="stat-sub">من أرباح المتجر</span>
-        </div>
-        <div className="stat-card">
-          <div className="stat-header">
-            <span className="stat-label">عمولة المنصة</span>
-            <ArrowUpRight size={20} className="stat-icon orange" />
-          </div>
-          <span className="stat-value orange">{formatMoney(platformFee)} د.ل</span>
-          <span className="stat-sub">مجموع الرسوم</span>
         </div>
         <div className="stat-card">
           <div className="stat-header">

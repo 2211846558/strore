@@ -47,12 +47,16 @@ const OrderDetailModal = ({ isOpen, onClose, order, loading = false }) => {
             <div className="order-detail-field">
               <span className="order-detail-label">المنتجات</span>
               <div className="order-products-list">
-                {order.products.map((p, idx) => (
-                  <div key={idx} className="order-product-item">
-                    {p.name}
-                    {p.quantity > 1 ? ` × ${p.quantity}` : ''}
-                  </div>
-                ))}
+                {order.products?.length ? (
+                  order.products.map((p, idx) => (
+                    <div key={idx} className="order-product-item">
+                      {p.name}
+                      {p.quantity > 1 ? ` × ${p.quantity}` : ''}
+                    </div>
+                  ))
+                ) : (
+                  <div className="order-product-item">لا توجد منتجات</div>
+                )}
               </div>
             </div>
 

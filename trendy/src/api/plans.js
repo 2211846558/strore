@@ -1,6 +1,6 @@
 import { apiRequest } from './client';
 import { API_ENDPOINTS } from './config';
-import { fetchTransactions } from './finance';
+import { fetchTransactions, fetchAllTransactions } from './finance';
 
 function extractList(res) {
   const payload = res?.data ?? res;
@@ -68,6 +68,36 @@ export function calcRemainingDays(endDate) {
   return diff > 0 ? diff : 0;
 }
 
+function subscriptionHistoryStorageKey(storeId) {
+  return `trendy_plan_sub_history_${storeId}`;
+}
+
+function readLocalSubscriptionHistory(storeId) {
+  try {
+    const raw = localStorage.getItem(subscriptionHistoryStorageKey(storeId));
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function appendLocalSubscriptionHistory(storeId, { planId, startsAt, endsAt, durationDays }) {
+  if (!storeId || !planId || !startsAt || !endsAt) return;
+
+  const history = readLocalSubscriptionHistory(storeId);
+  const key = `${planId}-${startsAt.toISOString()}`;
+  if (history.some((item) => `${item.planId}-${item.starts_at}` === key)) return;
+
+  history.push({
+    planId,
+    duration_days: durationDays ?? null,
+    starts_at: startsAt.toISOString(),
+    ends_at: endsAt.toISOString(),
+  });
+  localStorage.setItem(subscriptionHistoryStorageKey(storeId), JSON.stringify(history));
+}
+
 export function persistLocalSubscription(storeId, { planId, startsAt, endsAt, durationDays }) {
   if (!storeId || !startsAt || !endsAt) return;
   localStorage.setItem(
@@ -79,6 +109,7 @@ export function persistLocalSubscription(storeId, { planId, startsAt, endsAt, du
       ends_at: endsAt.toISOString(),
     }),
   );
+  appendLocalSubscriptionHistory(storeId, { planId, startsAt, endsAt, durationDays });
 }
 
 function readLocalSubscription(storeId, planId = null) {
@@ -286,9 +317,205 @@ export function mapPlanFromApi(plan) {
     price: String(plan.price ?? ''),
     durationDays: plan.duration_days ?? 30,
     commissionRate: plan.commission_rate ?? 0,
-    featuresText: `عمولة المنصة: ${plan.commission_rate ?? 0}% — مدة ${plan.duration_days ?? 30} يوم`,
+    featuresText: `مدة ${plan.duration_days ?? 30} يوم`,
     isPopular: Boolean(plan.is_popular ?? plan.is_featured ?? false),
   };
+}
+
+function isPlanSubscriptionTransaction(tx) {
+  const desc = String(tx?.description ?? tx?.raw?.description ?? '');
+  const type = String(tx?.typeRaw ?? tx?.transaction_type ?? '').toLowerCase();
+  return (
+    tx?.type === 'اشتراك' ||
+    ['deposit', 'subscription', 'plan_subscription'].includes(type) ||
+    /(اشتراك|تجديد|خطة|plan)/i.test(desc)
+  );
+}
+
+function matchPlanFromText(text, plans = []) {
+  const normalized = String(text ?? '').trim().toLowerCase();
+  if (!normalized) return null;
+
+  return plans.find((plan) => {
+    const title = String(plan.title ?? '').trim().toLowerCase();
+    return title && normalized.includes(title);
+  }) ?? null;
+}
+
+function buildSubscriptionEntry(
+  planId,
+  plans = [],
+  { startsAt, endsAt, durationDays, nestedPlan = null } = {},
+) {
+  if (!planId || !startsAt) return null;
+
+  const matchedPlan =
+    plans.find((p) => Number(p.id) === Number(planId)) ??
+    (nestedPlan ? mapPlanFromApi(nestedPlan) : null);
+  const resolvedDuration = resolvePlanDurationDays(planId, plans, nestedPlan, durationDays);
+  const aligned = alignSubscriptionPeriod({
+    startsAt,
+    endsAt,
+    durationDays: resolvedDuration,
+  });
+  const isExpired = aligned.endsAt ? aligned.endsAt.getTime() < Date.now() : true;
+  const remainingDays = !isExpired && aligned.endsAt ? calcRemainingDays(aligned.endsAt) : null;
+
+  return {
+    id: `${planId}-${aligned.startsAt.toISOString()}`,
+    planId: Number(planId),
+    title: matchedPlan?.title ?? nestedPlan?.name ?? `خطة #${planId}`,
+    price: matchedPlan?.price ?? String(nestedPlan?.price ?? '0'),
+    durationDays: resolvedDuration,
+    remainingDays,
+    status: isExpired ? 'منتهي' : 'نشط',
+    isExpired,
+    statusText: isExpired ? 'انتهى الاشتراك — جدّد الآن' : 'الاشتراك نشط حالياً',
+    dateRange: {
+      start: formatDisplayDate(aligned.startsAt),
+      end: aligned.endsAt ? formatDisplayDate(aligned.endsAt) : '—',
+    },
+    startsAtMs: aligned.startsAt.getTime(),
+  };
+}
+
+function seedHistoryFromCurrentLocal(storeId) {
+  if (!storeId) return;
+  try {
+    const raw = localStorage.getItem(subscriptionStorageKey(storeId));
+    if (!raw) return;
+    const item = JSON.parse(raw);
+    const startsAt = parseApiDate(item.starts_at);
+    const endsAt = parseApiDate(item.ends_at);
+    if (item.planId && startsAt && endsAt) {
+      appendLocalSubscriptionHistory(storeId, {
+        planId: item.planId,
+        startsAt,
+        endsAt,
+        durationDays: item.duration_days,
+      });
+    }
+  } catch {
+    // ignore
+  }
+}
+
+function extractSubscriptionsFromStoreList(store, plans = []) {
+  const list = store?.plans ?? store?.active_plans ?? store?.plan_subscriptions ?? [];
+  if (!Array.isArray(list) || !list.length) return [];
+
+  return list
+    .map((entry) => {
+      const planId = entry.plan_id ?? entry.pivot?.plan_id ?? entry.id;
+      const nestedPlan = entry.plan ?? entry;
+      const dates = readPivotDates(entry);
+      if (!planId || !dates?.startsAt) return null;
+      return buildSubscriptionEntry(planId, plans, {
+        startsAt: dates.startsAt,
+        endsAt: dates.endsAt,
+        durationDays: entry.duration_days ?? nestedPlan?.duration_days,
+        nestedPlan,
+      });
+    })
+    .filter(Boolean);
+}
+
+async function fetchSubscriptionEntriesFromFinance(plans = []) {
+  try {
+    const primary = await fetchAllTransactions({ search: 'اشتراك', perPage: 100 });
+    const secondary = await fetchAllTransactions({ search: 'خطة', perPage: 100 });
+    const seen = new Set();
+    const merged = [];
+
+    for (const tx of [...(primary.transactions ?? []), ...(secondary.transactions ?? [])]) {
+      const id = tx.id ?? tx.code;
+      if (id && seen.has(id)) continue;
+      if (id) seen.add(id);
+      if (!isPlanSubscriptionTransaction(tx)) continue;
+
+      const plan = matchPlanFromText(tx.description, plans);
+      if (!plan) continue;
+
+      const startsAt = parseApiDate(tx.date ?? tx.created_at);
+      if (!startsAt) continue;
+
+      const entry = buildSubscriptionEntry(plan.id, plans, {
+        startsAt,
+        endsAt: addDays(startsAt, plan.durationDays ?? 30),
+        durationDays: plan.durationDays,
+      });
+      if (entry) merged.push(entry);
+    }
+
+    return merged;
+  } catch {
+    return [];
+  }
+}
+
+function readHistorySubscriptionEntries(storeId, plans = []) {
+  return readLocalSubscriptionHistory(storeId)
+    .map((item) => {
+      const startsAt = parseApiDate(item.starts_at);
+      const endsAt = parseApiDate(item.ends_at);
+      if (!item.planId || !startsAt) return null;
+      return buildSubscriptionEntry(item.planId, plans, {
+        startsAt,
+        endsAt,
+        durationDays: item.duration_days,
+      });
+    })
+    .filter(Boolean);
+}
+
+function mergeSubscriptionEntries(entries) {
+  const byPlan = new Map();
+
+  for (const entry of entries) {
+    if (!entry?.planId) continue;
+    const existing = byPlan.get(entry.planId);
+    if (!existing || (entry.startsAtMs ?? 0) > (existing.startsAtMs ?? 0)) {
+      byPlan.set(entry.planId, entry);
+    }
+  }
+
+  return Array.from(byPlan.values());
+}
+
+export async function resolveAllStoreSubscriptions(store, storeId, plans = [], activeDetails = null) {
+  seedHistoryFromCurrentLocal(storeId);
+
+  const currentPlanId = store?.plan_id ?? store?.plan?.id ?? null;
+  const current = mapStoreSubscription(store, plans, activeDetails);
+  const collected = [
+    ...extractSubscriptionsFromStoreList(store, plans),
+    ...readHistorySubscriptionEntries(storeId, plans),
+    ...(await fetchSubscriptionEntriesFromFinance(plans)),
+  ];
+  if (current) collected.push(current);
+
+  let merged = mergeSubscriptionEntries(collected);
+
+  if (current) {
+    const index = merged.findIndex((entry) => Number(entry.planId) === Number(current.planId));
+    if (index >= 0) merged[index] = current;
+    else merged.unshift(current);
+  }
+
+  merged = merged.map((entry) => {
+    if (currentPlanId && Number(entry.planId) !== Number(currentPlanId)) {
+      return {
+        ...entry,
+        isExpired: true,
+        status: 'منتهي',
+        statusText: 'اشتراك سابق',
+        remainingDays: null,
+      };
+    }
+    return entry;
+  });
+
+  return merged.sort((a, b) => (b.startsAtMs ?? 0) - (a.startsAtMs ?? 0));
 }
 
 export function mapStoreSubscription(store, plans = [], dateOverrides = null) {
@@ -308,31 +535,32 @@ export function mapStoreSubscription(store, plans = [], dateOverrides = null) {
   const extracted = extractSubscriptionDatesFromStore(store);
   const rawStart = dateOverrides?.startsAt ?? extracted?.startsAt ?? null;
   const rawEnd = dateOverrides?.endsAt ?? extracted?.endsAt ?? null;
-  const { startsAt: startDate, endsAt: endDate } = alignSubscriptionPeriod({
-    startsAt: rawStart,
+
+  if (!planId && !matchedPlan && store.status !== 'active') return null;
+
+  const { startsAt, endsAt } = alignSubscriptionPeriod({
+    startsAt: rawStart ?? new Date(),
     endsAt: rawEnd,
     durationDays,
   });
 
-  const isExpired = endDate ? endDate.getTime() < Date.now() : store.status !== 'active';
-  const remainingDays = !isExpired && endDate ? calcRemainingDays(endDate) : null;
-
-  if (!planId && !matchedPlan && store.status !== 'active') return null;
+  const isExpired = endsAt ? endsAt.getTime() < Date.now() : store.status !== 'active';
 
   return {
     id: planId ?? store.id,
-    planId,
+    planId: Number(planId),
     title: matchedPlan?.title ?? nestedPlan?.name ?? 'خطة الاشتراك',
     price: matchedPlan?.price ?? String(nestedPlan?.price ?? store.plan_price ?? '0'),
     durationDays,
-    remainingDays,
+    remainingDays: !isExpired && endsAt ? calcRemainingDays(endsAt) : null,
     status: isExpired ? 'منتهي' : 'نشط',
     isExpired,
     statusText: isExpired ? 'انتهى الاشتراك — جدّد الآن' : 'الاشتراك نشط حالياً',
     dateRange: {
-      start: startDate ? formatDisplayDate(startDate) : '—',
-      end: endDate ? formatDisplayDate(endDate) : '—',
+      start: startsAt ? formatDisplayDate(startsAt) : '—',
+      end: endsAt ? formatDisplayDate(endsAt) : '—',
     },
+    startsAtMs: startsAt.getTime(),
   };
 }
 
