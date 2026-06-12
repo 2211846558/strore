@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Trash2, Edit2, CheckCircle2 } from 'lucide-react';
+import { Plus, Trash2, Edit2, CheckCircle2, Eye } from 'lucide-react';
 import OfferModal from '../components/offers/OfferModal';
+import OfferDetailModal from '../components/offers/OfferDetailModal';
 import {
   fetchAllPromotions,
   fetchPromotion,
@@ -20,12 +21,15 @@ const Offers = () => {
   const { storeId } = useAuth();
   const [offers, setOffers] = useState([]);
   const [catalogProducts, setCatalogProducts] = useState([]);
+  const [catalogProductsWithPrice, setCatalogProductsWithPrice] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [togglingId, setTogglingId] = useState(null);
   const [error, setError] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [detailOffer, setDetailOffer] = useState(null);
   const [editingOffer, setEditingOffer] = useState(null);
   const [loadingOfferDetails, setLoadingOfferDetails] = useState(false);
   const [toast, setToast] = useState(null);
@@ -45,6 +49,9 @@ const Offers = () => {
       ]);
       setOffers(promotions);
       setCatalogProducts(products.map((p) => ({ id: p.id, name: p.name })));
+      setCatalogProductsWithPrice(
+        products.map((p) => ({ id: p.id, name: p.name, price: p.price })),
+      );
     } catch (err) {
       setError(getApiErrorMessage(err, 'تعذّر تحميل الحملات'));
       setOffers([]);
@@ -124,6 +131,21 @@ const Offers = () => {
       setIsModalOpen(true);
     } catch (err) {
       showToast(getApiErrorMessage(err, 'تعذّر تحميل تفاصيل الحملة'));
+    } finally {
+      setLoadingOfferDetails(false);
+    }
+  };
+
+  const openDetails = async (offer) => {
+    setIsDetailOpen(true);
+    setDetailOffer(null);
+    setLoadingOfferDetails(true);
+    try {
+      const full = await fetchPromotion(offer.id);
+      setDetailOffer(full);
+    } catch (err) {
+      showToast(getApiErrorMessage(err, 'تعذّر تحميل تفاصيل العرض'));
+      setIsDetailOpen(false);
     } finally {
       setLoadingOfferDetails(false);
     }
@@ -220,6 +242,15 @@ const Offers = () => {
                 </button>
                 <button
                   type="button"
+                  className="offer-btn view-btn"
+                  onClick={() => openDetails(offer)}
+                  disabled={isSaving || loadingOfferDetails}
+                >
+                  <Eye size={16} />
+                  عرض التفاصيل
+                </button>
+                <button
+                  type="button"
                   className="offer-btn edit-btn"
                   onClick={() => openEdit(offer)}
                   disabled={isSaving || loadingOfferDetails}
@@ -234,6 +265,17 @@ const Offers = () => {
           <p className="no-results">لا توجد عروض تطابق بحثك.</p>
         )}
       </div>
+
+      <OfferDetailModal
+        isOpen={isDetailOpen}
+        onClose={() => {
+          setIsDetailOpen(false);
+          setDetailOffer(null);
+        }}
+        offer={detailOffer}
+        catalogProducts={catalogProductsWithPrice}
+        loading={loadingOfferDetails && !detailOffer}
+      />
 
       <OfferModal
         isOpen={isModalOpen}

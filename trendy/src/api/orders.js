@@ -56,13 +56,44 @@ export function mapStatusToApi(status) {
   return status;
 }
 
+function extractOrderItems(row) {
+  const itemsRaw =
+    row.items ??
+    row.order_items ??
+    row.products ??
+    row.line_items ??
+    [];
+  return Array.isArray(itemsRaw) ? itemsRaw : [];
+}
+
 function mapOrderItem(item) {
   return {
-    name: item.product_name ?? item.name ?? item.product?.name ?? '—',
+    name: item.product_name ?? item.name ?? item.product?.name ?? item.title ?? '—',
     quantity: Number(item.quantity ?? 1),
     price: Number(item.unit_price ?? item.price ?? 0),
     variantLabel: item.sku ?? item.variant_label ?? null,
   };
+}
+
+async function enrichOrdersWithItems(orders) {
+  const missing = orders.filter((order) => !order.products?.length && order.orderId);
+  if (!missing.length) return orders;
+
+  const details = await Promise.all(
+    missing.map(async (order) => {
+      try {
+        return await fetchOrder(order.orderId);
+      } catch {
+        return null;
+      }
+    }),
+  );
+
+  const byId = new Map(
+    details.filter(Boolean).map((order) => [order.orderId, order]),
+  );
+
+  return orders.map((order) => byId.get(order.orderId) ?? order);
 }
 
 function isPosOrder(row) {
@@ -73,8 +104,7 @@ function isPosOrder(row) {
 }
 
 export function mapOrder(row) {
-  const itemsRaw = row.items ?? row.order_items ?? row.products ?? [];
-  const products = (Array.isArray(itemsRaw) ? itemsRaw : []).map(mapOrderItem);
+  const products = extractOrderItems(row).map(mapOrderItem);
   const statusRaw = String(row.status ?? 'pending').toLowerCase();
   const status = mapStatusToArabic(statusRaw);
   const isPos = isPosOrder(row);
@@ -150,6 +180,7 @@ export async function fetchOrders({
   if (excludePos) {
     rows = rows.filter((order) => !isPosOrder(order.raw));
   }
+  rows = await enrichOrdersWithItems(rows);
 
   return {
     orders: rows,

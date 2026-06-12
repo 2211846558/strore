@@ -10,6 +10,7 @@ import {
   mapStoreSubscription,
   extractStoreFromSubscriptionResponse,
   resolveStoreSubscriptionDetails,
+  resolveAllStoreSubscriptions,
   persistLocalSubscription,
   buildSubscriptionPeriod,
 } from '../api/plans';
@@ -27,6 +28,8 @@ const Plans = ({ onboarding = false }) => {
   const [subscribeAction, setSubscribeAction] = useState('subscribe');
   const [availablePlans, setAvailablePlans] = useState([]);
   const [subscriptionDates, setSubscriptionDates] = useState(null);
+  const [mySubscriptions, setMySubscriptions] = useState([]);
+  const [loadingSubscriptions, setLoadingSubscriptions] = useState(false);
   const [loadingPlans, setLoadingPlans] = useState(true);
   const [plansError, setPlansError] = useState('');
   const [toast, setToast] = useState(null);
@@ -74,12 +77,39 @@ const Plans = ({ onboarding = false }) => {
     };
   }, [store, storeId, availablePlans]);
 
-  const currentSubscription = useMemo(
-    () => mapStoreSubscription(store, availablePlans, subscriptionDates),
-    [store, availablePlans, subscriptionDates],
-  );
+  useEffect(() => {
+    if (!store || !storeId) {
+      setMySubscriptions([]);
+      return;
+    }
 
-  const mySubscriptions = currentSubscription ? [currentSubscription] : [];
+    let cancelled = false;
+    setLoadingSubscriptions(true);
+    resolveAllStoreSubscriptions(store, storeId, availablePlans, subscriptionDates)
+      .then((list) => {
+        if (!cancelled) setMySubscriptions(list);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          const current = mapStoreSubscription(store, availablePlans, subscriptionDates);
+          setMySubscriptions(current ? [current] : []);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingSubscriptions(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [store, storeId, availablePlans, subscriptionDates]);
+
+  const currentSubscription = useMemo(
+    () =>
+      mySubscriptions.find((sub) => !sub.isExpired) ??
+      mapStoreSubscription(store, availablePlans, subscriptionDates),
+    [mySubscriptions, store, availablePlans, subscriptionDates],
+  );
 
   const showToast = (message) => {
     setToast(message);
@@ -244,7 +274,9 @@ const Plans = ({ onboarding = false }) => {
 
         {activeTab === 'my-subscriptions' && (
           <div className="plans-grid my-subscriptions">
-            {filteredSubscriptions.length > 0 ? (
+            {loadingSubscriptions ? (
+              <p className="no-results">جاري تحميل اشتراكاتك...</p>
+            ) : filteredSubscriptions.length > 0 ? (
               filteredSubscriptions.map((sub) => (
                 <SubscriptionCard
                   key={sub.id}
@@ -268,9 +300,11 @@ const Plans = ({ onboarding = false }) => {
                 />
               ))
             ) : (
-              <p className="no-results">
-                لا يوجد اشتراك نشط. انتقل إلى «الخطط المتاحة» للاشتراك في خطة.
-              </p>
+              !loadingSubscriptions && (
+                <p className="no-results">
+                  لا توجد اشتراكات مسجلة. انتقل إلى «الخطط المتاحة» للاشتراك في خطة.
+                </p>
+              )
             )}
           </div>
         )}

@@ -20,6 +20,20 @@ import {
 } from '../data/ordersData';
 import './Orders.css';
 
+function formatOrderProductsLabel(products = []) {
+  const list = Array.isArray(products) ? products.filter((p) => p?.name && p.name !== '—') : [];
+  if (!list.length) return 'لا توجد منتجات';
+
+  const names = list.map((p) => {
+    const qty = Number(p.quantity ?? 1);
+    return qty > 1 ? `${p.name} ×${qty}` : p.name;
+  });
+
+  if (names.length === 1) return names[0];
+  if (names.length === 2) return names.join('، ');
+  return `${names.slice(0, 2).join('، ')} +${names.length - 2} أخرى`;
+}
+
 const Orders = () => {
   const { storeId } = useAuth();
   const [orders, setOrders] = useState([]);
@@ -191,16 +205,7 @@ const Orders = () => {
                 </div>
                 <div className="order-detail-item">
                   <span className="label">المنتج</span>
-                  <span className="value">
-                    {(() => {
-                      const count = (order.products ?? []).reduce((sum, p) => sum + (p.quantity ?? 1), 0);
-                      if (count === 0) return 'لا توجد منتجات';
-                      if (count === 1) return 'منتج واحد';
-                      if (count === 2) return 'منتجان';
-                      if (count >= 3 && count <= 10) return `${count} منتجات`;
-                      return `${count} منتج`;
-                    })()}
-                  </span>
+                  <span className="value">{formatOrderProductsLabel(order.products)}</span>
                 </div>
                 <div className="order-detail-item">
                   <span className="label">الإجمالي</span>
