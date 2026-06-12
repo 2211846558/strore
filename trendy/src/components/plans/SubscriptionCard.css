@@ -63,8 +63,19 @@
 }
 
 .sub-date {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
   font-size: 14px;
   color: var(--text-secondary);
+  text-align: end;
+}
+
+.sub-remaining {
+  font-size: 13px;
+  color: var(--success);
+  font-weight: 600;
 }
 
 .sub-price {

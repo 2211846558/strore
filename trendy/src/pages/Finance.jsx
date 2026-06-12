@@ -16,9 +16,9 @@ import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import WalletModal from '../components/finance/WalletModal';
 import TransactionDetailModal from '../components/finance/TransactionDetailModal';
-import { fetchCustodyLogs } from '../api/custody';
+import { fetchCustodyLogs, fetchCustodySummary } from '../api/custody';
 import { useWallet } from '../context/WalletContext';
-import { fetchCustodySummary } from '../api/custody';
+import { useAuth } from '../context/AuthContext';
 import {
   fetchAllTransactions,
   fetchTransactionDetails,
@@ -39,6 +39,7 @@ const formatMoney = (value) =>
   });
 
 const Finance = () => {
+  const { storeId } = useAuth();
   const { balance: walletBalance } = useWallet();
   const [transactions, setTransactions] = useState([]);
   const [chartData, setChartData] = useState([]);
@@ -80,8 +81,8 @@ const Finance = () => {
         }),
         fetchProfitOverview(),
         fetchMonthlyRevenueChart(5),
-        fetchCustodySummary().catch(() => null),
-        fetchCustodyLogs({ perPage: 20 }).catch(() => ({ data: [] })),
+        fetchCustodySummary({ storeId }).catch(() => null),
+        fetchCustodyLogs({ storeId, perPage: 20 }).catch(() => ({ data: [] })),
       ]);
 
       setTransactions(txResult.transactions);
@@ -95,7 +96,7 @@ const Finance = () => {
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, statusFilter]);
+  }, [debouncedSearch, statusFilter, storeId]);
 
   useEffect(() => {
     loadFinanceData();
@@ -195,7 +196,13 @@ const Finance = () => {
           <span className="stat-value orange">
             {formatMoney(custodySummary?.total_custody_owed ?? 0)} د.ل
           </span>
-          <span className="stat-sub">{custodySummary?.status_text || '—'}</span>
+          <span className="stat-sub">
+            {custodySummary?.status_text || '—'}
+            {custodySummary?.status === 'pending_settlement' &&
+            Number(custodySummary?.number_of_orders) > 0
+              ? ` · ${custodySummary.number_of_orders} طلب`
+              : ''}
+          </span>
         </div>
         <div className="stat-card">
           <div className="stat-header">
@@ -369,38 +376,52 @@ const Finance = () => {
         </div>
       </div>
 
-      {custodyLogs.length > 0 && (
-        <div className="transactions-section custody-logs-section">
-          <div className="transactions-header">
-            <div className="transactions-title-group">
-              <h3 className="section-title">سجل العهدة</h3>
-              <p className="section-subtitle">آخر حركات العهدة المالية للمتجر</p>
-            </div>
-          </div>
-          <div className="transaction-table-wrapper">
-            <table className="transaction-table">
-              <thead>
-                <tr>
-                  <th>التاريخ</th>
-                  <th>النوع</th>
-                  <th>المبلغ</th>
-                  <th>الوصف</th>
-                </tr>
-              </thead>
-              <tbody>
-                {custodyLogs.map((log) => (
-                  <tr key={log.id}>
-                    <td>{log.created_at?.slice(0, 10) ?? '—'}</td>
-                    <td>{log.type ?? log.action ?? '—'}</td>
-                    <td>{formatMoney(log.amount ?? 0)} د.ل</td>
-                    <td>{log.description ?? log.note ?? '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      <div className="transactions-section custody-logs-section">
+        <div className="transactions-header">
+          <div className="transactions-title-group">
+            <h3 className="section-title">سجل العهدة</h3>
+            <p className="section-subtitle">آخر حركات العهدة المالية للمتجر</p>
           </div>
         </div>
-      )}
+        <div className="transaction-table-wrapper">
+          <table className="transaction-table">
+            <thead>
+              <tr>
+                <th>التاريخ</th>
+                <th>الإجراء</th>
+                <th>المبلغ</th>
+                <th>الرصيد بعد الحركة</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan="4" className="no-results-cell">
+                    جاري تحميل سجل العهدة...
+                  </td>
+                </tr>
+              ) : custodyLogs.length > 0 ? (
+                custodyLogs.map((log) => (
+                  <tr key={log.id}>
+                    <td>{log.date ? String(log.date).slice(0, 16).replace('T', ' ') : '—'}</td>
+                    <td>{log.action ?? '—'}</td>
+                    <td className={`amount-cell ${log.amount >= 0 ? 'positive' : 'negative'}`}>
+                      {log.amount_formatted ?? formatMoney(log.amount)} د.ل
+                    </td>
+                    <td>{formatMoney(log.balance_after)} د.ل</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="4" className="no-results-cell">
+                    لا توجد حركات عهدة مسجلة حالياً.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
       <WalletModal
         isOpen={isWalletOpen}

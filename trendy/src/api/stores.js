@@ -227,8 +227,14 @@ export function getApiErrorMessage(error, fallback = 'تعذّر إرسال ال
     if (error?.isUnauthorized || /unauthenticated/i.test(msg) || /bearer token/i.test(msg)) {
       return 'انتهت جلستك. يرجى تسجيل الدخول مرة أخرى.';
     }
-    if (error?.status === 403 || /insufficient permissions/i.test(msg)) {
-      return 'شحن المحفظة متاح لمدير المتجر فقط. سجّل الخروج ثم ادخل بحساب المدير (ليس حساب الموظف).';
+    if (error?.status === 403 || /insufficient permissions|forbidden|does not have the right roles/i.test(msg)) {
+      if (/wallet|charge|recharge|withdraw|محفظة|شحن|سحب/i.test(msg)) {
+        return 'شحن المحفظة متاح لمدير المتجر فقط. سجّل الخروج ثم ادخل بحساب المدير (ليس حساب الموظف).';
+      }
+      if (/employee|موظف/i.test(msg)) {
+        return 'إدارة الموظفين متاحة لمدير المتجر فقط. سجّل الدخول بحساب المدير.';
+      }
+      return 'ليس لديك صلاحية لتنفيذ هذا الإجراء. يتطلب حساب مدير المتجر.';
     }
     if (/store_inactive_subscription|يجب الاشتراك في خطة أولاً/i.test(msg)) {
       return 'يجب الاشتراك في خطة نشطة قبل إضافة المنتجات.';

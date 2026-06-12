@@ -60,7 +60,12 @@ const StaffModal = ({ isOpen, onClose, onSave, member, roles, isSaving = false }
     try {
       await onSave({ ...form });
     } catch (err) {
-      setError(getApiErrorMessage(err, 'تعذّر حفظ بيانات الموظف'));
+      const fallback = isEdit ? 'تعذّر حفظ بيانات الموظف' : 'تعذّر إضافة الموظف';
+      if (err?.status === 403) {
+        setError('إدارة الموظفين متاحة لمدير المتجر فقط. سجّل الدخول بحساب المدير.');
+        return;
+      }
+      setError(getApiErrorMessage(err, fallback));
     }
   };
 
@@ -74,38 +79,56 @@ const StaffModal = ({ isOpen, onClose, onSave, member, roles, isSaving = false }
           </button>
         </div>
 
-        <div className="staff-form">
+        <form
+          className="staff-form"
+          autoComplete="off"
+          key={isEdit ? `edit-${member.id}` : 'add-employee'}
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleSubmit();
+          }}
+        >
           {error && <div className="staff-form-error">{error}</div>}
 
           <div className="form-group">
-            <label>الاسم الكامل</label>
+            <label htmlFor="staff-name">الاسم الكامل</label>
             <input
+              id="staff-name"
+              name="staff_name"
               type="text"
               value={form.name}
               onChange={(e) => handleChange('name', e.target.value)}
               placeholder="أدخل الاسم الكامل"
+              autoComplete="off"
               disabled={isSaving}
             />
           </div>
 
           <div className="form-row">
             <div className="form-group">
-              <label>البريد الإلكتروني</label>
+              <label htmlFor="staff-email">البريد الإلكتروني</label>
               <input
+                id="staff-email"
+                name="staff_email"
                 type="email"
                 value={form.email}
                 onChange={(e) => handleChange('email', e.target.value)}
                 placeholder="email@trendy.com"
+                autoComplete="off"
                 disabled={isSaving}
               />
             </div>
             <div className="form-group">
-              <label>رقم الهاتف</label>
+              <label htmlFor="staff-phone">رقم الهاتف</label>
               <input
-                type="text"
+                id="staff-phone"
+                name="staff_phone"
+                type="tel"
+                inputMode="tel"
                 value={form.phone}
                 onChange={(e) => handleChange('phone', e.target.value)}
                 placeholder="09XXXXXXXX"
+                autoComplete="off"
                 disabled={isSaving}
               />
             </div>
@@ -132,14 +155,17 @@ const StaffModal = ({ isOpen, onClose, onSave, member, roles, isSaving = false }
               {isEdit ? 'كلمة المرور الجديدة (اتركها فارغة للإبقاء على الحالية)' : 'كلمة المرور الأولية'}
             </label>
             <input
+              id="staff-password"
+              name="staff_initial_password"
               type="password"
               value={form.password}
               onChange={(e) => handleChange('password', e.target.value)}
               placeholder={isEdit ? 'أدخل كلمة مرور جديدة' : 'أدخل كلمة المرور'}
+              autoComplete="new-password"
               disabled={isSaving}
             />
           </div>
-        </div>
+        </form>
 
         <div className="modal-footer">
           <button className="cancel-button" onClick={onClose} type="button" disabled={isSaving}>

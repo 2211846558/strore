@@ -24,6 +24,7 @@ const Marketing = () => {
   const [availableCampaigns, setAvailableCampaigns] = useState([]);
   const [myCampaigns, setMyCampaigns] = useState([]);
   const [loadingCampaigns, setLoadingCampaigns] = useState(true);
+  const [loadingMyCampaigns, setLoadingMyCampaigns] = useState(false);
   const [campaignsError, setCampaignsError] = useState('');
   const [toast, setToast] = useState('');
 
@@ -59,17 +60,22 @@ const Marketing = () => {
       setMyCampaigns([]);
       return;
     }
+    setLoadingMyCampaigns(true);
     try {
       const list = await fetchMyCampaigns(storeId, availableCampaigns);
       setMyCampaigns(list);
     } catch {
       setMyCampaigns([]);
+    } finally {
+      setLoadingMyCampaigns(false);
     }
   }, [storeId, availableCampaigns]);
 
   useEffect(() => {
-    loadMyCampaigns();
-  }, [loadMyCampaigns]);
+    if (activeTab === 'my-campaigns') {
+      loadMyCampaigns();
+    }
+  }, [activeTab, loadMyCampaigns]);
 
   const getCampaignBanner = (campaign) =>
     resolveCampaignBanner(campaign, availableCampaigns);
@@ -185,7 +191,8 @@ const Marketing = () => {
 
         {activeTab === 'my-campaigns' && (
           <div className="plans-grid">
-            {myCampaigns.length > 0 ? (
+            {loadingMyCampaigns && <p className="no-results">جاري تحميل حملاتك المشتركة...</p>}
+            {!loadingMyCampaigns && myCampaigns.length > 0 ? (
               myCampaigns.map((campaign) => (
                 <SubscribedCampaignCard
                   key={campaign.megaCampaignId ?? campaign.id}
@@ -200,9 +207,9 @@ const Marketing = () => {
                   selectedProducts={campaign.selectedProducts}
                 />
               ))
-            ) : (
+            ) : !loadingMyCampaigns ? (
               <p className="no-results">لا توجد حملات مشتركة حالياً. اشترك في حملة جديدة!</p>
-            )}
+            ) : null}
           </div>
         )}
       </div>
