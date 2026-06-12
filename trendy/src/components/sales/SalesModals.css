@@ -122,6 +122,22 @@
   text-align: right;
 }
 
+.sales-variant-loading,
+.sales-variant-error {
+  text-align: center;
+  font-size: 14px;
+  padding: 12px 0 20px;
+  margin: 0;
+}
+
+.sales-variant-loading {
+  color: var(--text-secondary);
+}
+
+.sales-variant-error {
+  color: #ef4444;
+}
+
 .sales-stock-box {
   background: #1e2a3f;
   border: 1px solid #1e2a3f;

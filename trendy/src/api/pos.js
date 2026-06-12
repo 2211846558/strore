@@ -1,8 +1,16 @@
 import { apiRequest } from './client';
 import { API_ENDPOINTS } from './config';
 import { fetchOrder as fetchOrderById } from './orders';
-import { fetchStoreProducts } from './products';
-import { fetchInventory } from './inventory';
+import {
+  fetchStoreProducts,
+  fetchAttributes,
+  unwrapApiEntity,
+  parseVariantColorSize,
+  parseAttributesString,
+  buildVariantFallbackLabel,
+  extractProductVariants,
+} from './products';
+import { fetchInventory, fetchInventoryVariant } from './inventory';
 
 function extractList(res) {
   const payload = res?.data ?? res;
@@ -17,16 +25,6 @@ const STATUS_AR = {
   cancelled: 'ملغاة',
   delivered: 'مستلمة',
 };
-
-function mapAttributeValues(attrs) {
-  if (!Array.isArray(attrs)) return [];
-  return attrs
-    .map((a) => {
-      if (typeof a === 'string') return a;
-      return a.value ?? a.name ?? a.label ?? a.attribute_value?.value ?? null;
-    })
-    .filter(Boolean);
-}
 
 function readVariantStockFromPayload(variant) {
   for (const field of [
@@ -47,11 +45,28 @@ function readVariantStockFromPayload(variant) {
 function buildInventoryStockMap(items) {
   const map = new Map();
   (items ?? []).forEach((row) => {
-    const id = Number(row.variantId ?? row.variant_id ?? row.id);
+    const id = Number(row.variantId ?? row.variant_id);
     if (!id) return;
     map.set(id, Number(row.totalStock ?? row.total_stock ?? row.total_current_stock ?? 0));
   });
   return map;
+}
+
+function resolvePosVariantStock(variantId, variant, inventoryStock) {
+  const productQty = readVariantStockFromPayload(variant);
+  const hasInv = inventoryStock.has(variantId);
+  const invQty = hasInv ? Number(inventoryStock.get(variantId) ?? 0) : null;
+
+  if (productQty != null && productQty > 0) {
+    return { stock: Number(productQty), stockUnknown: false };
+  }
+  if (invQty != null) {
+    return { stock: invQty, stockUnknown: false };
+  }
+  if (productQty != null) {
+    return { stock: Number(productQty), stockUnknown: false };
+  }
+  return { stock: 0, stockUnknown: true };
 }
 
 function variantKey(color, size, variantId) {
@@ -59,70 +74,187 @@ function variantKey(color, size, variantId) {
   return `variant-${variantId}`;
 }
 
+function readVariantAttrValues(variant) {
+  return (
+    variant.attribute_values ??
+    variant.attributes ??
+    variant.attributeValues ??
+    variant.values ??
+    []
+  );
+}
+
+function readVariantPrice(variant, raw, product) {
+  return Number(
+    variant.discounted_price ??
+      variant.original_price ??
+      variant.selling_price ??
+      variant.price ??
+      variant.display_price ??
+      raw.discounted_price ??
+      raw.base_price ??
+      product.price ??
+      0,
+  );
+}
+
+function buildInventoryMetaMap(inventoryRows = []) {
+  const map = new Map();
+  (inventoryRows ?? []).forEach((row) => {
+    const id = Number(row.variantId ?? row.variant_id);
+    if (!id) return;
+    map.set(id, row);
+  });
+  return map;
+}
+
+function mapPosVariant(variant, raw, product, inventoryStock, inventoryMeta, catalogAttributes) {
+  const attrValues = readVariantAttrValues(variant);
+  let { color, size, label } = parseVariantColorSize(attrValues, catalogAttributes);
+  const variantId = Number(variant.id);
+  const invRow = inventoryMeta.get(variantId);
+  const invAttributes = invRow?.attributes ?? invRow?.attribute_values;
+
+  if ((color === '—' || size === '—') && invAttributes) {
+    const parsed = Array.isArray(invAttributes)
+      ? parseVariantColorSize(invAttributes, catalogAttributes)
+      : parseAttributesString(invAttributes, catalogAttributes);
+    if (parsed.label) label = parsed.label;
+    if (color === '—' && parsed.color !== '—') color = parsed.color;
+    if (size === '—' && parsed.size !== '—') size = parsed.size;
+  }
+
+  const { stock, stockUnknown } = resolvePosVariantStock(variantId, variant, inventoryStock);
+  const resolvedLabel =
+    label && label !== '—'
+      ? label
+      : variant.sku || buildVariantFallbackLabel(variant);
+
+  return {
+    id: variantId,
+    sku: variant.sku ?? '',
+    label: resolvedLabel,
+    color,
+    size,
+    stock: Number(stock) || 0,
+    stockUnknown,
+    price: readVariantPrice(variant, raw, product),
+  };
+}
+
+function buildPosProductEntry(raw, product, inventoryStock, inventoryRows = [], catalogAttributes = []) {
+  const inventoryMeta = buildInventoryMetaMap(inventoryRows);
+  const variants = extractProductVariants(raw).map((variant) =>
+    mapPosVariant(variant, raw, product, inventoryStock, inventoryMeta, catalogAttributes),
+  );
+
+  if (!variants.length) return null;
+
+  const colors = [...new Set(variants.map((v) => v.color).filter((c) => c && c !== '—'))];
+  const sizes = [...new Set(variants.map((v) => v.size).filter((s) => s && s !== '—' && s !== 'واحد'))];
+  const hasColorSizeSelectors = colors.length > 0 && sizes.length > 0;
+  const useDirectSelection = !hasColorSizeSelectors;
+  const stockMap = {};
+  const variantByKey = {};
+
+  variants.forEach((v) => {
+    const key = variantKey(v.color, v.size, v.id);
+    stockMap[key] = v.stockUnknown ? null : v.stock;
+    variantByKey[key] = v;
+  });
+
+  return {
+    id: product.id,
+    name: raw.name ?? product.name,
+    price: Math.min(...variants.map((v) => v.price)),
+    image: product.image,
+    colors,
+    sizes,
+    variants,
+    stockMap,
+    variantByKey,
+    useDirectSelection,
+    variantOptions: useDirectSelection
+      ? variants.map((v) => ({
+          id: v.id,
+          label: v.label,
+          stock: v.stock,
+          stockUnknown: v.stockUnknown,
+          price: v.price,
+        }))
+      : [],
+  };
+}
+
+/**
+ * GET /products/{id} + GET /inventory — تنوعات منتج واحد للمبيعات المباشرة
+ */
+export async function fetchSalesProductVariants(productId, { storeId } = {}) {
+  const [res, inventoryResult, catalogAttributes] = await Promise.all([
+    apiRequest(API_ENDPOINTS.product(productId)),
+    fetchInventory({ storeId, perPage: 200 }).catch(() => ({ items: [] })),
+    fetchAttributes().catch(() => []),
+  ]);
+  const raw = unwrapApiEntity(res);
+  const inventoryItems = inventoryResult.items ?? [];
+  const inventoryStock = buildInventoryStockMap(inventoryItems);
+  const productStub = { id: productId, name: raw.name, price: raw.base_price, image: null };
+  const entry = buildPosProductEntry(
+    raw,
+    productStub,
+    inventoryStock,
+    inventoryItems,
+    catalogAttributes,
+  );
+  if (!entry) throw new Error('لا توجد تنوعات لهذا المنتج');
+  return entry;
+}
+
+/**
+ * GET /inventory/variants/{variantId} — كمية وسعر FIFO للتنوع المحدد
+ */
+export async function fetchVariantStockPrice(variantId, { fallbackStock } = {}) {
+  try {
+    const inv = await fetchInventoryVariant(variantId);
+    const invStock = Number(inv.totalStock ?? 0);
+    const price = Number(inv.displayPrice || inv.cachedPrice || 0);
+    const fallback = Number(fallbackStock ?? 0);
+    return {
+      stock: invStock > 0 ? invStock : fallback > 0 ? fallback : invStock,
+      price: price > 0 ? price : null,
+    };
+  } catch {
+    const fallback = Number(fallbackStock ?? 0);
+    return { stock: fallback > 0 ? fallback : null, price: null };
+  }
+}
+
 /**
  * جلب منتجات المتجر مع تنوعاتها للمبيعات المباشرة
  */
 export async function fetchPosCatalog({ storeId } = {}) {
-  const [products, inventoryResult] = await Promise.all([
+  const [products, inventoryResult, catalogAttributes] = await Promise.all([
     fetchStoreProducts({ storeId, status: 'active', perPage: 100 }),
     fetchInventory({ storeId, perPage: 200 }).catch(() => ({ items: [] })),
+    fetchAttributes().catch(() => []),
   ]);
 
-  const inventoryStock = buildInventoryStockMap(inventoryResult.items);
+  const inventoryItems = inventoryResult.items ?? [];
+  const inventoryStock = buildInventoryStockMap(inventoryItems);
   const catalog = [];
 
   for (const product of products) {
     try {
       const res = await apiRequest(API_ENDPOINTS.product(product.id));
-      const raw = res?.data ?? res;
-      const variantsRaw = raw.variants ?? raw.product_variants ?? [];
-
-      const variants = (Array.isArray(variantsRaw) ? variantsRaw : []).map((variant) => {
-        const attrs = mapAttributeValues(variant.attribute_values ?? variant.attributes);
-        const color = attrs[0] ?? '—';
-        const size = attrs[1] ?? (attrs.length === 1 ? 'واحد' : '—');
-        const variantId = Number(variant.id);
-        const fromInventory = inventoryStock.get(variantId);
-        const fromProduct = readVariantStockFromPayload(variant);
-        const stock = fromInventory ?? fromProduct;
-        const stockUnknown = stock == null;
-
-        return {
-          id: variantId,
-          sku: variant.sku ?? '',
-          label: attrs.join(' / ') || variant.sku || `تنوع #${variantId}`,
-          color,
-          size,
-          stock: stockUnknown ? 0 : Number(stock),
-          stockUnknown,
-          price: Number(variant.price ?? raw.base_price ?? product.price ?? 0),
-        };
-      });
-
-      if (!variants.length) continue;
-
-      const colors = [...new Set(variants.map((v) => v.color))];
-      const sizes = [...new Set(variants.map((v) => v.size))];
-      const stockMap = {};
-      const variantByKey = {};
-
-      variants.forEach((v) => {
-        const key = variantKey(v.color, v.size, v.id);
-        stockMap[key] = v.stockUnknown ? null : v.stock;
-        variantByKey[key] = v;
-      });
-
-      catalog.push({
-        id: product.id,
-        name: raw.name ?? product.name,
-        price: Math.min(...variants.map((v) => v.price)),
-        image: product.image,
-        colors,
-        sizes,
-        variants,
-        stockMap,
-        variantByKey,
-      });
+      const raw = unwrapApiEntity(res);
+      const entry = buildPosProductEntry(
+        raw,
+        product,
+        inventoryStock,
+        inventoryItems,
+        catalogAttributes,
+      );
+      if (entry) catalog.push(entry);
     } catch {
       // تجاهل المنتجات التي لا يمكن تحميل تنوعاتها
     }
@@ -161,9 +293,21 @@ export function getVariantStock(product, color, size) {
   return Number(variant.stock) || 0;
 }
 
+function normalizeAttrValue(value) {
+  return String(value ?? '')
+    .trim()
+    .replace(/[\u0623\u0625\u0622]/g, '\u0627')
+    .replace(/\u0649/g, '\u064A')
+    .toLowerCase();
+}
+
 export function resolveVariant(product, color, size) {
   if (!product?.variants?.length) return null;
-  const match = product.variants.find((v) => v.color === color && v.size === size);
+  const nColor = normalizeAttrValue(color);
+  const nSize = normalizeAttrValue(size);
+  const match = product.variants.find(
+    (v) => normalizeAttrValue(v.color) === nColor && normalizeAttrValue(v.size) === nSize,
+  );
   if (match) return match;
   if (product.variants.length === 1) return product.variants[0];
   return null;
