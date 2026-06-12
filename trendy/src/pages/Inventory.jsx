@@ -71,10 +71,7 @@ const Inventory = () => {
 
   useEffect(() => {
     loadShipments();
-  }, []);
-
-  /* ── فلترة من خلال الخادم ── */
-  const filteredShipments = allShipments;
+  }, [loadShipments]);
 
   /* ── حفظ شحنة ── */
   const handleSaveShipment = async (shipmentData) => {
@@ -254,7 +251,7 @@ const Inventory = () => {
               <tr>
                 <td colSpan="6" className="no-results-cell">جاري تحميل الشحنات...</td>
               </tr>
-            ) : filteredShipments.length === 0 ? (
+            ) : allShipments.length === 0 ? (
               <tr>
                 <td colSpan="6" className="no-results-cell">
                   {allShipments.length === 0 && !debouncedSearch && statusFilter === 'all'
@@ -263,7 +260,7 @@ const Inventory = () => {
                 </td>
               </tr>
             ) : (
-              filteredShipments.map((shipment) => {
+              allShipments.map((shipment) => {
                 /* حساب الكمية الفعلية من مجموع تنوعات الشحنة */
                 const computedQty = (shipment.items || []).reduce(
                   (sum, item) => sum + Number(item.quantity || 0),

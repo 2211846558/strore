@@ -231,6 +231,13 @@ function filterShipmentsByStatus(shipments, status) {
   return shipments.filter((shipment) => matchesShipmentStatusFilter(shipment, status));
 }
 
+/** تحويل فلتر الواجهة إلى query param لـ GET /inventory/shipments */
+function mapShipmentStatusFilterToApi(status) {
+  if (!status || status === 'all') return null;
+  if (status === 'cancelled') return 'archived';
+  return status;
+}
+
 function mapAttributeValues(attrs) {
   return (Array.isArray(attrs) ? attrs : [])
     .map((a) => a.value ?? a.name)
@@ -277,6 +284,7 @@ export async function fetchInventory({
   const query = new URLSearchParams({ per_page: String(perPage) });
   if (storeId) query.set('store_id', String(storeId));
   if (search?.trim()) query.set('search', search.trim());
+  if (stockFilter && stockFilter !== 'all') query.set('status', stockFilter);
 
   const res = await apiRequest(`${API_ENDPOINTS.inventory}?${query}`);
   const allRows = extractList(res).map(mapInventoryRow);
@@ -310,7 +318,9 @@ export async function fetchShipments({
   if (resolvedStoreId) query.set('store_id', String(resolvedStoreId));
   if (search?.trim()) query.set('search', search.trim());
 
-  // الفلترة تتم من الواجهة — الباك يخزن الملغاة غالباً كـ archived وليس cancelled
+  const apiStatus = mapShipmentStatusFilterToApi(status);
+  if (apiStatus) query.set('status', apiStatus);
+
   const res = await apiRequest(`${API_ENDPOINTS.inventoryShipments}?${query}`);
   const shipmentsRaw = extractList(res);
   const allShipments = shipmentsRaw.map(mapShipment);
