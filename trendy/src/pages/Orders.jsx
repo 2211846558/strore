@@ -54,6 +54,7 @@ const Orders = () => {
         storeId,
         search: debouncedSearch,
         status: statusFilter,
+        excludePos: false,
       });
       setOrders(list);
     } catch (err) {
@@ -190,14 +191,16 @@ const Orders = () => {
 
               <div className="order-card-details">
                 <div className="order-detail-item">
-                  <span className="label">العميل</span>
+                  <span className="label">{order.isPos ? 'بواسطة الموظف' : 'العميل'}</span>
                   <span className="value">{order.customerName}</span>
-                  <span
-                    className="value"
-                    style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}
-                  >
-                    {order.phone}
-                  </span>
+                  {!order.isPos && (
+                    <span
+                      className="value"
+                      style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}
+                    >
+                      {order.phone}
+                    </span>
+                  )}
                 </div>
                 <div className="order-detail-item">
                   <span className="label">المنتجات</span>

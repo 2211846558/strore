@@ -36,7 +36,7 @@ const calcInvoiceTotal = (items) =>
   items.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
 const Sales = () => {
-  const { storeId } = useAuth();
+  const { storeId, user } = useAuth();
   const [activeTab, setActiveTab] = useState('cart');
   const [products, setProducts] = useState([]);
   const [cart, setCart] = useState([]);
@@ -517,6 +517,7 @@ const Sales = () => {
         cart={cart}
         onConfirm={handleCreateInvoice}
         isSaving={isSaving}
+        user={user}
       />
 
       <RefundModal

@@ -345,7 +345,7 @@ export function mapOrderToInvoice(order) {
     id: order.order_number ?? `ORD-${order.id}`,
     orderId: order.id,
     date: order.created_at ? String(order.created_at).slice(0, 10) : '—',
-    customer: order.customer_name ?? '—',
+    customer: order.cashier_name ?? order.raw?.cashier_name ?? order.customer_name ?? '—',
     status: STATUS_AR[order.status] ?? order.status ?? '—',
     statusRaw: order.status,
     items,
