@@ -118,8 +118,12 @@ const ProductModal = ({
         stock: form.stock,
         imageFiles: newImages.map((img) => img.file),
       });
-      if (!isEdit && result) {
+      if (!isEdit && result?.id) {
         setSavedProduct(result);
+        return;
+      }
+      if (!isEdit && result && !result.id) {
+        setError('تعذّر إنشاء المنتج. تحقق من البيانات وحاول مرة أخرى.');
         return;
       }
       onClose();

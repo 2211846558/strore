@@ -23,6 +23,10 @@ const FIELD_LABELS = {
   batch_number: 'رقم الدفعة',
   selling_price: 'سعر البيع',
   unit_cost: 'سعر التكلفة',
+  base_price: 'السعر',
+  category_id: 'التصنيف',
+  sku: 'رمز SKU',
+  total_quantity: 'الكمية',
   role_id: 'الدور الوظيفي',
   job_title: 'المسمى الوظيفي',
   status: 'حالة الطلب',
@@ -225,6 +229,12 @@ export function getApiErrorMessage(error, fallback = 'تعذّر إرسال ال
     }
     if (error?.status === 403 || /insufficient permissions/i.test(msg)) {
       return 'شحن المحفظة متاح لمدير المتجر فقط. سجّل الخروج ثم ادخل بحساب المدير (ليس حساب الموظف).';
+    }
+    if (/store_inactive_subscription|يجب الاشتراك في خطة أولاً/i.test(msg)) {
+      return 'يجب الاشتراك في خطة نشطة قبل إضافة المنتجات.';
+    }
+    if (/name.*unique|اسم المنتج موجود/i.test(msg)) {
+      return 'اسم المنتج موجود مسبقاً في متجرك. اختر اسماً آخر.';
     }
     if (/no such paymentmethod/i.test(msg)) {
       return 'طريقة الدفع غير صالحة. استخدم بطاقة بنكية عبر Stripe (ليس سداد).';

@@ -1,9 +1,20 @@
 import { apiRequest } from './client';
 import { API_ENDPOINTS } from './config';
+import { getStoredUser, resolveManagedStoreId } from './auth';
 import {
   getProductImageCandidates,
   productPlaceholderImage,
 } from './media';
+
+function resolveProductStoreId(storeId) {
+  return resolveManagedStoreId(getStoredUser(), storeId);
+}
+
+function normalizeProductPrice(price) {
+  const num = Number(price);
+  if (Number.isNaN(num) || num < 0) return 0;
+  return num;
+}
 
 function mapImageEntry(img, productId) {
   const raw = typeof img === 'string' ? img : img?.url;
@@ -161,7 +172,8 @@ export async function createProductVariant(productId, { storeId, attributeValueI
   const body = {
     attribute_value_ids: attributeValueIds,
   };
-  if (storeId) body.store_id = storeId;
+  const resolvedStoreId = resolveProductStoreId(storeId);
+  if (resolvedStoreId) body.store_id = resolvedStoreId;
 
   const res = await apiRequest(API_ENDPOINTS.myStoreProductVariants(productId), {
     method: 'POST',
@@ -206,7 +218,8 @@ export async function fetchStoreProducts({
   perPage = 50,
 } = {}) {
   const query = new URLSearchParams({ per_page: String(perPage) });
-  if (storeId) query.set('store_id', String(storeId));
+  const resolvedStoreId = resolveProductStoreId(storeId);
+  if (resolvedStoreId) query.set('store_id', String(resolvedStoreId));
   if (name?.trim()) query.set('name', name.trim());
   if (categoryId && categoryId !== 'all') query.set('category_id', String(categoryId));
   if (status && status !== 'all') query.set('status', status);
@@ -221,23 +234,54 @@ export async function fetchStoreProducts({
  */
 export async function fetchProductDetails(id) {
   const res = await apiRequest(API_ENDPOINTS.product(id));
-  const item = res?.data ?? res;
-  return mapProductFromDetails(item);
+  return mapProductFromDetails(unwrapApiEntity(res));
+}
+
+function unwrapApiEntity(res) {
+  const payload = res?.data ?? res;
+  if (payload?.id != null) return payload;
+  if (payload?.data?.id != null) return payload.data;
+  return payload;
 }
 
 function buildProductFormData({ storeId, name, sku, description, price, categoryId, stock, imageFiles }) {
   const fd = new FormData();
-  if (storeId) fd.append('store_id', String(storeId));
-  fd.append('name', name);
-  if (sku) fd.append('sku', sku);
+  const resolvedStoreId = resolveProductStoreId(storeId);
+  if (!resolvedStoreId) {
+    throw new Error('لم يتم تحديد المتجر. يرجى تسجيل الدخول مرة أخرى.');
+  }
+  fd.append('store_id', String(resolvedStoreId));
+  fd.append('name', String(name).trim());
+  if (sku) fd.append('sku', String(sku).trim());
   if (description) fd.append('description', description);
-  fd.append('base_price', String(price));
+  fd.append('base_price', String(normalizeProductPrice(price)));
   fd.append('category_id', String(categoryId));
   if (stock !== '' && stock != null) fd.append('total_quantity', String(stock));
   if (imageFiles?.length) {
     imageFiles.forEach((file, index) => fd.append(`images[${index}]`, file));
   }
   return fd;
+}
+
+function extractCreatedProduct(res) {
+  const item = unwrapApiEntity(res);
+  if (!item?.id) {
+    throw new Error('تعذّر إنشاء المنتج: لم يُرجع الخادم معرف المنتج. تحقق من رسالة الخطأ أو أعد المحاولة.');
+  }
+  return mapProductFromDetails(item);
+}
+
+async function verifyCreatedProduct(productId) {
+  try {
+    const verified = await fetchProductDetails(productId);
+    if (verified?.id) return verified;
+  } catch {
+    // fallback below
+  }
+
+  throw new Error(
+    'تم إرسال الطلب لكن تعذّر التأكد من حفظ المنتج في الخادم. تحقق من قائمة المنتجات أو أعد المحاولة.',
+  );
 }
 
 /**
@@ -249,8 +293,8 @@ export async function createProduct(payload) {
     method: 'POST',
     body: fd,
   });
-  const item = res?.data ?? res;
-  return mapProductFromDetails(item);
+  const created = extractCreatedProduct(res);
+  return verifyCreatedProduct(created.id);
 }
 
 /**

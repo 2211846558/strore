@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { X, AlertTriangle } from 'lucide-react';
+import ConfirmDialog from '../common/ConfirmDialog';
 import { fetchShipmentCatalog, suggestBatchNumber } from '../../api/inventory';
 import { fetchProductVariants } from '../../api/products';
 import { getApiErrorMessage } from '../../api/stores';
+import { ARCHIVE_SHIPMENT_CONFIRM } from './shipmentStatusConfirm';
 import './AddShipmentModal.css';
 
 const AddShipmentModal = ({
   isOpen,
   onClose,
   onSave,
+  onArchive,
   initialData = null,
   storeId,
   isSaving = false,
@@ -25,11 +28,15 @@ const AddShipmentModal = ({
   const [quantities, setQuantities] = useState({}); // variantId -> quantity
   const [loadingVariants, setLoadingVariants] = useState(false);
   const [error, setError] = useState('');
+  const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
+  const [isArchiving, setIsArchiving] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
 
     setError('');
+    setShowArchiveConfirm(false);
+    setIsArchiving(false);
     if (initialData) {
       setSelectedProductId(initialData.productId ? String(initialData.productId) : '');
       setPurchasePrice(initialData.costPrice !== undefined && initialData.costPrice !== null ? String(initialData.costPrice) : '');
@@ -122,6 +129,32 @@ const AddShipmentModal = ({
     sellingPrice !== '' &&
     Number(sellingPrice) < Number(purchasePrice);
 
+  const canArchive =
+    isEditMode &&
+    initialData?.statusRaw !== 'finished' &&
+    initialData?.statusRaw !== 'cancelled' &&
+    typeof onArchive === 'function';
+
+  const handleArchive = () => {
+    if (!initialData || !canArchive) return;
+    setShowArchiveConfirm(true);
+  };
+
+  const handleConfirmArchive = async () => {
+    if (!initialData || !canArchive) return;
+    setError('');
+    setIsArchiving(true);
+    try {
+      await onArchive(initialData);
+      setShowArchiveConfirm(false);
+      onClose();
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'تعذّر أرشفة الشحنة.'));
+    } finally {
+      setIsArchiving(false);
+    }
+  };
+
   const handleSubmit = async () => {
     if (!batchNumber.trim()) {
       setError('رقم الشحنة مطلوب.');
@@ -176,6 +209,7 @@ const AddShipmentModal = ({
     setError('');
     try {
       const payload = {
+        productId: Number(selectedProductId),
         batchNumber: batchNumber.trim(),
         supplierName: supplierName.trim(),
         costPrice: Number(purchasePrice),
@@ -192,6 +226,7 @@ const AddShipmentModal = ({
   if (!isOpen) return null;
 
   return (
+    <>
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content add-shipment-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
@@ -203,6 +238,16 @@ const AddShipmentModal = ({
 
         <div className="shipment-form">
           {error && <p className="form-error">{error}</p>}
+
+          {isEditMode && initialData?.status && (
+            <div className="shipment-status-banner">
+              <span>حالة الشحنة الحالية:</span>
+              <strong>{initialData.status}</strong>
+              {initialData.dynamicStatus && (
+                <span className="status-hint">({initialData.dynamicStatus})</span>
+              )}
+            </div>
+          )}
 
           {/* الحقول الرئيسية */}
           <div className="form-row">
@@ -356,6 +401,16 @@ const AddShipmentModal = ({
         </div>
 
         <div className="modal-footer">
+          {canArchive && (
+            <button
+              className="archive-button"
+              onClick={handleArchive}
+              type="button"
+              disabled={isSaving}
+            >
+              أرشفة الشحنة
+            </button>
+          )}
           <button className="cancel-button" onClick={onClose} type="button" disabled={isSaving}>
             إلغاء
           </button>
@@ -370,6 +425,17 @@ const AddShipmentModal = ({
         </div>
       </div>
     </div>
+
+    <ConfirmDialog
+      isOpen={showArchiveConfirm}
+      onClose={() => !isArchiving && setShowArchiveConfirm(false)}
+      onConfirm={handleConfirmArchive}
+      title={ARCHIVE_SHIPMENT_CONFIRM.title}
+      message={ARCHIVE_SHIPMENT_CONFIRM.message}
+      confirmText={ARCHIVE_SHIPMENT_CONFIRM.confirmText}
+      isLoading={isArchiving}
+    />
+    </>
   );
 };
 

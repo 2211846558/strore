@@ -527,3 +527,39 @@
   font-weight: 700;
 }
 
+.shipment-status-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid var(--border-color);
+  font-size: 14px;
+}
+
+.shipment-status-banner strong {
+  color: var(--primary-color, #6366f1);
+}
+
+.status-hint {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.archive-button {
+  margin-inline-end: auto;
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: 1px solid #ef4444;
+  background: transparent;
+  color: #ef4444;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.archive-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
