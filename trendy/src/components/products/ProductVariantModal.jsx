@@ -402,6 +402,8 @@ const ProductVariantModal = ({ isOpen, onClose, product, storeId, onVariantAdded
         <div className="variant-modal-body">
           {loading ? (
             <p className="variant-loading">جاري تحميل التنوعات والخصائص...</p>
+          ) : globalError ? (
+            <p className="form-error vm-global-error">{globalError}</p>
           ) : attributes.length === 0 ? (
             <p className="variant-empty">
               لا توجد خصائص متاحة بقيم. أضف خصائص (لون، مقاس، ...) من لوحة الإدارة أولاً.

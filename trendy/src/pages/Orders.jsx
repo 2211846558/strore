@@ -7,9 +7,12 @@ import {
   fetchOrder,
   updateOrderStatus,
   cancelOrder,
-  prepareOrder,
+  dispatchOrderForDelivery,
+  buildDispatchToast,
   canCancelOrderStatus,
   canPrepareOrder,
+  canDispatchOrder,
+  shouldDispatchToDriver,
 } from '../api/orders';
 import { getApiErrorMessage } from '../api/stores';
 import { useAuth } from '../context/AuthContext';
@@ -89,8 +92,13 @@ const Orders = () => {
 
     setUpdatingId(order.orderId);
     try {
-      await updateOrderStatus(order.orderId, newStatus);
-      showToast(`تم تحديث حالة الطلب ${order.id} إلى «${newStatus}»`);
+      if (shouldDispatchToDriver(newStatus)) {
+        const updated = await dispatchOrderForDelivery(order);
+        showToast(buildDispatchToast(updated));
+      } else {
+        await updateOrderStatus(order.orderId, newStatus);
+        showToast(`تم تحديث حالة الطلب ${order.id} إلى «${newStatus}»`);
+      }
       await loadOrders();
     } catch (err) {
       showToast(getApiErrorMessage(err, 'تعذّر تحديث حالة الطلب'));
@@ -120,15 +128,15 @@ const Orders = () => {
     }
   };
 
-  const handlePrepare = async (order) => {
-    if (!order || !canPrepareOrder(order)) return;
+  const handleDispatch = async (order) => {
+    if (!order || !canDispatchOrder(order)) return;
     setActionId(order.orderId);
     try {
-      await prepareOrder(order.orderId);
-      showToast(`تم تجهيز الطلب ${order.id} بنجاح`);
+      const updated = await dispatchOrderForDelivery(order);
+      showToast(buildDispatchToast(updated));
       await loadOrders();
     } catch (err) {
-      showToast(getApiErrorMessage(err, 'تعذّر تجهيز الطلب'));
+      showToast(getApiErrorMessage(err, 'تعذّر إرسال الطلب للتوصيل'));
     } finally {
       setActionId(null);
     }
@@ -159,7 +167,7 @@ const Orders = () => {
           <Search size={20} color="#9ca3af" />
           <input
             type="text"
-            placeholder="البحث برقم الطلب أو اسم العميل..."
+            placeholder="البحث برقم الطلب أو اسم الموظف..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
@@ -192,16 +200,8 @@ const Orders = () => {
 
               <div className="order-card-details">
                 <div className="order-detail-item">
-                  <span className="label">{order.isPos ? 'بواسطة الموظف' : 'العميل'}</span>
-                  <span className="value">{order.customerName}</span>
-                  {!order.isPos && (
-                    <span
-                      className="value"
-                      style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}
-                    >
-                      {order.phone}
-                    </span>
-                  )}
+                  <span className="label">الموظف</span>
+                  <span className="value">{order.staffName}</span>
                 </div>
                 <div className="order-detail-item">
                   <span className="label">المنتج</span>
@@ -211,6 +211,18 @@ const Orders = () => {
                   <span className="label">الإجمالي</span>
                   <span className="value total">{order.total} د.ل</span>
                 </div>
+                {!order.isPos && (
+                  <div className="order-detail-item">
+                    <span className="label">السائق</span>
+                    <span className="value">
+                      {order.hasDriver
+                        ? order.driverName
+                        : ['تم الشحن', 'قيد التوصيل'].includes(order.status)
+                          ? 'في انتظار سائق'
+                          : '—'}
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div className="order-card-actions">
@@ -243,10 +255,21 @@ const Orders = () => {
                   <button
                     type="button"
                     className="order-btn-view"
-                    onClick={() => handlePrepare(order)}
+                    onClick={() => handleDispatch(order)}
                     disabled={actionId === order.orderId}
                   >
-                    تجهيز الطلب
+                    إرسال للتوصيل
+                  </button>
+                )}
+
+                {canDispatchOrder(order) && !canPrepareOrder(order) && (
+                  <button
+                    type="button"
+                    className="order-btn-view"
+                    onClick={() => handleDispatch(order)}
+                    disabled={actionId === order.orderId}
+                  >
+                    تعيين سائق
                   </button>
                 )}
 

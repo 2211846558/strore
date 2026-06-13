@@ -257,8 +257,11 @@ export function getApiErrorMessage(error, fallback = 'تعذّر إرسال ال
     if (/OrderController::show/i.test(msg) || /must be of type int, string given/i.test(msg)) {
       return 'تعذّر تحميل المحادثات. حاول مرة أخرى.';
     }
+    if (/undefined relationship.*Rating/i.test(msg) || /Call to undefined relationship \[user\] on model \[App\\Models\\Rating\]/i.test(msg)) {
+      return 'تعذّر تحميل بيانات المنتج بسبب خطأ في الخادم. حاول مرة أخرى لاحقاً.';
+    }
     if (/undefined method/i.test(msg) || /App\\Models/i.test(msg)) {
-      return 'تعذّر تحميل المحادثات بسبب خطأ في الخادم. حاول مرة أخرى لاحقاً.';
+      return 'حدث خطأ في الخادم. حاول مرة أخرى لاحقاً.';
     }
     if (/App\\Http\\Controllers/i.test(msg) || /vendor\\laravel/i.test(msg)) {
       return 'حدث خطأ في الخادم. حاول مرة أخرى لاحقاً.';

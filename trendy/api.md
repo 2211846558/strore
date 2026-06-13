@@ -82,6 +82,17 @@ Route::prefix('v1/auth')->group(function () {
     Route::get('/stores/{store}', [\App\Http\Controllers\Api\V1\StoreController::class, 'show']);
 
     // عرض قائمة المناطق المدعومة
+    // GET /api/zones
+    // ─────────────────────────────────────────────────────────────────────────
+    // تُستخدم لاختيار منطقة المتجر المحلي، عنوان الشحن، ومنطقة عمل السائق.
+    // ربط المناطق مع السائقين والطلبات:
+    //   1. المتجر المحلي: zone_id عند الانضمام (POST /api/stores/join) أو التعديل
+    //   2. السائق عند الاتصال: POST /api/drivers/toggle-status { is_online, current_zone_id }
+    //   3. عند إرسال الطلب للتوصيل (POST /api/orders/{id}/prepare أو PATCH status → out_for_delivery):
+    //      - تُحدَّد منطقة الطلب من shipping_address.zone_id أو store.zone_id
+    //      - يُعيَّن سائق online في نفس المنطقة → out_for_delivery + Trip
+    //   4. السائق يرى طلباته المعيَّنة: GET /api/orders?order_type=current
+    //   5. عند اتصال سائق جديد بمنطقة: يُسند له أقدم طلب shipped غير معيَّن في المنطقة
     Route::get('/zones', [\App\Http\Controllers\Api\V1\ZoneController::class, 'index']);
 
     // -------------------------------------------------------------------------
@@ -379,6 +390,10 @@ Route::prefix('v1/auth')->group(function () {
     // GET /api/v1/products/{id}
     Route::get('/products/{id}', [\App\Http\Controllers\Api\V1\ProductController::class, 'show']);
 
+    // عرض التنوعات المرتبطة بكل منتج
+    // GET /api/products/{id}/variants
+    Route::get('/products/{id}/variants', [\App\Http\Controllers\Api\V1\ProductController::class, 'variants']);
+
     // [5.2] + [5.7] عرض منتجات متجر معين مع الفلترة والـ Pagination:
     // يعرض فقط المنتجات النشطة للمتجر المحدد.
     // معاملات الفلترة المدعومة [5.7]:
@@ -523,6 +538,10 @@ Route::prefix('v1/auth')->group(function () {
         // 1. إضافة شحنة جديدة (توريد)
         // POST /api/v1/inventory/shipments
         Route::post('/shipments', [\App\Http\Controllers\Api\V1\InventoryController::class, 'store']);
+
+        // عرض قائمة الشحنات مع الفلترة والبحث
+        // GET /api/v1/inventory/shipments
+        Route::get('/shipments', [\App\Http\Controllers\Api\V1\InventoryController::class, 'listShipments']);
 
         // 2 & 6 & 7. عرض القائمة والبحث والفلترة
         // GET /api/v1/inventory
@@ -823,6 +842,13 @@ Route::prefix('v1/auth')->group(function () {
 
         // 1 & 5 & 6. عرض القائمة والبحث والفلترة
         // GET /api/orders
+        // ─────────────────────────────────────────────────────────────────────
+        // للسائق (driver): يُعاد فقط الطلبات المعيَّنة له (driver_id).
+        //   ?order_type=current  → processing | shipped | out_for_delivery
+        //   ?order_type=past     → delivered | cancelled | completed
+        // التعيين التلقائي يتم حسب منطقة عنوان الشحن (أو منطقة المتجر) عبر:
+        //   POST /api/orders/{id}/prepare
+        //   PATCH /api/orders/{id}/status  { status: "out_for_delivery" }
         Route::get('/', [\App\Http\Controllers\Api\V1\OrderController::class, 'index']);
 
         // =========================================================================
@@ -860,6 +886,9 @@ Route::prefix('v1/auth')->group(function () {
 
         // تجهيز الطلب من قبل المتجر
         // POST /api/v1/orders/{id}/prepare
+        // ─────────────────────────────────────────────────────────────────────
+        // يغيّر الحالة إلى shipped ثم يُعيّن سائقاً online في منطقة التوصيل
+        // (shipping_address.zone_id أو store.zone_id) → out_for_delivery + Trip
         Route::post('/{id}/prepare', [\App\Http\Controllers\Api\V1\OrderController::class, 'prepare'])
             ->middleware(['role:store_manager,store_staff', 'store_plan_active']);
 
@@ -928,6 +957,10 @@ Route::prefix('v1/auth')->group(function () {
             ->middleware('role:super_admin,operations_admin,driver');
 
         // [18.7, 18.8] تفعيل/تعطيل حالة الاتصال (للسائق فقط)
+        // POST /api/drivers/toggle-status
+        // body: { is_online: true, current_zone_id: 1, latitude?, longitude? }
+        // ─────────────────────────────────────────────────────────────────────
+        // عند الاتصال بمنطقة: يُسند تلقائياً أقدم طلب shipped في نفس المنطقة
         Route::post('/toggle-status', [\App\Http\Controllers\Api\V1\DriverController::class, 'toggleStatus'])
             ->middleware('role:driver,super_admin,operations_admin');
 
@@ -967,4 +1000,5 @@ Route::prefix('v1/auth')->group(function () {
     // =========================================================================
     Route::middleware('auth:sanctum')->prefix('fcm')->group(function () {
         Route::post('/token', [\App\Http\Controllers\Api\V1\FcmTokenController::class, 'register']);
-        Route::post('/token/unregister', [\App\Http\Controllers\Api\V1\FcmTokenController::class, 'unregister'])
+        Route::post('/token/unregister', [\App\Http\Controllers\Api\V1\FcmTokenController::class, 'unregister']);
+    });

@@ -443,7 +443,7 @@ const Sales = () => {
                   <div>
                     <p className="sales-invoice-number">فاتورة رقم: {invoice.id}</p>
                     <p className="sales-invoice-meta">
-                      التاريخ: {invoice.date} | العميل: {invoice.customer}
+                      التاريخ: {invoice.date} | الموظف: {invoice.staff ?? invoice.customer}
                     </p>
                   </div>
                   <span className="sales-invoice-status">{invoice.status}</span>

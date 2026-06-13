@@ -82,6 +82,17 @@ Route::prefix('v1/auth')->group(function () {
     Route::get('/stores/{store}', [\App\Http\Controllers\Api\V1\StoreController::class, 'show']);
 
     // عرض قائمة المناطق المدعومة
+    // GET /api/zones
+    // ─────────────────────────────────────────────────────────────────────────
+    // تُستخدم لاختيار منطقة المتجر المحلي، عنوان الشحن، ومنطقة عمل السائق.
+    // ربط المناطق مع السائقين والطلبات:
+    //   1. المتجر المحلي: zone_id عند الانضمام (POST /api/stores/join) أو التعديل
+    //   2. السائق عند الاتصال: POST /api/drivers/toggle-status { is_online, current_zone_id }
+    //   3. عند إرسال الطلب للتوصيل (POST /api/orders/{id}/prepare أو PATCH status → out_for_delivery):
+    //      - تُحدَّد منطقة الطلب من shipping_address.zone_id أو store.zone_id
+    //      - يُعيَّن سائق online في نفس المنطقة → out_for_delivery + Trip
+    //   4. السائق يرى طلباته المعيَّنة: GET /api/orders?order_type=current
+    //   5. عند اتصال سائق جديد بمنطقة: يُسند له أقدم طلب shipped غير معيَّن في المنطقة
     Route::get('/zones', [\App\Http\Controllers\Api\V1\ZoneController::class, 'index']);
 
     // -------------------------------------------------------------------------
