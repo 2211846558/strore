@@ -100,15 +100,19 @@ function appendLocalSubscriptionHistory(storeId, { planId, startsAt, endsAt, dur
 
 export function persistLocalSubscription(storeId, { planId, startsAt, endsAt, durationDays }) {
   if (!storeId || !startsAt || !endsAt) return;
-  localStorage.setItem(
-    subscriptionStorageKey(storeId),
-    JSON.stringify({
-      planId: planId ?? null,
-      duration_days: durationDays ?? null,
-      starts_at: startsAt.toISOString(),
-      ends_at: endsAt.toISOString(),
-    }),
-  );
+  const now = Date.now();
+  const isScheduled = startsAt.getTime() > now;
+  if (!isScheduled) {
+    localStorage.setItem(
+      subscriptionStorageKey(storeId),
+      JSON.stringify({
+        planId: planId ?? null,
+        duration_days: durationDays ?? null,
+        starts_at: startsAt.toISOString(),
+        ends_at: endsAt.toISOString(),
+      }),
+    );
+  }
   appendLocalSubscriptionHistory(storeId, { planId, startsAt, endsAt, durationDays });
 }
 
@@ -318,7 +322,7 @@ export function mapPlanFromApi(plan) {
     durationDays: plan.duration_days ?? 30,
     commissionRate: plan.commission_rate ?? 0,
     featuresText: `مدة ${plan.duration_days ?? 30} يوم`,
-    isPopular: Boolean(plan.is_popular ?? plan.is_featured ?? false),
+    isPopular: Boolean(plan.is_popular ?? plan.is_featured ?? (plan.id === 2 || plan.name?.includes('شهرية'))),
   };
 }
 
@@ -358,8 +362,21 @@ function buildSubscriptionEntry(
     endsAt,
     durationDays: resolvedDuration,
   });
-  const isExpired = aligned.endsAt ? aligned.endsAt.getTime() < Date.now() : true;
+  const now = Date.now();
+  const isExpired = aligned.endsAt ? aligned.endsAt.getTime() < now : true;
+  const isScheduled = aligned.startsAt ? aligned.startsAt.getTime() > now : false;
   const remainingDays = !isExpired && aligned.endsAt ? calcRemainingDays(aligned.endsAt) : null;
+
+  let status = 'منتهي';
+  let statusText = 'انتهى الاشتراك — جدّد الآن';
+
+  if (isScheduled) {
+    status = 'مجدول';
+    statusText = `مجدول للبدء في ${formatDisplayDate(aligned.startsAt)}`;
+  } else if (!isExpired) {
+    status = 'نشط';
+    statusText = 'الاشتراك نشط حالياً';
+  }
 
   return {
     id: `${planId}-${aligned.startsAt.toISOString()}`,
@@ -368,14 +385,59 @@ function buildSubscriptionEntry(
     price: matchedPlan?.price ?? String(nestedPlan?.price ?? '0'),
     durationDays: resolvedDuration,
     remainingDays,
-    status: isExpired ? 'منتهي' : 'نشط',
+    status,
     isExpired,
-    statusText: isExpired ? 'انتهى الاشتراك — جدّد الآن' : 'الاشتراك نشط حالياً',
+    statusText,
     dateRange: {
       start: formatDisplayDate(aligned.startsAt),
       end: aligned.endsAt ? formatDisplayDate(aligned.endsAt) : '—',
     },
     startsAtMs: aligned.startsAt.getTime(),
+  };
+}
+
+export function mapSubscriptionFromApi(apiSub, plans = []) {
+  if (!apiSub) return null;
+
+  const startsAt = parseApiDate(apiSub.starts_at);
+  const endsAt = parseApiDate(apiSub.ends_at);
+
+  const matchedPlan = plans.find((p) => Number(p.id) === Number(apiSub.plan_id));
+  const planName = apiSub.plan?.name ?? matchedPlan?.title ?? `خطة #${apiSub.plan_id}`;
+  const planPrice = apiSub.price_paid ?? apiSub.plan?.price ?? matchedPlan?.price ?? '0';
+  const durationDays = Number(apiSub.plan?.duration_days ?? matchedPlan?.durationDays ?? 30);
+
+  const now = Date.now();
+  const isExpired = endsAt ? endsAt.getTime() < now : false;
+  const isScheduled = startsAt ? startsAt.getTime() > now : false;
+  const remainingDays = !isExpired && endsAt ? calcRemainingDays(endsAt) : null;
+
+  let status = 'منتهي';
+  let statusText = 'انتهى الاشتراك — جدّد الآن';
+
+  if (apiSub.status === 'scheduled' || isScheduled) {
+    status = 'مجدول';
+    statusText = startsAt ? `مجدول للبدء في ${formatDisplayDate(startsAt)}` : 'مجدول للبدء';
+  } else if ((apiSub.status === 'active' || apiSub.status === 'نشط') && !isExpired) {
+    status = 'نشط';
+    statusText = 'الاشتراك نشط حالياً';
+  }
+
+  return {
+    id: apiSub.id,
+    planId: Number(apiSub.plan_id),
+    title: planName,
+    price: String(planPrice),
+    durationDays,
+    remainingDays,
+    status,
+    isExpired,
+    statusText,
+    dateRange: {
+      start: startsAt ? formatDisplayDate(startsAt) : '—',
+      end: endsAt ? formatDisplayDate(endsAt) : '—',
+    },
+    startsAtMs: startsAt ? startsAt.getTime() : 0,
   };
 }
 
@@ -469,53 +531,125 @@ function readHistorySubscriptionEntries(storeId, plans = []) {
 }
 
 function mergeSubscriptionEntries(entries) {
-  const byPlan = new Map();
+  const merged = [];
 
   for (const entry of entries) {
     if (!entry?.planId) continue;
-    const existing = byPlan.get(entry.planId);
-    if (!existing || (entry.startsAtMs ?? 0) > (existing.startsAtMs ?? 0)) {
-      byPlan.set(entry.planId, entry);
+    // Check if we already have a similar entry (same planId and within 5 minutes)
+    const isDuplicate = merged.some(
+      (m) =>
+        m.planId === entry.planId &&
+        Math.abs((m.startsAtMs ?? 0) - (entry.startsAtMs ?? 0)) < 5 * 60 * 1000
+    );
+    if (!isDuplicate) {
+      merged.push(entry);
     }
   }
 
-  return Array.from(byPlan.values());
+  return merged;
+}
+
+function stackSubscriptionPeriods(entries) {
+  if (!entries.length) return [];
+
+  const sorted = [...entries].sort((a, b) => (a.startsAtMs ?? 0) - (b.startsAtMs ?? 0));
+  const stacked = [];
+  let lastEnd = null;
+
+  for (const entry of sorted) {
+    const durationDays = Number(entry.durationDays) || 30;
+    const purchaseDate = new Date(entry.startsAtMs);
+
+    let startsAt;
+    if (lastEnd && lastEnd.getTime() >= purchaseDate.getTime()) {
+      startsAt = new Date(lastEnd.getTime());
+      startsAt.setDate(startsAt.getDate() + 1);
+      startsAt.setHours(0, 0, 0, 0);
+    } else {
+      startsAt = new Date(purchaseDate.getTime());
+    }
+
+    const endsAt = new Date(startsAt.getTime());
+    endsAt.setDate(endsAt.getDate() + durationDays);
+    endsAt.setSeconds(endsAt.getSeconds() - 1);
+    if (lastEnd && lastEnd.getTime() >= purchaseDate.getTime()) {
+      endsAt.setHours(23, 59, 59, 999);
+    }
+
+    const now = Date.now();
+    const isExpired = endsAt.getTime() < now;
+    const isScheduled = startsAt.getTime() > now;
+    const remainingDays = !isExpired ? calcRemainingDays(endsAt) : null;
+
+    let status = 'منتهي';
+    let statusText = 'انتهى الاشتراك — جدّد الآن';
+
+    if (isScheduled) {
+      status = 'مجدول';
+      statusText = `مجدول للبدء في ${formatDisplayDate(startsAt)}`;
+    } else if (!isExpired) {
+      status = 'نشط';
+      statusText = 'الاشتراك نشط حالياً';
+    }
+
+    stacked.push({
+      ...entry,
+      startsAtMs: startsAt.getTime(),
+      dateRange: {
+        start: formatDisplayDate(startsAt),
+        end: formatDisplayDate(endsAt),
+      },
+      status,
+      statusText,
+      isExpired,
+      remainingDays,
+    });
+
+    lastEnd = endsAt;
+  }
+
+  return stacked;
 }
 
 export async function resolveAllStoreSubscriptions(store, storeId, plans = [], activeDetails = null) {
   seedHistoryFromCurrentLocal(storeId);
 
-  const currentPlanId = store?.plan_id ?? store?.plan?.id ?? null;
-  const current = mapStoreSubscription(store, plans, activeDetails);
+  let apiSubscriptions = [];
+  let apiSuccess = false;
+  if (storeId) {
+    try {
+      const res = await apiRequest(API_ENDPOINTS.storePlanSubscriptions(storeId));
+      const subs = res?.subscriptions ?? res?.data?.subscriptions ?? [];
+      apiSubscriptions = subs.map((s) => mapSubscriptionFromApi(s, plans)).filter(Boolean);
+      apiSuccess = true;
+    } catch (err) {
+      console.error('Failed to fetch store subscriptions:', err);
+    }
+  }
+
   const collected = [
     ...extractSubscriptionsFromStoreList(store, plans),
     ...readHistorySubscriptionEntries(storeId, plans),
     ...(await fetchSubscriptionEntriesFromFinance(plans)),
   ];
-  if (current) collected.push(current);
 
-  let merged = mergeSubscriptionEntries(collected);
-
+  const current = mapStoreSubscription(store, plans, activeDetails);
   if (current) {
-    const index = merged.findIndex((entry) => Number(entry.planId) === Number(current.planId));
-    if (index >= 0) merged[index] = current;
-    else merged.unshift(current);
+    collected.push(current);
   }
 
-  merged = merged.map((entry) => {
-    if (currentPlanId && Number(entry.planId) !== Number(currentPlanId)) {
-      return {
-        ...entry,
-        isExpired: true,
-        status: 'منتهي',
-        statusText: 'اشتراك سابق',
-        remainingDays: null,
-      };
-    }
-    return entry;
-  });
+  const merged = mergeSubscriptionEntries(collected);
+  const stacked = stackSubscriptionPeriods(merged);
 
-  return merged.sort((a, b) => (b.startsAtMs ?? 0) - (a.startsAtMs ?? 0));
+  if (apiSuccess) {
+    const expiredFromStacked = stacked.filter((sub) => sub.status === 'منتهي' || sub.isExpired);
+    const finalExpired = expiredFromStacked.filter(
+      (exp) => !apiSubscriptions.some((apiSub) => apiSub.planId === exp.planId && Math.abs(apiSub.startsAtMs - exp.startsAtMs) < 1000 * 60)
+    );
+    return [...apiSubscriptions, ...finalExpired].sort((a, b) => (b.startsAtMs ?? 0) - (a.startsAtMs ?? 0));
+  } else {
+    return stacked.sort((a, b) => (b.startsAtMs ?? 0) - (a.startsAtMs ?? 0));
+  }
 }
 
 export function mapStoreSubscription(store, plans = [], dateOverrides = null) {
@@ -544,7 +678,20 @@ export function mapStoreSubscription(store, plans = [], dateOverrides = null) {
     durationDays,
   });
 
-  const isExpired = endsAt ? endsAt.getTime() < Date.now() : store.status !== 'active';
+  const now = Date.now();
+  const isExpired = endsAt ? endsAt.getTime() < now : store.status !== 'active';
+  const isScheduled = startsAt ? startsAt.getTime() > now : false;
+
+  let status = 'منتهي';
+  let statusText = 'انتهى الاشتراك — جدّد الآن';
+
+  if (isScheduled) {
+    status = 'مجدول';
+    statusText = `مجدول للبدء في ${formatDisplayDate(startsAt)}`;
+  } else if (!isExpired) {
+    status = 'نشط';
+    statusText = 'الاشتراك نشط حالياً';
+  }
 
   return {
     id: planId ?? store.id,
@@ -553,14 +700,14 @@ export function mapStoreSubscription(store, plans = [], dateOverrides = null) {
     price: matchedPlan?.price ?? String(nestedPlan?.price ?? store.plan_price ?? '0'),
     durationDays,
     remainingDays: !isExpired && endsAt ? calcRemainingDays(endsAt) : null,
-    status: isExpired ? 'منتهي' : 'نشط',
+    status,
     isExpired,
-    statusText: isExpired ? 'انتهى الاشتراك — جدّد الآن' : 'الاشتراك نشط حالياً',
+    statusText,
     dateRange: {
       start: startsAt ? formatDisplayDate(startsAt) : '—',
       end: endsAt ? formatDisplayDate(endsAt) : '—',
     },
-    startsAtMs: startsAt.getTime(),
+    startsAtMs: startsAt ? startsAt.getTime() : 0,
   };
 }
 
@@ -658,4 +805,17 @@ export async function renewStorePlan(storeId) {
  */
 export async function changeStorePlan(storeId, planId) {
   return apiRequest(API_ENDPOINTS.storePlanChange(storeId, planId), { method: 'POST' });
+}
+
+/**
+ * POST /api/stores/subscribe/preview — body: { plan_id, store_id }
+ */
+export async function previewSubscribeToPlan({ planId, storeId }) {
+  return apiRequest(API_ENDPOINTS.storeSubscribePreview, {
+    method: 'POST',
+    body: {
+      plan_id: Number(planId),
+      store_id: Number(storeId),
+    },
+  });
 }

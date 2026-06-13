@@ -9,7 +9,7 @@ import {
 } from '@stripe/react-stripe-js';
 import { useWallet } from '../../context/WalletContext';
 import { useAuth } from '../../context/AuthContext';
-import { subscribeToPlan, renewStorePlan, changeStorePlan } from '../../api/plans';
+import { subscribeToPlan, renewStorePlan, changeStorePlan, previewSubscribeToPlan } from '../../api/plans';
 import { getApiErrorMessage } from '../../api/stores';
 import {
   createStripeCardPaymentMethod,
@@ -69,6 +69,7 @@ const PlanSubscribeActions = ({
   hasEnoughBalance,
   storeId,
   refreshWallet,
+  loadingPreview = false,
 }) => {
   const [subscribeError, setSubscribeError] = useState('');
   const [subscribeLoading, setSubscribeLoading] = useState(false);
@@ -111,7 +112,7 @@ const PlanSubscribeActions = ({
         type="button"
         className="plan-wallet-btn subscribe"
         onClick={handleSubscribe}
-        disabled={!hasEnoughBalance || subscribeLoading}
+        disabled={!hasEnoughBalance || subscribeLoading || loadingPreview}
       >
         {subscribeLoading
           ? 'جاري المعالجة...'
@@ -121,7 +122,7 @@ const PlanSubscribeActions = ({
               ? 'تأكيد تغيير الخطة'
               : 'تأكيد الاشتراك'}
       </button>
-      <button type="button" className="plan-wallet-btn back" onClick={onClose}>
+      <button type="button" className="plan-wallet-btn back" onClick={onClose} disabled={subscribeLoading}>
         <ArrowRight size={18} />
         العودة للخطط
       </button>
@@ -129,7 +130,7 @@ const PlanSubscribeActions = ({
   );
 };
 
-const PlanSubscribeWalletForm = ({ plan, action = 'subscribe', onClose, onConfirm, onToast }) => {
+const PlanSubscribeWalletForm = ({ plan, action = 'subscribe', onClose, onConfirm, onToast, loadingPreview = false }) => {
   const stripe = useStripe();
   const elements = useElements();
   const { balance, refreshWallet, storeId, hasEnoughBalance, missingAmount } = usePlanWalletState(plan);
@@ -312,9 +313,19 @@ const PlanSubscribeWalletForm = ({ plan, action = 'subscribe', onClose, onConfir
         hasEnoughBalance={hasEnoughBalance}
         storeId={storeId}
         refreshWallet={refreshWallet}
+        loadingPreview={loadingPreview}
       />
     </>
   );
+};
+
+const formatFriendlyDate = (dateStr) => {
+  if (!dateStr) return '';
+  const cleanStr = dateStr.includes('T') ? dateStr : dateStr.replace(' ', 'T');
+  const d = new Date(cleanStr);
+  if (isNaN(d.getTime())) return dateStr;
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()}`;
 };
 
 const PlanSubscribeWalletModal = ({
@@ -329,17 +340,52 @@ const PlanSubscribeWalletModal = ({
   const walletState = usePlanWalletState(plan);
   const stripeReady = isStripeConfigured();
 
+  const [previewDates, setPreviewDates] = useState(null);
+  const [loadingPreview, setLoadingPreview] = useState(false);
+  const [previewError, setPreviewError] = useState('');
+
   useEffect(() => {
     if (!isOpen) return;
     refreshWallet();
   }, [isOpen, plan?.id, refreshWallet]);
+
+  useEffect(() => {
+    if (!isOpen || !plan?.id || !walletState.storeId) {
+      setPreviewDates(null);
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingPreview(true);
+    setPreviewError('');
+    setPreviewDates(null);
+
+    previewSubscribeToPlan({ planId: plan.id, storeId: walletState.storeId })
+      .then((res) => {
+        if (!cancelled) {
+          setPreviewDates(res);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setPreviewError(getApiErrorMessage(err, 'تعذر احتساب تاريخ بدء الاشتراك المتوقع'));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingPreview(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, plan?.id, walletState.storeId]);
 
   if (!isOpen || !plan) return null;
 
   return (
     <div className="plan-wallet-overlay" onClick={onClose}>
       <div className="plan-wallet-modal" onClick={(e) => e.stopPropagation()}>
-        <button type="button" className="plan-wallet-close" onClick={onClose} aria-label="إغلاق">
+        <button type="button" className="plan-wallet-close" onClick={onClose} aria-label="إغلاق" disabled={loadingPreview}>
           <X size={22} />
         </button>
 
@@ -356,6 +402,45 @@ const PlanSubscribeWalletModal = ({
             <>اشتراك في <strong>{plan.title}</strong> — {plan.price} د.ل</>
           )}
         </p>
+
+        {/* صندوق معاينة تاريخ بدء الاشتراك المتوقع */}
+        <div className="plan-subscription-preview-box">
+          {loadingPreview && (
+            <div className="preview-loading">
+              <span className="spinner"></span>
+              <span>جاري احتساب تاريخ بدء الاشتراك...</span>
+            </div>
+          )}
+          {previewError && (
+            <div className="preview-error">
+              <span>{previewError}</span>
+            </div>
+          )}
+          {previewDates && !loadingPreview && (
+            <div className="preview-dates-content">
+              <div className="preview-dates-row">
+                <div className="date-item">
+                  <span className="date-label">تاريخ البدء المتوقع:</span>
+                  <span className="date-val">{formatFriendlyDate(previewDates.starts_at)}</span>
+                </div>
+                <div className="date-item">
+                  <span className="date-label">تاريخ الانتهاء المتوقع:</span>
+                  <span className="date-val">{formatFriendlyDate(previewDates.ends_at)}</span>
+                </div>
+              </div>
+              
+              {previewDates.status === 'active' ? (
+                <div className="preview-alert active-alert">
+                  <span>سيبدأ هذا الاشتراك فوراً اليوم وسيتم تفعيل متجرك.</span>
+                </div>
+              ) : (
+                <div className="preview-alert scheduled-alert">
+                  <span>سيتم جدولة هذا الاشتراك ويبدأ تلقائياً بعد انتهاء الخطة الحالية في {formatFriendlyDate(previewDates.starts_at)}.</span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
         {!stripeReady && !walletState.hasEnoughBalance ? (
           <div className="plan-wallet-stripe-missing">
@@ -389,7 +474,10 @@ const PlanSubscribeWalletModal = ({
               action={action}
               onClose={onClose}
               onConfirm={onConfirm}
-              {...walletState}
+              hasEnoughBalance={walletState.hasEnoughBalance}
+              storeId={walletState.storeId}
+              refreshWallet={refreshWallet}
+              loadingPreview={loadingPreview}
             />
           </>
         ) : (
@@ -399,6 +487,7 @@ const PlanSubscribeWalletModal = ({
             onClose={onClose}
             onConfirm={onConfirm}
             onToast={onToast}
+            loadingPreview={loadingPreview}
           />
         )}
       </div>
