@@ -8,7 +8,7 @@ const FIELD_LABELS = {
   name: 'اسم المتجر',
   store_email: 'إيميل المتجر',
   password: 'كلمة المرور',
-  phone: 'رقم هاتف المتجر',
+  phone: 'رقم الهاتف',
   entity_type: 'نوع الكيان',
   type: 'نوع المتجر',
   zone_id: 'المنطقة',
