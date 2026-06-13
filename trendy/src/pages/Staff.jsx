@@ -111,6 +111,7 @@ const Staff = () => {
   };
 
   const handleToggleActive = async (member) => {
+    if (member.roleSlug === 'store_manager') return;
     setTogglingId(member.id);
     try {
       await toggleEmployee(member.id);
@@ -300,6 +301,7 @@ const Staff = () => {
         onSave={handleSave}
         member={editingStaff}
         roles={formRoleOptions}
+        existingStaff={staff}
         isSaving={isSaving}
       />
 

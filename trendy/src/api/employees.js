@@ -156,7 +156,10 @@ function resolveActive(row) {
 export function mapEmployee(row) {
   const roleSlug = resolveRoleSlug(row);
   const roleId = resolveRoleId(row);
-  const active = resolveActive(row);
+  let active = resolveActive(row);
+  if (roleSlug === 'store_manager') {
+    active = true;
+  }
 
   return {
     id: row.id,
@@ -202,6 +205,47 @@ export function buildEmployeeUpdatePayload(form, options = {}) {
   const body = buildEmployeePayload(form, options);
   if (!form.password?.trim()) delete body.password;
   return body;
+}
+
+function normalizePhone(value) {
+  return String(value ?? '').replace(/\D/g, '');
+}
+
+/**
+ * تحقق من مدخلات الموظف قبل الإرسال — يمنع أرقام وهمية ويتكرار البيانات ضمن القائمة المحمّلة
+ */
+export function validateEmployeeForm(form, { existingEmployees = [], editingId = null } = {}) {
+  const phone = form.phone?.trim() ?? '';
+  const email = form.email?.trim().toLowerCase() ?? '';
+  const digits = normalizePhone(phone);
+
+  if (digits.length < 8) {
+    return 'رقم الهاتف قصير جداً. أدخل رقماً صالحاً (8 أرقام على الأقل).';
+  }
+  if (/^(\d)\1+$/.test(digits)) {
+    return 'رقم الهاتف غير صالح. لا يمكن استخدام أرقام متكررة مثل 0000000.';
+  }
+
+  const duplicatePhone = existingEmployees.find(
+    (member) =>
+      member.id !== editingId && normalizePhone(member.phone) === digits,
+  );
+  if (duplicatePhone) {
+    return `رقم الهاتف مستخدم مسبقاً للموظف «${duplicatePhone.name}».`;
+  }
+
+  if (email) {
+    const duplicateEmail = existingEmployees.find(
+      (member) =>
+        member.id !== editingId &&
+        String(member.email ?? '').trim().toLowerCase() === email,
+    );
+    if (duplicateEmail) {
+      return `البريد الإلكتروني مستخدم مسبقاً للموظف «${duplicateEmail.name}».`;
+    }
+  }
+
+  return '';
 }
 
 /**
