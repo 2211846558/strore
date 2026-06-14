@@ -84,18 +84,44 @@ function readVariantAttrValues(variant) {
   );
 }
 
-function readVariantPrice(variant, raw, product) {
-  return Number(
-    variant.discounted_price ??
-      variant.original_price ??
-      variant.selling_price ??
+function readInventorySellingPrice(invRow) {
+  if (!invRow) return null;
+
+  const candidates = [
+    invRow.displayPrice,
+    invRow.display_price,
+    invRow.fifo_display_price,
+    invRow.cachedPrice,
+    invRow.cached_price,
+    invRow.price,
+    invRow.selling_price,
+    invRow.sellingPrice,
+  ];
+
+  for (const value of candidates) {
+    const num = Number(value);
+    if (Number.isFinite(num) && num > 0) return num;
+  }
+
+  return null;
+}
+
+function readVariantPrice(variant, raw, product, invRow) {
+  const inventoryPrice = readInventorySellingPrice(invRow);
+  if (inventoryPrice != null) return inventoryPrice;
+
+  const variantPrice = Number(
+    variant.selling_price ??
       variant.price ??
+      variant.discounted_price ??
+      variant.original_price ??
       variant.display_price ??
-      raw.discounted_price ??
-      raw.base_price ??
-      product.price ??
       0,
   );
+  if (variantPrice > 0) return variantPrice;
+
+  const basePrice = Number(raw.base_price ?? product.price ?? 0);
+  return Number.isFinite(basePrice) && basePrice >= 0 ? basePrice : 0;
 }
 
 function buildInventoryMetaMap(inventoryRows = []) {
@@ -138,7 +164,7 @@ function mapPosVariant(variant, raw, product, inventoryStock, inventoryMeta, cat
     size,
     stock: Number(stock) || 0,
     stockUnknown,
-    price: readVariantPrice(variant, raw, product),
+    price: readVariantPrice(variant, raw, product, invRow),
   };
 }
 
@@ -166,7 +192,11 @@ function buildPosProductEntry(raw, product, inventoryStock, inventoryRows = [], 
   return {
     id: product.id,
     name: raw.name ?? product.name,
-    price: Math.min(...variants.map((v) => v.price)),
+    price: (() => {
+      const prices = variants.map((v) => Number(v.price)).filter((p) => p > 0);
+      if (prices.length) return Math.min(...prices);
+      return Number(variants[0]?.price ?? 0);
+    })(),
     image: product.image,
     colors,
     sizes,
@@ -217,11 +247,11 @@ export async function fetchVariantStockPrice(variantId, { fallbackStock } = {}) 
   try {
     const inv = await fetchInventoryVariant(variantId);
     const invStock = Number(inv.totalStock ?? 0);
-    const price = Number(inv.displayPrice || inv.cachedPrice || 0);
+    const price = readInventorySellingPrice(inv);
     const fallback = Number(fallbackStock ?? 0);
     return {
       stock: invStock > 0 ? invStock : fallback > 0 ? fallback : invStock,
-      price: price > 0 ? price : null,
+      price: price ?? null,
     };
   } catch {
     const fallback = Number(fallbackStock ?? 0);

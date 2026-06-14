@@ -61,8 +61,8 @@ const Orders = () => {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  const loadOrders = useCallback(async () => {
-    setLoading(true);
+  const loadOrders = useCallback(async (quiet = false) => {
+    if (!quiet) setLoading(true);
     setError('');
     try {
       let list = await fetchAllOrders({
@@ -76,15 +76,21 @@ const Orders = () => {
       }
       setOrders(list);
     } catch (err) {
-      setError(getApiErrorMessage(err, 'تعذّر تحميل الطلبات'));
-      setOrders([]);
+      if (!quiet) {
+        setError(getApiErrorMessage(err, 'تعذّر تحميل الطلبات'));
+        setOrders([]);
+      }
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
     }
   }, [storeId, debouncedSearch, statusFilter]);
 
   useEffect(() => {
     loadOrders();
+    const interval = setInterval(() => {
+      loadOrders(true);
+    }, 10000);
+    return () => clearInterval(interval);
   }, [loadOrders]);
 
   const handleStatusChange = async (order, newStatus) => {

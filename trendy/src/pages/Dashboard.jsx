@@ -45,6 +45,12 @@ const mapStoreToForm = (store, ratingAverage = null, user = null) => {
     email: resolveStoreEmail(store, user),
     zoneId: String(store?.zone_id ?? store?.zone?.id ?? ''),
     location: store?.zone?.name ?? store?.zone_name ?? '',
+    type: store?.type || 'local',
+    googleMapUrl: store?.google_map_url || '',
+    merchantData: {
+      tax_number: store?.merchant_data?.tax_number || '',
+      commercial_register: store?.merchant_data?.commercial_register || '',
+    },
     rating,
     statusRaw,
     statusLabel: STORE_STATUS_LABELS[statusRaw] ?? store?.status ?? '—',
@@ -88,8 +94,8 @@ const Dashboard = () => {
     loadStoreProfile();
   }, [loadStoreProfile]);
 
-  const loadDashboardData = useCallback(async () => {
-    setStatsLoading(true);
+  const loadDashboardData = useCallback(async (quiet = false) => {
+    if (!quiet) setStatsLoading(true);
     setStatsError('');
     try {
       const [dashboardStats, chart] = await Promise.all([
@@ -105,16 +111,22 @@ const Dashboard = () => {
         setMonthlyRevenue([]);
         return;
       }
-      setStatsError(getApiErrorMessage(err, 'تعذّر تحميل إحصائيات لوحة التحكم'));
-      setStats(null);
-      setMonthlyRevenue([]);
+      if (!quiet) {
+        setStatsError(getApiErrorMessage(err, 'تعذّر تحميل إحصائيات لوحة التحكم'));
+        setStats(null);
+        setMonthlyRevenue([]);
+      }
     } finally {
-      setStatsLoading(false);
+      if (!quiet) setStatsLoading(false);
     }
   }, [storeId]);
 
   useEffect(() => {
     loadDashboardData();
+    const interval = setInterval(() => {
+      loadDashboardData(true);
+    }, 20000);
+    return () => clearInterval(interval);
   }, [loadDashboardData]);
 
   const showToast = (message) => {
@@ -132,19 +144,24 @@ const Dashboard = () => {
     try {
       const payload = buildStoreUpdateFormData(formData, logoFile);
       const res = await updateStore(storeId, payload);
+      const isLocal = formData.type === 'local' || formData.type === 'محلي';
       const updated = res?.data ?? {
         ...store,
         name: formData.name,
         description: formData.description,
         phone: formData.phone,
-        zone_id: formData.zoneId ? Number(formData.zoneId) : undefined,
-        store_email: formData.email,
+        type: formData.type,
+        merchant_data: formData.merchantData,
+        zone_id: isLocal && formData.zoneId ? Number(formData.zoneId) : null,
+        google_map_url: isLocal && formData.googleMapUrl ? formData.googleMapUrl : null,
         ...(logoFile ? { logo: formData.image } : {}),
       };
       updateStoreInSession({
         ...mergeStoreProfile(updated, store, user),
-        store_email: formData.email || resolveStoreEmail(updated, user),
-        zone_id: formData.zoneId ? Number(formData.zoneId) : undefined,
+        type: updated.type,
+        merchant_data: updated.merchant_data,
+        zone_id: updated.zone_id,
+        google_map_url: updated.google_map_url,
       });
       await loadStoreProfile();
       showToast('تم تحديث بيانات المتجر بنجاح');

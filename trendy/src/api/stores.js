@@ -27,7 +27,8 @@ const FIELD_LABELS = {
   category_id: 'التصنيف',
   sku: 'رمز SKU',
   total_quantity: 'الكمية',
-  role_id: 'الدور الوظيفي',
+  start_at: 'تاريخ البداية',
+  end_at: 'تاريخ النهاية',
   job_title: 'المسمى الوظيفي',
   status: 'حالة الطلب',
   reason: 'سبب الإلغاء',
@@ -109,6 +110,12 @@ const translateValidationMessage = (message, field) => {
   if (/min/i.test(message) && field === 'password') return 'كلمة المرور يجب أن تكون 8 أحرف على الأقل';
   if (/max/i.test(message) && field === 'notes') return 'الملاحظات يجب ألا تتجاوز 2000 حرف';
   if (/unique/i.test(message)) return `${label} مستخدم مسبقاً`;
+  if (/after_or_equal|after or equal.*now/i.test(message)) {
+    return `${label} يجب أن يكون اليوم أو تاريخاً لاحقاً`;
+  }
+  if (/after.*start_at|after:start_at/i.test(message) && field === 'end_at') {
+    return 'تاريخ النهاية يجب أن يكون بعد تاريخ البداية';
+  }
   if (/size/i.test(message) && field === 'otp') return 'رمز التحقق يجب أن يكون 6 أرقام';
   if (/exists/i.test(message) && field === 'store_email') return 'لا يوجد طلب انضمام بهذا الإيميل';
   if (/in:/i.test(message) && field === 'type') return 'نوع المتجر غير صالح';
@@ -144,8 +151,27 @@ export function buildStoreUpdateFormData(formData, logoFile) {
     fd.append('description', formData.description?.trim() || '');
   }
   if (formData.phone?.trim()) fd.append('phone', formData.phone.trim());
-  if (formData.email?.trim()) fd.append('store_email', formData.email.trim());
-  if (formData.zoneId) fd.append('zone_id', String(Number(formData.zoneId)));
+  if (formData.type) fd.append('type', formData.type);
+
+  if (formData.merchantData && typeof formData.merchantData === 'object') {
+    if (formData.merchantData.tax_number !== undefined) {
+      fd.append('merchant_data[tax_number]', formData.merchantData.tax_number?.trim() || '');
+    }
+    if (formData.merchantData.commercial_register !== undefined) {
+      fd.append('merchant_data[commercial_register]', formData.merchantData.commercial_register?.trim() || '');
+    }
+  }
+
+  const isLocal = formData.type === 'local' || formData.type === 'محلي';
+  if (isLocal) {
+    if (formData.zoneId) {
+      fd.append('zone_id', String(Number(formData.zoneId)));
+    }
+    if (formData.googleMapUrl !== undefined) {
+      fd.append('google_map_url', formData.googleMapUrl?.trim() || '');
+    }
+  }
+
   if (logoFile instanceof File) fd.append('logo', logoFile);
 
   return fd;

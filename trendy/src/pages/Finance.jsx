@@ -6,6 +6,7 @@ import {
   Download,
   DollarSign,
   TrendingUp,
+  CircleDollarSign,
   CreditCard,
   Landmark,
   CheckCircle2,
@@ -21,7 +22,10 @@ import { useAuth } from '../context/AuthContext';
 import {
   fetchAllTransactions,
   fetchTransactionDetails,
+  fetchRevenueOverview,
   fetchProfitOverview,
+  resolveStoreNetRevenue,
+  resolveStoreNetProfit,
   fetchMonthlyRevenueChart,
   exportFinanceReport,
   filterTransactionsByType,
@@ -43,6 +47,7 @@ const Finance = () => {
   const [transactions, setTransactions] = useState([]);
   const [chartData, setChartData] = useState([]);
   const [profitOverview, setProfitOverview] = useState(null);
+  const [revenueOverview, setRevenueOverview] = useState(null);
   const [custodySummary, setCustodySummary] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -72,19 +77,21 @@ const Finance = () => {
     setLoading(true);
     setError('');
     try {
-      const [txResult, profit, chart, custody, logs] = await Promise.all([
+      const [txResult, revenue, profit, chart, custody, logs] = await Promise.all([
         fetchAllTransactions({
           search: debouncedSearch,
           status: statusFilter !== 'all' ? statusFilter : undefined,
           perPage: 100,
         }),
-        fetchProfitOverview(),
+        fetchRevenueOverview().catch(() => null),
+        fetchProfitOverview().catch(() => null),
         fetchMonthlyRevenueChart(5),
         fetchCustodySummary({ storeId }).catch(() => null),
         fetchCustodyLogs({ storeId, perPage: 20 }).catch(() => ({ data: [] })),
       ]);
 
       setTransactions(txResult.transactions);
+      setRevenueOverview(revenue);
       setProfitOverview(profit);
       setChartData(chart);
       setCustodySummary(custody);
@@ -105,9 +112,8 @@ const Finance = () => {
 
   const totalTransactions = transactions.length;
   const successfulTransactions = transactions.filter((t) => t.status === 'ناجح').length;
-  const totalRevenue = Number(
-    profitOverview?.net_profit ?? profitOverview?.total_revenue ?? 0,
-  );
+  const netRevenue = resolveStoreNetRevenue(revenueOverview);
+  const netProfit = resolveStoreNetProfit(profitOverview);
   const currentBalance = walletBalance;
 
   const handleViewTransaction = async (transaction) => {
@@ -175,8 +181,16 @@ const Finance = () => {
             <span className="stat-label">صافي الإيرادات</span>
             <TrendingUp size={20} className="stat-icon green" />
           </div>
-          <span className="stat-value green">{formatMoney(totalRevenue)} د.ل</span>
-          <span className="stat-sub">من أرباح المتجر</span>
+          <span className="stat-value green">{formatMoney(netRevenue)} د.ل</span>
+          <span className="stat-sub">إجمالي مبيعات المتجر</span>
+        </div>
+        <div className="stat-card">
+          <div className="stat-header">
+            <span className="stat-label">صافي الأرباح</span>
+            <CircleDollarSign size={20} className="stat-icon purple" />
+          </div>
+          <span className="stat-value purple">{formatMoney(netProfit)} د.ل</span>
+          <span className="stat-sub">بعد خصم تكلفة البضاعة</span>
         </div>
         <div className="stat-card">
           <div className="stat-header">
