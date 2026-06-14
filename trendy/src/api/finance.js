@@ -148,6 +148,25 @@ export async function fetchProfitOverview({ startDate, endDate } = {}) {
   return res?.data ?? res;
 }
 
+/** صافي إيرادات المتجر — GET /finance/revenue-overview → total_store_revenue */
+export function resolveStoreNetRevenue(revenueOverview) {
+  if (!revenueOverview || typeof revenueOverview !== 'object') return 0;
+  const value = Number(
+    revenueOverview.total_store_revenue ??
+      revenueOverview.total_revenue ??
+      revenueOverview.revenue ??
+      0,
+  );
+  return Number.isNaN(value) ? 0 : value;
+}
+
+/** صافي أرباح المتجر — GET /finance/profit-overview → net_profit */
+export function resolveStoreNetProfit(profitOverview) {
+  if (!profitOverview || typeof profitOverview !== 'object') return 0;
+  const value = Number(profitOverview.net_profit);
+  return Number.isNaN(value) ? 0 : value;
+}
+
 /**
  * GET /finance/transactions — بحث وفلترة من الخادم
  */

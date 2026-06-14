@@ -15,7 +15,7 @@ const PlanCard = ({ title, price, featuresText, isPopular, isActive, onSubscribe
 
       <div className="plan-price">
         <span className="amount">{price}</span>
-        <span className="currency">د.ل / شهرياً</span>
+        <span className="currency">د.ل</span>
       </div>
 
       <div className="plan-features">

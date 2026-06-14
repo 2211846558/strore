@@ -5,4 +5,9 @@
   height: auto;
   object-fit: contain;
   margin: 0 auto 4px;
+  background: transparent;
+}
+
+[data-theme='dark'] .trendy-brand-image {
+  mix-blend-mode: screen;
 }
