@@ -85,4 +85,8 @@ export const API_ENDPOINTS = {
   employees: '/employees',
   employee: (id) => `/employees/${id}`,
   employeeToggle: (id) => `/employees/${id}/toggle`,
+  notifications: '/notifications',
+  notificationsReadAll: '/notifications/read-all',
+  notificationRead: (id) => `/notifications/${id}/read`,
+  notificationTrigger: '/notifications/trigger',
 };

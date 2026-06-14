@@ -94,8 +94,8 @@ const Dashboard = () => {
     loadStoreProfile();
   }, [loadStoreProfile]);
 
-  const loadDashboardData = useCallback(async () => {
-    setStatsLoading(true);
+  const loadDashboardData = useCallback(async (quiet = false) => {
+    if (!quiet) setStatsLoading(true);
     setStatsError('');
     try {
       const [dashboardStats, chart] = await Promise.all([
@@ -111,16 +111,22 @@ const Dashboard = () => {
         setMonthlyRevenue([]);
         return;
       }
-      setStatsError(getApiErrorMessage(err, 'تعذّر تحميل إحصائيات لوحة التحكم'));
-      setStats(null);
-      setMonthlyRevenue([]);
+      if (!quiet) {
+        setStatsError(getApiErrorMessage(err, 'تعذّر تحميل إحصائيات لوحة التحكم'));
+        setStats(null);
+        setMonthlyRevenue([]);
+      }
     } finally {
-      setStatsLoading(false);
+      if (!quiet) setStatsLoading(false);
     }
   }, [storeId]);
 
   useEffect(() => {
     loadDashboardData();
+    const interval = setInterval(() => {
+      loadDashboardData(true);
+    }, 20000);
+    return () => clearInterval(interval);
   }, [loadDashboardData]);
 
   const showToast = (message) => {

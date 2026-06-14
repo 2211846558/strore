@@ -1,4 +1,4 @@
-﻿.notifications-page {
+.notifications-page {
   padding-bottom: 40px;
 }
 
@@ -209,3 +209,53 @@
     justify-content: flex-end;
   }
 }
+
+.notifications-loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 24px;
+  gap: 16px;
+  color: var(--text-secondary);
+}
+
+.notifications-loading-container svg {
+  animation: spin 1s linear infinite;
+  color: var(--primary);
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.notifications-error-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  background-color: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 12px;
+  color: var(--danger);
+  margin-bottom: 20px;
+  font-weight: 600;
+}
+
+.retry-btn {
+  margin-inline-start: auto;
+  background: var(--danger);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+

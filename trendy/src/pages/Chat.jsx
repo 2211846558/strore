@@ -16,9 +16,12 @@ const Chat = () => {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const messagesEndRef = useRef(null);
+  const messagesContainerRef = useRef(null);
+  const messagesCountRef = useRef(0);
+  const activeChatIdRef = useRef(null);
 
-  const loadChats = useCallback(async () => {
-    setLoading(true);
+  const loadChats = useCallback(async (quiet = false) => {
+    if (!quiet) setLoading(true);
     setError('');
     try {
       const list = await fetchChats({ storeId });
@@ -26,19 +29,76 @@ const Chat = () => {
     } catch {
       setChats([]);
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
     }
   }, [storeId]);
+
+  const loadActiveMessages = useCallback(async (chatId, quiet = false) => {
+    if (!quiet) setLoadingMessages(true);
+    try {
+      const messages = await fetchChatMessages(chatId);
+      setActiveChat((prev) => {
+        if (!prev || prev.id !== chatId) return prev;
+        return { ...prev, messages };
+      });
+    } catch (err) {
+      if (!quiet) {
+        setError(getApiErrorMessage(err, 'تعذّر تحميل الرسائل'));
+        setActiveChat(null);
+      }
+    } finally {
+      if (!quiet) setLoadingMessages(false);
+    }
+  }, []);
 
   useEffect(() => {
     loadChats();
   }, [loadChats]);
 
   useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    const interval = setInterval(() => {
+      loadChats(true);
+      if (activeChat?.id) {
+        loadActiveMessages(activeChat.id, true);
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [loadChats, loadActiveMessages, activeChat?.id]);
+
+  useEffect(() => {
+    if (!activeChat) {
+      messagesCountRef.current = 0;
+      activeChatIdRef.current = null;
+      return;
     }
-  }, [activeChat?.messages]);
+
+    const prevCount = messagesCountRef.current;
+    const prevChatId = activeChatIdRef.current;
+    const newCount = activeChat.messages?.length ?? 0;
+
+    messagesCountRef.current = newCount;
+    activeChatIdRef.current = activeChat.id;
+
+    if (newCount > 0) {
+      const isNewChat = prevChatId !== activeChat.id;
+      const hasNewMessages = newCount > prevCount;
+      const lastMsg = activeChat.messages[newCount - 1];
+      const sentByMe = lastMsg?.sender === 'store' || lastMsg?.sender === 'employee' || lastMsg?.sender === 'admin';
+
+      let isNearBottom = true;
+      if (messagesContainerRef.current) {
+        const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
+        isNearBottom = scrollHeight - scrollTop - clientHeight < 200;
+      }
+
+      if (isNewChat || (hasNewMessages && (sentByMe || isNearBottom))) {
+        if (messagesEndRef.current) {
+          messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+        }
+      }
+    }
+  }, [activeChat?.messages, activeChat?.id]);
 
   const filteredChats = chats.filter(
     (chat) =>
@@ -49,17 +109,8 @@ const Chat = () => {
 
   const handleSelectChat = async (chat) => {
     setActiveChat({ ...chat, messages: [] });
-    setLoadingMessages(true);
-    try {
-      const messages = await fetchChatMessages(chat.id);
-      setActiveChat({ ...chat, messages, unread: 0 });
-      setChats((prev) => prev.map((c) => (c.id === chat.id ? { ...c, unread: 0 } : c)));
-    } catch (err) {
-      setError(getApiErrorMessage(err, 'تعذّر تحميل الرسائل'));
-      setActiveChat(null);
-    } finally {
-      setLoadingMessages(false);
-    }
+    await loadActiveMessages(chat.id, false);
+    setChats((prev) => prev.map((c) => (c.id === chat.id ? { ...c, unread: 0 } : c)));
   };
 
   const handleSendReply = async () => {
@@ -185,7 +236,7 @@ const Chat = () => {
                 </div>
               </div>
 
-              <div className="chat-main-messages">
+              <div className="chat-main-messages" ref={messagesContainerRef}>
                 {loadingMessages ? (
                   <div className="chat-messages-loading">جاري تحميل الرسائل...</div>
                 ) : (
