@@ -1,5 +1,5 @@
 export const ORDER_STATUSES = [
-  { value: 'جديد', label: 'جديد' },
+  { value: 'تجهيز الطلب', label: 'تجهيز الطلب' },
   { value: 'قيد المعالجة', label: 'قيد المعالجة' },
   { value: 'تم الشحن', label: 'تم الشحن' },
   { value: 'قيد التوصيل', label: 'قيد التوصيل' },
@@ -21,7 +21,7 @@ export const initialOrders = [
     address: 'طرابلس، شارع الجمهورية',
     products: [{ name: 'قميص قطني أزرق' }, { name: 'بنطال جينز' }],
     total: 250,
-    status: 'جديد',
+    status: 'تجهيز الطلب',
   },
   {
     id: 'ORD002',
@@ -67,6 +67,7 @@ export const initialOrders = [
 
 export const getStatusBadgeClass = (status) => {
   const map = {
+    'تجهيز الطلب': 'status-new',
     'جديد': 'status-new',
     'قيد المعالجة': 'status-processing',
     'تم الشحن': 'status-shipped',

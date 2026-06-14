@@ -93,6 +93,24 @@
   color: var(--text-secondary);
 }
 
+.order-btn-prepare {
+  border: none;
+  cursor: pointer;
+  padding: 10px 16px;
+  border-radius: 10px;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.order-btn-prepare:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.order-btn-prepare:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
 .order-status-badge.status-processing {
   background: var(--gradient-primary);
   color: white;

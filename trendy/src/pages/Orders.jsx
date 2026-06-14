@@ -5,20 +5,15 @@ import OrderDetailModal from '../components/orders/OrderDetailModal';
 import {
   fetchAllOrders,
   fetchOrder,
-  updateOrderStatus,
   cancelOrder,
-  dispatchOrderForDelivery,
-  buildDispatchToast,
+  prepareOrder,
   canCancelOrderStatus,
   canPrepareOrder,
-  canDispatchOrder,
-  shouldDispatchToDriver,
 } from '../api/orders';
 import { getApiErrorMessage } from '../api/stores';
 import { useAuth } from '../context/AuthContext';
 import {
   STATUS_FILTER_OPTIONS,
-  ORDER_STATUSES,
   getStatusBadgeClass,
 } from '../data/ordersData';
 import './Orders.css';
@@ -44,7 +39,6 @@ const Orders = () => {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [loading, setLoading] = useState(true);
-  const [updatingId, setUpdatingId] = useState(null);
   const [cancellingId, setCancellingId] = useState(null);
   const [actionId, setActionId] = useState(null);
   const [error, setError] = useState('');
@@ -68,11 +62,11 @@ const Orders = () => {
       let list = await fetchAllOrders({
         storeId,
         search: debouncedSearch,
-        status: statusFilter,
+        status: statusFilter === 'تجهيز الطلب' ? 'all' : statusFilter,
         excludePos: false,
       });
-      if (statusFilter === 'جديد') {
-        list = list.filter((order) => !order.isPos);
+      if (statusFilter === 'تجهيز الطلب') {
+        list = list.filter((order) => !order.isPos && canPrepareOrder(order));
       }
       setOrders(list);
     } catch (err) {
@@ -92,26 +86,6 @@ const Orders = () => {
     }, 10000);
     return () => clearInterval(interval);
   }, [loadOrders]);
-
-  const handleStatusChange = async (order, newStatus) => {
-    if (!order || order.status === newStatus) return;
-
-    setUpdatingId(order.orderId);
-    try {
-      if (shouldDispatchToDriver(newStatus)) {
-        const updated = await dispatchOrderForDelivery(order);
-        showToast(buildDispatchToast(updated));
-      } else {
-        await updateOrderStatus(order.orderId, newStatus);
-        showToast(`تم تحديث حالة الطلب ${order.id} إلى «${newStatus}»`);
-      }
-      await loadOrders();
-    } catch (err) {
-      showToast(getApiErrorMessage(err, 'تعذّر تحديث حالة الطلب'));
-    } finally {
-      setUpdatingId(null);
-    }
-  };
 
   const handleCancel = async (order) => {
     if (!order || !canCancelOrderStatus(order.status)) return;
@@ -134,15 +108,15 @@ const Orders = () => {
     }
   };
 
-  const handleDispatch = async (order) => {
-    if (!order || !canDispatchOrder(order)) return;
+  const handlePrepare = async (order) => {
+    if (!order || !canPrepareOrder(order)) return;
     setActionId(order.orderId);
     try {
-      const updated = await dispatchOrderForDelivery(order);
-      showToast(buildDispatchToast(updated));
+      await prepareOrder(order.orderId);
+      showToast(`تم تجهيز الطلب ${order.id} بنجاح`);
       await loadOrders();
     } catch (err) {
-      showToast(getApiErrorMessage(err, 'تعذّر إرسال الطلب للتوصيل'));
+      showToast(getApiErrorMessage(err, 'تعذّر تجهيز الطلب'));
     } finally {
       setActionId(null);
     }
@@ -173,7 +147,7 @@ const Orders = () => {
           <Search size={20} color="#9ca3af" />
           <input
             type="text"
-            placeholder="البحث برقم الطلب أو اسم الموظف..."
+            placeholder="البحث برقم الطلب أو اسم العميل..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
@@ -206,8 +180,16 @@ const Orders = () => {
 
               <div className="order-card-details">
                 <div className="order-detail-item">
-                  <span className="label">الموظف</span>
-                  <span className="value">{order.staffName}</span>
+                  <span className="label">{order.isPos ? 'بواسطة الموظف' : 'العميل'}</span>
+                  <span className="value">{order.customerName}</span>
+                  {!order.isPos && (
+                    <span
+                      className="value"
+                      style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}
+                    >
+                      {order.phone}
+                    </span>
+                  )}
                 </div>
                 <div className="order-detail-item">
                   <span className="label">المنتج</span>
@@ -242,12 +224,15 @@ const Orders = () => {
                 </button>
 
                 {canPrepareOrder(order) ? (
-                  <OrderDropdown
-                    className="compact"
-                    value={order.status}
-                    options={ORDER_STATUSES}
-                    onChange={(status) => handleStatusChange(order, status)}
-                  />
+                  <button
+                    type="button"
+                    className={`order-status-badge ${getStatusBadgeClass(order.status)} order-btn-prepare`}
+                    onClick={() => handlePrepare(order)}
+                    disabled={actionId === order.orderId}
+                    title="تجهيز الطلب وإرساله للسائق"
+                  >
+                    {order.status}
+                  </button>
                 ) : (
                   <span
                     className={`order-status-badge ${getStatusBadgeClass(order.status)}`}
@@ -255,28 +240,6 @@ const Orders = () => {
                   >
                     حالة الطلب: {order.status}
                   </span>
-                )}
-
-                {canPrepareOrder(order) && (
-                  <button
-                    type="button"
-                    className="order-btn-view"
-                    onClick={() => handleDispatch(order)}
-                    disabled={actionId === order.orderId}
-                  >
-                    إرسال للتوصيل
-                  </button>
-                )}
-
-                {canDispatchOrder(order) && !canPrepareOrder(order) && (
-                  <button
-                    type="button"
-                    className="order-btn-view"
-                    onClick={() => handleDispatch(order)}
-                    disabled={actionId === order.orderId}
-                  >
-                    تعيين سائق
-                  </button>
                 )}
 
                 <button
