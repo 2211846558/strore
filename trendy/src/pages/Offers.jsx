@@ -73,7 +73,7 @@ const Offers = () => {
     try {
       const payload = editingOffer
         ? buildPromotionUpdatePayload(formData, { storeId })
-        : buildPromotionPayload(formData, { storeId });
+        : buildPromotionPayload(formData, { storeId, forCreate: true });
 
       if (editingOffer) {
         await updatePromotion(editingOffer.id, payload);

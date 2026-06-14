@@ -107,13 +107,54 @@ function mapTypeToApi(type) {
   return type === 'قيمة ثابتة' ? 'fixed' : 'percentage';
 }
 
-export function buildPromotionPayload(form, { storeId } = {}) {
+function localTodayYmd() {
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
+function isOnOrBeforeLocalDay(dateStr, ref = new Date()) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const selected = new Date(y, m - 1, d);
+  const refDay = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate());
+  return selected.getTime() <= refDay.getTime();
+}
+
+function formatUtcDateTime(date) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return (
+    `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())} ` +
+    `${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}:${pad(date.getUTCSeconds())}`
+  );
+}
+
+/** الباك يستخدم UTC — نرسل start_at بتوقيت UTC مع هامش بسيط */
+function formatPromotionStartAt(dateStr, { forCreate = false } = {}) {
+  if (!dateStr) return dateStr;
+  if (!forCreate) {
+    return dateStr.includes(' ') ? dateStr : `${dateStr} 00:00:00`;
+  }
+
+  const now = new Date();
+  if (isOnOrBeforeLocalDay(dateStr, now)) {
+    return formatUtcDateTime(new Date(now.getTime() + 120_000));
+  }
+
+  return `${dateStr} 00:00:00`;
+}
+
+function formatPromotionEndAt(dateStr) {
+  if (!dateStr) return dateStr;
+  return `${dateStr} 23:59:59`;
+}
+
+export function buildPromotionPayload(form, { storeId, forCreate = false } = {}) {
   const body = {
     name: form.name.trim(),
     type: mapTypeToApi(form.type),
     value: Number(form.value),
-    start_at: form.startDate,
-    end_at: form.endDate,
+    start_at: formatPromotionStartAt(form.startDate, { forCreate }),
+    end_at: formatPromotionEndAt(form.endDate),
     product_ids: form.productIds.map(Number),
   };
 

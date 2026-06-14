@@ -5,6 +5,12 @@ import './OfferModal.css';
 
 const DISCOUNT_TYPES = ['نسبة مئوية %', 'قيمة ثابتة'];
 
+function localTodayYmd() {
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
 const OfferModal = ({
   isOpen,
   onClose,
@@ -46,7 +52,7 @@ const OfferModal = ({
         name: '',
         type: 'نسبة مئوية %',
         value: '',
-        startDate: '',
+        startDate: localTodayYmd(),
         endDate: '',
         productIds: [],
         active: true,
@@ -79,7 +85,10 @@ const OfferModal = ({
     (form.type !== 'نسبة مئوية %' || numericValue <= 100);
 
   const isValidDates =
-    form.startDate && form.endDate && new Date(form.endDate) >= new Date(form.startDate);
+    form.startDate &&
+    form.endDate &&
+    new Date(`${form.endDate}T23:59:59`) >= new Date(`${form.startDate}T00:00:00`) &&
+    (!isEdit ? form.startDate >= localTodayYmd() : true);
 
   const canSubmit =
     form.name.trim() !== '' &&
@@ -90,6 +99,10 @@ const OfferModal = ({
 
   const handleSubmit = async () => {
     if (!canSubmit) {
+      if (form.startDate && !isEdit && form.startDate < localTodayYmd()) {
+        setError('تاريخ البداية لا يمكن أن يكون في الماضي');
+        return;
+      }
       setError('يجب تعبئة جميع البيانات واختيار منتج واحد على الأقل');
       return;
     }
@@ -151,6 +164,7 @@ const OfferModal = ({
               <input
                 type="date"
                 value={form.startDate}
+                min={localTodayYmd()}
                 onChange={(e) => handleChange('startDate', e.target.value)}
               />
             </div>
@@ -159,6 +173,7 @@ const OfferModal = ({
               <input
                 type="date"
                 value={form.endDate}
+                min={form.startDate || localTodayYmd()}
                 onChange={(e) => handleChange('endDate', e.target.value)}
               />
             </div>
