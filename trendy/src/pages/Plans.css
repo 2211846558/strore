@@ -94,3 +94,396 @@
     flex: 1;
   }
 }
+
+/* My Subscriptions Tab Layout & Styling */
+.my-subscriptions-container {
+  width: 100%;
+}
+
+.subscriptions-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+  text-align: right;
+}
+
+.section-title-sub {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 20px;
+}
+
+.section-title-sub-small {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 16px;
+}
+
+/* Active Subscription Card */
+.active-sub-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+}
+
+.active-sub-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 16px;
+}
+
+.active-sub-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin: 0 0 6px 0;
+}
+
+.active-sub-dates {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.active-sub-badge {
+  background-color: #d1fae5;
+  color: #065f46;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: 99px;
+}
+
+.active-sub-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.active-sub-price {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.price-amount {
+  font-size: 36px;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.price-unit {
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+/* Progress bar styles */
+.active-sub-progress-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.progress-text-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.progress-bar-track {
+  background: var(--bg-input);
+  border-radius: 99px;
+  height: 10px;
+  overflow: hidden;
+  position: relative;
+}
+
+.progress-bar-fill {
+  background: #10b981;
+  border-radius: 99px;
+  height: 100%;
+  transition: width 0.4s ease;
+}
+
+.active-sub-footer {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.renew-btn-active {
+  background: var(--gradient-primary);
+  color: white;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 10px 20px;
+  border-radius: 8px;
+  transition: opacity 0.2s ease;
+}
+
+.renew-btn-active:hover {
+  opacity: 0.9;
+}
+
+/* Warning card for no active plan */
+.active-sub-warning-card {
+  background: #fffbeb;
+  border: 1px dashed #f59e0b;
+  border-radius: 16px;
+  padding: 24px;
+  text-align: center;
+  color: #b45309;
+}
+
+.active-sub-warning-card p {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0 0 16px 0;
+}
+
+.warning-action-btn {
+  background-color: #f59e0b;
+  color: white;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 10px 20px;
+  border-radius: 8px;
+  transition: background-color 0.2s ease;
+}
+
+.warning-action-btn:hover {
+  background-color: #d97706;
+}
+
+/* Visual timeline of scheduled plans */
+.subscriptions-timeline {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  padding-right: 20px;
+  margin-right: 10px;
+}
+
+.timeline-node {
+  display: flex;
+  gap: 20px;
+  position: relative;
+  padding-bottom: 24px;
+}
+
+.timeline-node:last-child {
+  padding-bottom: 0;
+}
+
+.timeline-marker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+}
+
+.node-number {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background-color: var(--primary-light);
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  border: 2px solid var(--border-color);
+}
+
+.timeline-line {
+  position: absolute;
+  top: 28px;
+  bottom: -24px;
+  width: 2px;
+  background-color: var(--border-color);
+  z-index: 1;
+}
+
+.timeline-node:last-child .timeline-line {
+  display: none;
+}
+
+.timeline-content-card {
+  flex: 1;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.02);
+}
+
+.timeline-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.timeline-card-header h4 {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.timeline-badge {
+  background-color: #f3e8ff;
+  color: #6b21a8;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 12px;
+}
+
+.timeline-card-body {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.timeline-dates {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.timeline-price {
+  display: flex;
+  align-items: baseline;
+  color: var(--text-primary);
+}
+
+.timeline-price span:first-child {
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.price-sub-unit {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* Expired subscriptions list */
+.expired-subs-list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--bg-card);
+  overflow: hidden;
+}
+
+.expired-sub-row {
+  display: grid;
+  grid-template-columns: 1.5fr 2fr 1fr 1fr;
+  align-items: center;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.expired-sub-row:last-child {
+  border-bottom: none;
+}
+
+.expired-title {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.expired-dates {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.expired-price {
+  font-weight: 600;
+}
+
+.expired-badge-label {
+  justify-self: flex-start;
+  background-color: #f3f4f6;
+  color: #4b5563;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+/* Empty State Styling */
+.empty-subscriptions-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 60px 20px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  max-width: 500px;
+  margin: 40px auto;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.02);
+}
+
+.empty-icon-wrap {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background-color: var(--bg-input);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  margin-bottom: 24px;
+}
+
+.empty-subscriptions-state h3 {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin: 0 0 10px 0;
+}
+
+.empty-subscriptions-state p {
+  font-size: 14px;
+  color: var(--text-muted);
+  line-height: 1.6;
+  max-width: 400px;
+  margin: 0 0 24px 0;
+}
+
+.empty-state-btn {
+  background: var(--gradient-primary);
+  color: white;
+  font-size: 15px;
+  font-weight: 700;
+  padding: 12px 28px;
+  border-radius: 8px;
+  transition: opacity 0.2s ease;
+}
+
+.empty-state-btn:hover {
+  opacity: 0.9;
+}

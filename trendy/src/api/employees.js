@@ -156,7 +156,10 @@ function resolveActive(row) {
 export function mapEmployee(row) {
   const roleSlug = resolveRoleSlug(row);
   const roleId = resolveRoleId(row);
-  const active = resolveActive(row);
+  let active = resolveActive(row);
+  if (roleSlug === 'store_manager') {
+    active = true;
+  }
 
   return {
     id: row.id,

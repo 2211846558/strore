@@ -143,52 +143,81 @@ const Plans = ({ onboarding = false }) => {
     );
 
   const handleConfirmSubscription = async (plan, apiResponse) => {
+    const payload = apiResponse?.data ?? apiResponse ?? {};
+    const subscription = payload.subscription ?? payload.data?.subscription ?? {};
+    const apiStart = subscription.starts_at ?? subscription.start_date ?? payload.starts_at;
+    const apiEnd = subscription.ends_at ?? subscription.end_date ?? payload.ends_at;
+
+    const startsAt = apiStart ? new Date(apiStart.includes('T') ? apiStart : apiStart.replace(' ', 'T')) : null;
+    const endsAt = apiEnd ? new Date(apiEnd.includes('T') ? apiEnd : apiEnd.replace(' ', 'T')) : null;
+
     const period = buildSubscriptionPeriod({
       action: subscribeAction,
       plan,
       previousSubscription: currentSubscription,
     });
+
+    const finalStarts = startsAt ?? period.startsAt;
+    const finalEnds = endsAt ?? period.endsAt;
+
     persistLocalSubscription(storeId, {
       planId: plan.id,
-      startsAt: period.startsAt,
-      endsAt: period.endsAt,
+      startsAt: finalStarts,
+      endsAt: finalEnds,
       durationDays: plan.durationDays,
     });
-    setSubscriptionDates({ ...period, durationDays: plan.durationDays });
+    setSubscriptionDates({ startsAt: finalStarts, endsAt: finalEnds, durationDays: plan.durationDays });
 
     const updatedStore = extractStoreFromSubscriptionResponse(apiResponse, plan);
 
     if (storeId) {
-      updateStoreInSession({
-        id: storeId,
-        ...updatedStore,
-        status: 'active',
-        plan_id: updatedStore.plan_id ?? plan.id,
-        subscription_starts_at: period.startsAt.toISOString(),
-        subscription_ends_at: period.endsAt.toISOString(),
-      });
+      const isScheduled = finalStarts.getTime() > Date.now();
+      if (!isScheduled) {
+        updateStoreInSession({
+          id: storeId,
+          ...updatedStore,
+          status: 'active',
+          plan_id: updatedStore.plan_id ?? plan.id,
+          subscription_starts_at: finalStarts.toISOString(),
+          subscription_ends_at: finalEnds.toISOString(),
+        });
+      } else {
+        updateStoreInSession({
+          id: storeId,
+          status: 'active',
+        });
+      }
     }
 
     try {
       await refreshSession();
       if (storeId) {
-        updateStoreInSession({
-          id: storeId,
-          status: 'active',
-          plan_id: plan.id,
-          ...updatedStore,
-          subscription_starts_at: period.startsAt.toISOString(),
-          subscription_ends_at: period.endsAt.toISOString(),
-        });
+        const isScheduled = finalStarts.getTime() > Date.now();
+        if (!isScheduled) {
+          updateStoreInSession({
+            id: storeId,
+            status: 'active',
+            plan_id: plan.id,
+            ...updatedStore,
+            subscription_starts_at: finalStarts.toISOString(),
+            subscription_ends_at: finalEnds.toISOString(),
+          });
+        } else {
+          updateStoreInSession({
+            id: storeId,
+            status: 'active',
+          });
+        }
       }
     } catch {
       // الاشتراك نجح — نُبقي التحديث المحلي
     }
 
+    const friendlyStart = finalStarts ? formatDisplayDate(finalStarts) : '—';
     const messages = {
-      renew: `تم تجديد اشتراك ${plan.title} بنجاح`,
-      change: `تم الانتقال إلى ${plan.title} بنجاح`,
-      subscribe: `تم الاشتراك في ${plan.title} بنجاح`,
+      renew: `تم تجديد اشتراك ${plan.title} بنجاح. يبدأ التمديد في ${friendlyStart}`,
+      change: `تم الانتقال إلى ${plan.title} بنجاح. يبدأ العمل بها في ${friendlyStart}`,
+      subscribe: `تم الاشتراك في ${plan.title} بنجاح. يبدأ الاشتراك في ${friendlyStart}`,
     };
     showToast(messages[subscribeAction] || messages.subscribe);
     setIsWalletModalOpen(false);
@@ -198,12 +227,45 @@ const Plans = ({ onboarding = false }) => {
     }
   };
 
-  const filteredAvailablePlans = availablePlans.filter((plan) =>
-    plan.title.toLowerCase().includes(searchQuery.toLowerCase()),
+  const getPlanStatus = (planId) => {
+    const sub = mySubscriptions.find((s) => Number(s.planId) === Number(planId) && !s.isExpired);
+    if (!sub) return 'available';
+    if (sub.status === 'نشط') return 'active';
+    if (sub.status === 'مجدول') return 'scheduled';
+    return 'available';
+  };
+
+  const formatDisplayDate = (date) => {
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${pad(date.getDate())}-${pad(date.getMonth() + 1)}-${date.getFullYear()}`;
+  };
+
+  const activeSubscription = useMemo(
+    () => mySubscriptions.find((sub) => sub.status === 'نشط' && !sub.isExpired),
+    [mySubscriptions]
   );
 
-  const filteredSubscriptions = mySubscriptions.filter((sub) =>
-    sub.title.toLowerCase().includes(searchQuery.toLowerCase()),
+  const scheduledSubscriptions = useMemo(
+    () => mySubscriptions.filter((sub) => sub.status === 'مجدول' && !sub.isExpired).sort((a, b) => a.startsAtMs - b.startsAtMs),
+    [mySubscriptions]
+  );
+  
+  const expiredSubscriptions = useMemo(
+    () => mySubscriptions.filter((sub) => sub.status === 'منتهي' || sub.isExpired),
+    [mySubscriptions]
+  );
+
+  const hasNoSubscriptions = !activeSubscription && scheduledSubscriptions.length === 0;
+
+  const getProgressPercent = (sub) => {
+    if (!sub || !sub.durationDays) return 0;
+    const remaining = sub.remainingDays ?? 0;
+    const passed = Math.max(0, sub.durationDays - remaining);
+    return Math.min(100, Math.round((passed / sub.durationDays) * 100));
+  };
+
+  const filteredAvailablePlans = availablePlans.filter((plan) =>
+    plan.title.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
   return (
@@ -262,7 +324,7 @@ const Plans = ({ onboarding = false }) => {
                   price={plan.price}
                   featuresText={plan.featuresText}
                   isPopular={plan.isPopular}
-                  isActive={isPlanActive(plan.id)}
+                  status={getPlanStatus(plan.id)}
                   onSubscribe={() => handleSubscribeClick(plan)}
                 />
               ))
@@ -273,38 +335,140 @@ const Plans = ({ onboarding = false }) => {
         )}
 
         {activeTab === 'my-subscriptions' && (
-          <div className="plans-grid my-subscriptions">
+          <div className="my-subscriptions-container">
             {loadingSubscriptions ? (
               <p className="no-results">جاري تحميل اشتراكاتك...</p>
-            ) : filteredSubscriptions.length > 0 ? (
-              filteredSubscriptions.map((sub) => (
-                <SubscriptionCard
-                  key={sub.id}
-                  title={sub.title}
-                  price={sub.price}
-                  status={sub.status}
-                  durationDays={sub.durationDays}
-                  remainingDays={sub.remainingDays}
-                  statusText={sub.statusText}
-                  isExpired={sub.isExpired}
-                  onRenew={() => {
-                    const plan =
-                      availablePlans.find((p) => p.id === sub.planId) ?? {
-                        id: sub.planId,
-                        title: sub.title,
-                        price: sub.price,
-                        durationDays: sub.durationDays ?? 30,
-                      };
-                    handleSubscribeClick(plan, 'renew');
-                  }}
-                />
-              ))
+            ) : hasNoSubscriptions ? (
+              <div className="empty-subscriptions-state">
+                <div className="empty-icon-wrap">
+                  <Search size={48} />
+                </div>
+                <h3>لا توجد اشتراكات نشطة أو مجدولة حالياً</h3>
+                <p>يمكنك استعراض الخطط المتاحة والاشتراك في إحداها لتفعيل متجرك والبدء في إدارة الكتالوج والمبيعات.</p>
+                <button 
+                  className="empty-state-btn" 
+                  onClick={() => setActiveTab('available')}
+                >
+                  عرض الخطط المتاحة
+                </button>
+              </div>
             ) : (
-              !loadingSubscriptions && (
-                <p className="no-results">
-                  لا توجد اشتراكات مسجلة. انتقل إلى «الخطط المتاحة» للاشتراك في خطة.
-                </p>
-              )
+              <div className="subscriptions-layout">
+                {/* 1. الخطة المفعّلة */}
+                <div className="active-subscription-section">
+                  <h2 className="section-title-sub">الخطة المفعّلة حالياً</h2>
+                  {activeSubscription ? (
+                    <div className="active-sub-card">
+                      <div className="active-sub-header">
+                        <div>
+                          <h3 className="active-sub-title">{activeSubscription.title}</h3>
+                          <span className="active-sub-dates">
+                            الفترة: من {activeSubscription.dateRange.start} إلى {activeSubscription.dateRange.end}
+                          </span>
+                        </div>
+                        <div className="active-sub-badge">نشط</div>
+                      </div>
+                      
+                      <div className="active-sub-body">
+                        <div className="active-sub-price">
+                          <span className="price-amount">{activeSubscription.price}</span>
+                          <span className="price-unit">د.ل / {activeSubscription.durationDays} يوم</span>
+                        </div>
+                        
+                        <div className="active-sub-progress-wrapper">
+                          <div className="progress-text-row">
+                            <span>متبقي {activeSubscription.remainingDays ?? 0} يوم</span>
+                            <span>{getProgressPercent(activeSubscription)}%</span>
+                          </div>
+                          <div className="progress-bar-track">
+                            <div 
+                              className="progress-bar-fill" 
+                              style={{ width: `${getProgressPercent(activeSubscription)}%` }}
+                            ></div>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="active-sub-footer">
+                        <button 
+                          className="renew-btn-active"
+                          onClick={() => {
+                            const plan = availablePlans.find((p) => p.id === activeSubscription.planId) ?? {
+                              id: activeSubscription.planId,
+                              title: activeSubscription.title,
+                              price: activeSubscription.price,
+                              durationDays: activeSubscription.durationDays ?? 30,
+                            };
+                            handleSubscribeClick(plan, 'renew');
+                          }}
+                        >
+                          تجديد الاشتراك
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="active-sub-warning-card">
+                      <p>لا يوجد اشتراك مفعّل حالياً. متجرك متوقف عن استقبال المبيعات والتصفح.</p>
+                      <button 
+                        className="warning-action-btn"
+                        onClick={() => setActiveTab('available')}
+                      >
+                        تفعيل المتجر الآن
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* 2. سلسلة الخطط المجدولة */}
+                {scheduledSubscriptions.length > 0 && (
+                  <div className="scheduled-subscriptions-section">
+                    <h2 className="section-title-sub">سلسلة الاشتراكات المجدولة</h2>
+                    <div className="subscriptions-timeline">
+                      {scheduledSubscriptions.map((sub, index) => (
+                        <div key={sub.id} className="timeline-node">
+                          <div className="timeline-marker">
+                            <span className="node-number">{index + 1}</span>
+                            <div className="timeline-line"></div>
+                          </div>
+                          <div className="timeline-content-card">
+                            <div className="timeline-card-header">
+                              <h4>{sub.title}</h4>
+                              <span className="timeline-badge">مجدول</span>
+                            </div>
+                            <div className="timeline-card-body">
+                              <div className="timeline-dates">
+                                <span>يبدأ في: {sub.dateRange.start}</span>
+                                <span>ينتهي في: {sub.dateRange.end}</span>
+                              </div>
+                              <div className="timeline-price">
+                                <span>{sub.price} د.ل</span>
+                                <span className="price-sub-unit"> / {sub.durationDays} يوم</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                {/* 3. الاشتراكات السابقة */}
+                {expiredSubscriptions.length > 0 && (
+                  <div className="expired-subscriptions-section">
+                    <h2 className="section-title-sub-small">الاشتراكات السابقة</h2>
+                    <div className="expired-subs-list">
+                      {expiredSubscriptions.map((sub) => (
+                        <div key={sub.id} className="expired-sub-row">
+                          <span className="expired-title">{sub.title}</span>
+                          <span className="expired-dates">من {sub.dateRange.start} إلى {sub.dateRange.end}</span>
+                          <span className="expired-price">{sub.price} د.ل</span>
+                          <span className="expired-badge-label">منتهي</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         )}

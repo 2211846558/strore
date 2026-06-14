@@ -2,15 +2,24 @@ import React from 'react';
 import { CreditCard } from 'lucide-react';
 import './PlanCard.css';
 
-const PlanCard = ({ title, price, featuresText, isPopular, isActive, onSubscribe }) => {
+const PlanCard = ({ title, price, featuresText, isPopular, status = 'available', onSubscribe }) => {
+  const isRecommended = isPopular;
+
+  const getButtonText = () => {
+    return 'اشترك في الخطة';
+  };
+
+  const isBtnDisabled = false;
+
   return (
-    <div className={`plan-card ${isPopular ? 'popular' : ''} ${isActive ? 'active' : ''}`} tabIndex={0}>
+    <div className={`plan-card ${isRecommended ? 'popular recommended' : ''} ${status === 'active' ? 'active' : ''} ${status === 'scheduled' ? 'scheduled' : ''}`} tabIndex={0}>
       <div className="plan-header">
         <div className="title-row">
           <h3 className="plan-title">{title}</h3>
-          {isActive && <span className="active-badge">نشط</span>}
+          {status === 'active' && <span className="active-badge">نشط</span>}
+          {status === 'scheduled' && <span className="scheduled-badge">مجدول</span>}
         </div>
-        {isPopular && <span className="popular-badge">الأكثر شعبية</span>}
+        {isRecommended && <span className="popular-badge recommended-badge">الخطة الموصى بها</span>}
       </div>
 
       <div className="plan-price">
@@ -22,9 +31,9 @@ const PlanCard = ({ title, price, featuresText, isPopular, isActive, onSubscribe
         <p>{featuresText}</p>
       </div>
 
-      <button className="subscribe-btn" onClick={onSubscribe} disabled={isActive}>
+      <button className={`subscribe-btn ${status}`} onClick={onSubscribe} disabled={isBtnDisabled}>
         <CreditCard size={18} />
-        {isActive ? 'مشترك حالياً' : 'اشتراك في الخطة'}
+        {getButtonText()}
       </button>
     </div>
   );

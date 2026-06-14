@@ -144,8 +144,27 @@ export function buildStoreUpdateFormData(formData, logoFile) {
     fd.append('description', formData.description?.trim() || '');
   }
   if (formData.phone?.trim()) fd.append('phone', formData.phone.trim());
-  if (formData.email?.trim()) fd.append('store_email', formData.email.trim());
-  if (formData.zoneId) fd.append('zone_id', String(Number(formData.zoneId)));
+  if (formData.type) fd.append('type', formData.type);
+
+  if (formData.merchantData && typeof formData.merchantData === 'object') {
+    if (formData.merchantData.tax_number !== undefined) {
+      fd.append('merchant_data[tax_number]', formData.merchantData.tax_number?.trim() || '');
+    }
+    if (formData.merchantData.commercial_register !== undefined) {
+      fd.append('merchant_data[commercial_register]', formData.merchantData.commercial_register?.trim() || '');
+    }
+  }
+
+  const isLocal = formData.type === 'local' || formData.type === 'محلي';
+  if (isLocal) {
+    if (formData.zoneId) {
+      fd.append('zone_id', String(Number(formData.zoneId)));
+    }
+    if (formData.googleMapUrl !== undefined) {
+      fd.append('google_map_url', formData.googleMapUrl?.trim() || '');
+    }
+  }
+
   if (logoFile instanceof File) fd.append('logo', logoFile);
 
   return fd;
