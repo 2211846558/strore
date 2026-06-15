@@ -202,7 +202,26 @@ export async function createProductVariant(
   return mapped;
 }
 
-const productDetailsCache = new Map();
+const PRODUCT_IMG_CACHE_KEY = 'trendy_product_img_cache';
+
+function readProductImgCache() {
+  try {
+    const raw = sessionStorage.getItem(PRODUCT_IMG_CACHE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeProductImgCache(id, data) {
+  try {
+    const cache = readProductImgCache();
+    cache[String(id)] = data;
+    sessionStorage.setItem(PRODUCT_IMG_CACHE_KEY, JSON.stringify(cache));
+  } catch {
+    // تجاوز أخطاء quota
+  }
+}
 
 /**
  * قائمة المنتجات تُرجع thumbnail فقط — نُكمل الصور من تفاصيل كل منتج.
@@ -213,13 +232,13 @@ async function enrichProductsWithImages(products) {
   return Promise.all(
     products.map(async (product) => {
       if (product.status === 'مؤرشف') return product;
-      const cached = productDetailsCache.get(product.id);
+      const cached = readProductImgCache()[String(product.id)];
       if (cached) {
         return { ...product, ...cached };
       }
       try {
         const details = await fetchProductDetails(product.id);
-        productDetailsCache.set(product.id, {
+        writeProductImgCache(product.id, {
           images: details.images,
           image: details.image,
           imageCandidates: details.imageCandidates,

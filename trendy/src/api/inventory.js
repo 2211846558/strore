@@ -640,7 +640,14 @@ function resolveCategoryName(raw, product) {
   return '—';
 }
 
+const enrichmentCache = new Map();
+
 export async function loadVariantEnrichmentContext({ storeId } = {}) {
+  const cacheKey = storeId ? String(storeId) : '__global__';
+  if (enrichmentCache.has(cacheKey)) {
+    return enrichmentCache.get(cacheKey);
+  }
+
   const [attrs, inventoryResult] = await Promise.all([
     fetchAttributes({ perPage: 100 }).catch(() => []),
     fetchInventory({ perPage: 500, storeId }).catch(() => ({ items: [] })),
@@ -654,7 +661,9 @@ export async function loadVariantEnrichmentContext({ storeId } = {}) {
     ]),
   );
 
-  return { catalogAttributes, inventoryByVariantId };
+  const result = { catalogAttributes, inventoryByVariantId };
+  enrichmentCache.set(cacheKey, result);
+  return result;
 }
 
 function isFallbackVariantLabel(label) {
@@ -705,32 +714,33 @@ export async function fetchEnrichedProductVariants(productId, { storeId } = {}) 
 export async function fetchShipmentCatalog({ storeId } = {}) {
   const products = await fetchStoreProducts({ storeId, status: 'active', perPage: 100 });
   const { catalogAttributes, inventoryByVariantId } = await loadVariantEnrichmentContext({ storeId });
-  const catalog = [];
 
-  for (const product of products) {
-    try {
+  const results = await Promise.allSettled(
+    products.map(async (product) => {
       const variants = await fetchProductVariants(product.id, {
         catalogAttributes,
         inventoryByVariantId,
       });
 
-      if (variants.length) {
-        catalog.push({
-          id: product.id,
-          name: product.name,
-          category: typeof product.category === 'string' ? product.category : '—',
-          price: String(product.price ?? ''),
-          variants: variants.map((variant) => ({
-            id: variant.id,
-            sku: variant.sku ?? '',
-            label: variant.label,
-          })),
-        });
-      }
-    } catch {
-      // تجاهل المنتجات التي لا يمكن تحميل تنوعاتها
-    }
-  }
+      if (!variants.length) return null;
+
+      return {
+        id: product.id,
+        name: product.name,
+        category: typeof product.category === 'string' ? product.category : '—',
+        price: String(product.price ?? ''),
+        variants: variants.map((variant) => ({
+          id: variant.id,
+          sku: variant.sku ?? '',
+          label: variant.label,
+        })),
+      };
+    }),
+  );
+
+  const catalog = results
+    .filter((r) => r.status === 'fulfilled' && r.value != null)
+    .map((r) => r.value);
 
   return catalog;
 }

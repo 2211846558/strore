@@ -271,24 +271,18 @@ export async function fetchPosCatalog({ storeId } = {}) {
 
   const inventoryItems = inventoryResult.items ?? [];
   const inventoryStock = buildInventoryStockMap(inventoryItems);
-  const catalog = [];
 
-  for (const product of products) {
-    try {
+  const results = await Promise.allSettled(
+    products.map(async (product) => {
       const res = await apiRequest(API_ENDPOINTS.product(product.id));
       const raw = unwrapApiEntity(res);
-      const entry = buildPosProductEntry(
-        raw,
-        product,
-        inventoryStock,
-        inventoryItems,
-        catalogAttributes,
-      );
-      if (entry) catalog.push(entry);
-    } catch {
-      // تجاهل المنتجات التي لا يمكن تحميل تنوعاتها
-    }
-  }
+      return buildPosProductEntry(raw, product, inventoryStock, inventoryItems, catalogAttributes);
+    }),
+  );
+
+  const catalog = results
+    .filter((r) => r.status === 'fulfilled' && r.value != null)
+    .map((r) => r.value);
 
   return catalog;
 }

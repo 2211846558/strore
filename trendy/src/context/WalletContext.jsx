@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useCallback, useMemo, useEf
 import { useAuth } from './AuthContext';
 import { getStoreWalletBalance, chargeStoreWallet, withdrawStoreWallet, resolveWalletChargeContext } from '../api/wallet';
 import { resolveManagedStoreId } from '../api/auth';
-import { fetchAllTransactions, mapToWalletLog } from '../api/finance';
+import { fetchTransactions, mapToWalletLog } from '../api/finance';
 
 const WalletContext = createContext(null);
 
@@ -20,7 +20,7 @@ export const WalletProvider = ({ children }) => {
     try {
       const [balanceRes, txResult] = await Promise.all([
         getStoreWalletBalance({ storeId: effectiveStoreId }),
-        fetchAllTransactions({ perPage: 50 }),
+        fetchTransactions({ perPage: 50 }),
       ]);
       setBalance(Number(balanceRes?.balance ?? 0));
       const walletStatus = String(balanceRes?.status ?? balanceRes?.wallet_status ?? 'active').toLowerCase();
@@ -31,7 +31,7 @@ export const WalletProvider = ({ children }) => {
         frozen: 'مجمّدة',
       };
       setStatus(statusLabels[walletStatus] ?? balanceRes?.status ?? 'نشطة');
-      setTransactions(txResult.transactions.map(mapToWalletLog));
+      setTransactions((txResult.transactions ?? []).map(mapToWalletLog));
     } catch {
       // يبقى الرصيد الحالي عند فشل التحميل
     } finally {

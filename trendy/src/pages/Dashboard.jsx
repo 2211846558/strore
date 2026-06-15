@@ -16,7 +16,7 @@ import {
   mergeStoreProfile,
   resolveStoreEmail,
 } from '../api/stores';
-import { fetchDashboardStats, fetchStoreMonthlyRevenueChart } from '../api/dashboard';
+import { fetchStoreDashboard } from '../api/dashboard';
 import { getStoreLogoCandidates, resolveStoreLogoUrl } from '../api/media';
 import './Dashboard.css';
 
@@ -98,12 +98,9 @@ const Dashboard = () => {
     if (!quiet) setStatsLoading(true);
     setStatsError('');
     try {
-      const [dashboardStats, chart] = await Promise.all([
-        fetchDashboardStats({ storeId }),
-        fetchStoreMonthlyRevenueChart(5),
-      ]);
-      setStats(dashboardStats);
-      setMonthlyRevenue(chart);
+      const { stats, monthlyRevenue } = await fetchStoreDashboard({ storeId });
+      setStats(stats);
+      setMonthlyRevenue(monthlyRevenue);
     } catch (err) {
       if (err?.status === 401 || err?.isUnauthorized) {
         setStatsError('');

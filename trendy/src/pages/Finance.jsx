@@ -77,15 +77,15 @@ const Finance = () => {
     setLoading(true);
     setError('');
     try {
-      const [txResult, revenue, profit, chart, custody, logs] = await Promise.all([
+      const [txResult, revenue, profit, custody, logs] = await Promise.all([
         fetchAllTransactions({
           search: debouncedSearch,
           status: statusFilter !== 'all' ? statusFilter : undefined,
           perPage: 100,
+          maxPages: 3,
         }),
         fetchRevenueOverview().catch(() => null),
         fetchProfitOverview().catch(() => null),
-        fetchMonthlyRevenueChart(5),
         fetchCustodySummary({ storeId }).catch(() => null),
         fetchCustodyLogs({ storeId, perPage: 20 }).catch(() => ({ data: [] })),
       ]);
@@ -93,7 +93,6 @@ const Finance = () => {
       setTransactions(txResult.transactions);
       setRevenueOverview(revenue);
       setProfitOverview(profit);
-      setChartData(chart);
       setCustodySummary(custody);
       setCustodyLogs(logs?.data ?? []);
     } catch (err) {
@@ -107,6 +106,12 @@ const Finance = () => {
   useEffect(() => {
     loadFinanceData();
   }, [loadFinanceData]);
+
+  useEffect(() => {
+    fetchMonthlyRevenueChart(5)
+      .then(setChartData)
+      .catch(() => setChartData([]));
+  }, [storeId]);
 
   const filteredTransactions = filterTransactionsByType(transactions, typeFilter);
 

@@ -49,6 +49,7 @@ export const API_ENDPOINTS = {
   walletLogs: '/wallet/logs',
   custodySummary: '/stores/custody/summary',
   custodyLogs: '/stores/custody/logs',
+  storeDashboard: '/stores/dashboard',
   storeDashboardTotalNewOrders: '/stores/dashboard/total-new-orders',
   storeDashboardTotalEmployees: '/stores/dashboard/total-employees',
   storeRatings: (storeId) => `/stores/${storeId}/ratings`,
