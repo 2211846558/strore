@@ -2,13 +2,12 @@ import { apiRequest } from './client';
 import { API_ENDPOINTS } from './config';
 import { fetchOrder as fetchOrderById } from './orders';
 import {
-  fetchStoreProducts,
-  fetchAttributes,
   unwrapApiEntity,
   parseVariantColorSize,
   parseAttributesString,
   buildVariantFallbackLabel,
   extractProductVariants,
+  fetchAttributes,
 } from './products';
 import { fetchInventory, fetchInventoryVariant } from './inventory';
 
@@ -261,30 +260,11 @@ export async function fetchVariantStockPrice(variantId, { fallbackStock } = {}) 
 
 /**
  * جلب منتجات المتجر مع تنوعاتها للمبيعات المباشرة
+ * — يستخدم endpoint محسّن من السيرفر بدل N+1 طلب
  */
-export async function fetchPosCatalog({ storeId } = {}) {
-  const [products, inventoryResult, catalogAttributes] = await Promise.all([
-    fetchStoreProducts({ storeId, status: 'active', perPage: 100 }),
-    fetchInventory({ storeId, perPage: 200 }).catch(() => ({ items: [] })),
-    fetchAttributes().catch(() => []),
-  ]);
-
-  const inventoryItems = inventoryResult.items ?? [];
-  const inventoryStock = buildInventoryStockMap(inventoryItems);
-
-  const results = await Promise.allSettled(
-    products.map(async (product) => {
-      const res = await apiRequest(API_ENDPOINTS.product(product.id));
-      const raw = unwrapApiEntity(res);
-      return buildPosProductEntry(raw, product, inventoryStock, inventoryItems, catalogAttributes);
-    }),
-  );
-
-  const catalog = results
-    .filter((r) => r.status === 'fulfilled' && r.value != null)
-    .map((r) => r.value);
-
-  return catalog;
+export async function fetchPosCatalog(_options = {}) {
+  const res = await apiRequest(API_ENDPOINTS.posCatalog);
+  return extractList(res);
 }
 
 export function getProductStockInfo(product) {
@@ -374,6 +354,28 @@ export function mapOrderToInvoice(order) {
     status: STATUS_AR[order.status] ?? order.status ?? '—',
     statusRaw: order.status,
     items,
+  };
+}
+
+/**
+ * GET /pos/init — catalog + cart + wallet in one request
+ */
+export async function fetchPosInit() {
+  const res = await apiRequest(API_ENDPOINTS.posInit);
+  const data = res?.data ?? res ?? {};
+  const cartRaw = data.cart ?? {};
+
+  return {
+    catalog: data.catalog ?? [],
+    cart: {
+      items: (cartRaw.items ?? []).map(mapCartItem),
+      subtotal: Number(cartRaw.summary?.subtotal ?? 0),
+      total: Number(cartRaw.summary?.total ?? 0),
+    },
+    wallet: {
+      balance: Number(data.wallet?.balance ?? 0),
+      status: data.wallet?.status ?? 'active',
+    },
   };
 }
 
@@ -476,13 +478,12 @@ export async function fetchPosInvoices({ search, perPage = 50 } = {}) {
   const query = new URLSearchParams({
     per_page: String(perPage),
     order_type: 'past',
+    sales_channel: 'pos',
   });
   if (search?.trim()) query.set('search', search.trim());
 
   const res = await apiRequest(`${API_ENDPOINTS.orders}?${query}`);
-  const rows = extractList(res).filter((order) =>
-    String(order.order_number ?? '').includes('POS'),
-  );
+  const rows = extractList(res);
 
   return rows.map((row) => {
     const itemsRaw = row.items ?? row.order_items ?? row.products ?? row.line_items ?? [];

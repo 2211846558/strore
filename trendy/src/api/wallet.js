@@ -11,29 +11,8 @@ import {
   userCanChargeStoreWallet,
 } from './auth';
 
-function pickWalletBalance(walletPayload, storePayload) {
-  const store = storePayload?.data ?? storePayload ?? {};
-  const wallet = walletPayload?.data ?? walletPayload ?? {};
-  const candidates = [
-    wallet.balance,
-    wallet.store_balance,
-    wallet.store_wallet_balance,
-    store.wallet_balance,
-    store.wallet?.balance,
-    store.store_wallet_balance,
-  ];
-
-  for (const value of candidates) {
-    if (value == null || value === '') continue;
-    const num = Number(value);
-    if (!Number.isNaN(num)) return num;
-  }
-
-  return 0;
-}
-
 /**
- * GET /api/wallet/balance — مع دمج رصيد محفظة المتجر إن وُجد
+ * GET /api/wallet/balance
  */
 export async function getWalletBalance(forceRefresh = false) {
   return staleWhileRevalidate('wallet', async () => {
@@ -43,19 +22,13 @@ export async function getWalletBalance(forceRefresh = false) {
 }
 
 export async function getStoreWalletBalance({ storeId } = {}) {
-  const [walletRes, storeRes] = await Promise.all([
-    getWalletBalance().catch(() => ({})),
-    storeId
-      ? apiRequest(API_ENDPOINTS.storeShow(storeId)).catch(() => null)
-      : Promise.resolve(null),
-  ]);
-
-  const balance = pickWalletBalance(walletRes, storeRes);
-  const base = walletRes?.data ?? walletRes ?? {};
+  const res = await getWalletBalance().catch(() => ({}));
+  const data = res?.data ?? res ?? {};
+  const balance = Number(data.balance ?? data.store_balance ?? data.store_wallet_balance ?? 0);
 
   return {
-    ...base,
-    balance,
+    ...data,
+    balance: Number.isNaN(balance) ? 0 : balance,
   };
 }
 

@@ -68,6 +68,8 @@ export const API_ENDPOINTS = {
   promotions: '/promotions',
   promotion: (id) => `/promotions/${id}`,
   promotionToggle: (id) => `/promotions/${id}/toggle`,
+  posInit: '/pos/init',
+  posCatalog: '/pos/catalog',
   posCart: '/pos/cart',
   posCartItem: (itemId) => `/pos/cart/${itemId}`,
   posCheckout: '/pos/checkout',

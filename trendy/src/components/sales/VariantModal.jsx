@@ -3,16 +3,12 @@ import { X } from 'lucide-react';
 import {
   getVariantStock,
   resolveVariant,
-  fetchSalesProductVariants,
   fetchVariantStockPrice,
 } from '../../api/pos';
 import ExchangePriceDiff from './ExchangePriceDiff';
 import './SalesModals.css';
 
 const VariantModal = ({ isOpen, onClose, product, onAdd, isSaving, exchangeFrom, storeId }) => {
-  const [variantProduct, setVariantProduct] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [loadError, setLoadError] = useState('');
   const [color, setColor] = useState('');
   const [size, setSize] = useState('');
   const [selectedVariantId, setSelectedVariantId] = useState('');
@@ -20,14 +16,12 @@ const VariantModal = ({ isOpen, onClose, product, onAdd, isSaving, exchangeFrom,
   const [livePrice, setLivePrice] = useState(null);
   const [loadingStock, setLoadingStock] = useState(false);
 
-  const activeProduct = variantProduct ?? product;
+  const activeProduct = product;
   const useDirectSelection = Boolean(activeProduct?.useDirectSelection);
   const variantOptions = activeProduct?.variantOptions ?? [];
 
   useEffect(() => {
     if (!isOpen || !product?.id) {
-      setVariantProduct(null);
-      setLoadError('');
       setColor('');
       setSize('');
       setSelectedVariantId('');
@@ -36,47 +30,15 @@ const VariantModal = ({ isOpen, onClose, product, onAdd, isSaving, exchangeFrom,
       return;
     }
 
-    let cancelled = false;
-    setLoading(true);
-    setLoadError('');
-
-    fetchSalesProductVariants(product.id, { storeId })
-      .then((data) => {
-        if (cancelled) return;
-        setVariantProduct({ ...data, image: product.image ?? data.image });
-        if (data.useDirectSelection) {
-          setSelectedVariantId(
-            data.variantOptions?.length === 1 ? String(data.variantOptions[0].id) : '',
-          );
-        } else {
-          setColor(data.colors?.length === 1 ? data.colors[0] : '');
-          setSize(data.sizes?.length === 1 ? data.sizes[0] : '');
-        }
-      })
-      .catch(() => {
-        if (cancelled) return;
-        if (product.variants?.length) {
-          setVariantProduct(product);
-          if (product.useDirectSelection) {
-            setSelectedVariantId(
-              product.variantOptions?.length === 1 ? String(product.variantOptions[0].id) : '',
-            );
-          } else {
-            setColor(product.colors?.length === 1 ? product.colors[0] : '');
-            setSize(product.sizes?.length === 1 ? product.sizes[0] : '');
-          }
-        } else {
-          setLoadError('تعذّر تحميل تنوعات المنتج');
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isOpen, product, storeId]);
+    if (product.useDirectSelection) {
+      setSelectedVariantId(
+        product.variantOptions?.length === 1 ? String(product.variantOptions[0].id) : '',
+      );
+    } else {
+      setColor(product.colors?.length === 1 ? product.colors[0] : '');
+      setSize(product.sizes?.length === 1 ? product.sizes[0] : '');
+    }
+  }, [isOpen, product]);
 
   const hideSizeField =
     !useDirectSelection &&
@@ -102,8 +64,6 @@ const VariantModal = ({ isOpen, onClose, product, onAdd, isSaving, exchangeFrom,
     ? Boolean(selectedVariantId)
     : Boolean(color && (hideSizeField || size));
   const canAdd =
-    !loading &&
-    !loadError &&
     selectionReady &&
     variant &&
     (stock > 0 || variant?.stockUnknown) &&
@@ -141,7 +101,7 @@ const VariantModal = ({ isOpen, onClose, product, onAdd, isSaving, exchangeFrom,
     };
   }, [variant?.id, selectionReady, useDirectSelection, color, size, hideSizeField]);
 
-  if (!isOpen || !product) return null;
+  if (!isOpen || !activeProduct) return null;
 
   const handleAdd = async () => {
     if (!canAdd) return;
@@ -172,11 +132,7 @@ const VariantModal = ({ isOpen, onClose, product, onAdd, isSaving, exchangeFrom,
           <p className="sales-modal-product-price">{price} د.ل</p>
         </div>
 
-        {loading ? (
-          <p className="sales-variant-loading">جاري تحميل التنوعات...</p>
-        ) : loadError ? (
-          <p className="sales-variant-error">{loadError}</p>
-        ) : useDirectSelection ? (
+        {useDirectSelection ? (
           <div className="sales-form-group">
             <label htmlFor="variant-direct">التنوع</label>
             <select

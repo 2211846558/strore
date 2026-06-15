@@ -11,7 +11,7 @@ import {
   X,
 } from 'lucide-react';
 import {
-  fetchPosCatalog,
+  fetchPosInit,
   fetchPosCart,
   addToPosCart,
   removeFromPosCart,
@@ -122,18 +122,24 @@ const Sales = () => {
     };
   }, [dropdownOpen]);
 
-  const loadProducts = useCallback(async () => {
+  const loadInitData = useCallback(async () => {
     setLoadingProducts(true);
+    setLoadingCart(true);
     try {
-      const catalog = await fetchPosCatalog({ storeId });
+      const { catalog, cart } = await fetchPosInit();
       setProducts(catalog);
+      setCart(cart.items);
+      setCartTotal(cart.total);
     } catch (err) {
-      setError(getApiErrorMessage(err, 'تعذّر تحميل المنتجات'));
+      setError(getApiErrorMessage(err, 'تعذّر تحميل بيانات المبيعات'));
       setProducts([]);
+      setCart([]);
+      setCartTotal(0);
     } finally {
       setLoadingProducts(false);
+      setLoadingCart(false);
     }
-  }, [storeId]);
+  }, []);
 
   const loadCart = useCallback(async () => {
     setLoadingCart(true);
@@ -164,9 +170,8 @@ const Sales = () => {
   }, [debouncedInvoiceSearch]);
 
   useEffect(() => {
-    loadProducts();
-    loadCart();
-  }, [loadProducts, loadCart]);
+    loadInitData();
+  }, [loadInitData]);
 
   useEffect(() => {
     if (activeTab === 'invoices') loadInvoices();
@@ -181,7 +186,7 @@ const Sales = () => {
   }, [invoices, invoiceSearch]);
 
   const refreshAll = async () => {
-    await Promise.all([loadProducts(), loadCart(), activeTab === 'invoices' ? loadInvoices() : Promise.resolve()]);
+    await Promise.all([loadInitData(), activeTab === 'invoices' ? loadInvoices() : Promise.resolve()]);
   };
 
   const openProduct = (product) => {
