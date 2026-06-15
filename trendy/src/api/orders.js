@@ -67,11 +67,18 @@ function extractOrderItems(row) {
 }
 
 function mapOrderItem(item) {
+  const variant = item.variant ?? item.product_variant ?? {};
   return {
     name: item.product_name ?? item.name ?? item.product?.name ?? item.title ?? '—',
     quantity: Number(item.quantity ?? 1),
     price: Number(item.unit_price ?? item.price ?? 0),
-    variantLabel: item.sku ?? item.variant_label ?? null,
+    variantLabel: item.variant_label ?? item.variantLabel ?? variant.label ?? null,
+    variantId: item.variant_id ?? item.variantId ?? item.product_variant_id ?? item.productVariantId ?? null,
+    lineId: item.id ?? item.lineId ?? null,
+    sku: item.sku ?? variant.sku ?? '',
+    productId: item.product_id ?? item.product?.id ?? variant.product_id ?? null,
+    color: item.color ?? variant.color ?? null,
+    size: item.size ?? variant.size ?? null,
   };
 }
 

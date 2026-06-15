@@ -1,4 +1,4 @@
-﻿.notification-modal-overlay {
+.notification-modal-overlay {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.5);
@@ -14,9 +14,11 @@
   background: var(--bg-card);
   border-radius: 16px;
   width: 100%;
-  max-width: 440px;
+  max-width: 480px;
   padding: 24px;
   box-shadow: var(--shadow-lg);
+  max-height: 90vh;
+  overflow-y: auto;
 }
 
 .notification-detail-header {
@@ -125,3 +127,147 @@
 .notification-detail-action:hover {
   opacity: 0.95;
 }
+
+/* Order Details Styling in Notifications */
+.notification-order-section {
+  margin-top: 16px;
+  border-top: 1px solid var(--border-color);
+  padding-top: 16px;
+}
+
+.notification-order-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px 0;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.notification-order-error {
+  padding: 14px;
+  background: rgba(248, 113, 113, 0.1);
+  border: 1px solid rgba(248, 113, 113, 0.2);
+  border-radius: 12px;
+  color: var(--danger);
+  font-size: 14px;
+  text-align: center;
+  font-weight: 700;
+}
+
+.notification-order-details {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  text-align: right;
+}
+
+.notification-order-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.notification-order-info {
+  background: var(--bg-input);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.notification-order-field {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+}
+
+.notification-order-field .label {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.notification-order-field .value {
+  color: var(--text-primary);
+  font-weight: 800;
+}
+
+.notification-order-products {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.notification-order-product-item {
+  background: var(--bg-input);
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  display: flex;
+  justify-content: space-between;
+}
+
+.notification-order-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-color);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.notification-order-total strong {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--primary);
+}
+
+.notification-order-btn-prepare {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 14px;
+  border: none;
+  border-radius: 12px;
+  background: var(--gradient-primary);
+  color: white;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  box-shadow: var(--shadow-primary);
+  transition: all 0.2s ease;
+}
+
+.notification-order-btn-prepare:hover:not(:disabled) {
+  opacity: 0.95;
+  transform: translateY(-1px);
+}
+
+.notification-order-btn-prepare:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.notification-spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
