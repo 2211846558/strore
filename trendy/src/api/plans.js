@@ -1,6 +1,7 @@
 import { apiRequest } from './client';
 import { API_ENDPOINTS } from './config';
 import { fetchTransactions, fetchAllTransactions } from './finance';
+import { staleWhileRevalidate, TTL, clearCache } from './cache';
 
 function extractList(res) {
   const payload = res?.data ?? res;
@@ -224,17 +225,17 @@ async function fetchSubscriptionDatesFromFinance(storeId, planTitle, durationDay
   const seen = new Set();
   const transactions = [];
 
-  for (const term of searches) {
-    try {
-      const result = await fetchTransactions({ search: term, perPage: 50 });
-      for (const tx of result.transactions ?? []) {
-        if (!seen.has(tx.id)) {
-          seen.add(tx.id);
-          transactions.push(tx);
-        }
+  const results = await Promise.allSettled(
+    searches.map((term) => fetchTransactions({ search: term, perPage: 50 })),
+  );
+
+  for (const res of results) {
+    if (res.status !== 'fulfilled') continue;
+    for (const tx of res.value.transactions ?? []) {
+      if (!seen.has(tx.id)) {
+        seen.add(tx.id);
+        transactions.push(tx);
       }
-    } catch {
-      // تجاهل — نُكمل بالمصادر الأخرى
     }
   }
 
@@ -484,8 +485,10 @@ function extractSubscriptionsFromStoreList(store, plans = []) {
 
 async function fetchSubscriptionEntriesFromFinance(plans = []) {
   try {
-    const primary = await fetchAllTransactions({ search: 'اشتراك', perPage: 100 });
-    const secondary = await fetchAllTransactions({ search: 'خطة', perPage: 100 });
+    const [primary, secondary] = await Promise.all([
+      fetchAllTransactions({ search: 'اشتراك', perPage: 100, maxPages: 3 }),
+      fetchAllTransactions({ search: 'خطة', perPage: 100, maxPages: 3 }),
+    ]);
     const seen = new Set();
     const merged = [];
 
@@ -627,10 +630,12 @@ export async function resolveAllStoreSubscriptions(store, storeId, plans = [], a
     }
   }
 
+  const fromFinance = apiSuccess ? [] : await fetchSubscriptionEntriesFromFinance(plans);
+
   const collected = [
     ...extractSubscriptionsFromStoreList(store, plans),
     ...readHistorySubscriptionEntries(storeId, plans),
-    ...(await fetchSubscriptionEntriesFromFinance(plans)),
+    ...fromFinance,
   ];
 
   const current = mapStoreSubscription(store, plans, activeDetails);
@@ -775,15 +780,18 @@ export function extractStoreFromSubscriptionResponse(response, plan) {
 /**
  * GET /api/plans — الخطط النشطة المتاحة للتجار
  */
-export async function fetchPlans() {
-  const res = await apiRequest(API_ENDPOINTS.plans);
-  return extractList(res);
+export async function fetchPlans(forceRefresh = false) {
+  return staleWhileRevalidate('plans', async () => {
+    const res = await apiRequest(API_ENDPOINTS.plans);
+    return extractList(res);
+  }, TTL.STATIC, forceRefresh);
 }
 
 /**
  * POST /api/stores/subscribe — body: { plan_id, store_id }
  */
 export async function subscribeToPlan({ planId, storeId }) {
+  clearCache('plans');
   return apiRequest(API_ENDPOINTS.storeSubscribe, {
     method: 'POST',
     body: {
@@ -797,6 +805,7 @@ export async function subscribeToPlan({ planId, storeId }) {
  * POST /api/stores/{store}/renew
  */
 export async function renewStorePlan(storeId) {
+  clearCache('plans');
   return apiRequest(API_ENDPOINTS.storePlanRenew(storeId), { method: 'POST' });
 }
 
@@ -804,6 +813,7 @@ export async function renewStorePlan(storeId) {
  * POST /api/stores/{store}/change-plan/{plan}
  */
 export async function changeStorePlan(storeId, planId) {
+  clearCache('plans');
   return apiRequest(API_ENDPOINTS.storePlanChange(storeId, planId), { method: 'POST' });
 }
 

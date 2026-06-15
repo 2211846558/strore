@@ -2,6 +2,7 @@ import { apiRequest } from './client';
 import { API_ENDPOINTS } from './config';
 import { fetchStoreProducts as fetchStoreProductsList } from './products';
 import { resolveCampaignBannerUrl } from './media';
+import { staleWhileRevalidate, TTL } from './cache';
 
 /** تكلفة الاشتراك في الحملة حسب الباكند (CampaignSubscriptionService) */
 export const CAMPAIGN_SUBSCRIPTION_COST = 50;
@@ -209,17 +210,21 @@ function mapStoredSubscription(entry) {
 /**
  * GET /api/campaigns — الحملات الإعلانية النشطة
  */
-export async function fetchAvailableCampaigns() {
-  const res = await apiRequest(API_ENDPOINTS.campaigns, { auth: false });
-  return extractList(res).map(mapCampaignFromApi);
+export async function fetchAvailableCampaigns(forceRefresh = false) {
+  return staleWhileRevalidate('campaigns', async () => {
+    const res = await apiRequest(API_ENDPOINTS.campaigns, { auth: false });
+    return extractList(res).map(mapCampaignFromApi);
+  }, TTL.SEMI, forceRefresh);
 }
 
 /**
  * GET /api/campaigns/{id} — تفاصيل حملة مع المتاجر المشتركة
  */
-export async function fetchCampaignById(campaignId) {
-  const res = await apiRequest(API_ENDPOINTS.campaign(campaignId), { auth: false });
-  return mapCampaignFromApi(unwrapEntity(res));
+export async function fetchCampaignById(campaignId, forceRefresh = false) {
+  return staleWhileRevalidate(`campaign_${campaignId}`, async () => {
+    const res = await apiRequest(API_ENDPOINTS.campaign(campaignId), { auth: false });
+    return mapCampaignFromApi(unwrapEntity(res));
+  }, TTL.SEMI, forceRefresh);
 }
 
 /**
@@ -346,24 +351,29 @@ export async function fetchMyCampaigns(storeId, availableCampaigns = null) {
 
   try {
     const available = availableCampaigns ?? (await fetchAvailableCampaigns());
-    const apiSubscribed = [];
+    const subscribed = available.filter((campaign) =>
+      isStoreSubscribedToCampaign(campaign, storeId),
+    );
 
-    for (const campaign of available) {
-      if (!isStoreSubscribedToCampaign(campaign, storeId)) continue;
+    const enrichedList = await Promise.allSettled(
+      subscribed.map(async (campaign) => {
+        try {
+          return await fetchCampaignById(campaign.megaCampaignId ?? campaign.id);
+        } catch {
+          return campaign;
+        }
+      }),
+    );
 
-      let enriched = campaign;
-      try {
-        enriched = await fetchCampaignById(campaign.megaCampaignId ?? campaign.id);
-      } catch {
-        enriched = campaign;
-      }
-
+    const apiSubscribed = enrichedList.map((result, index) => {
+      const campaign = subscribed[index];
+      const enriched = result.status === 'fulfilled' ? result.value : campaign;
       const localEntry = findLocalCampaignEntry(
         storeId,
         enriched.megaCampaignId ?? enriched.id,
       );
-      apiSubscribed.push(mapApiSubscriptionToMyCampaign(enriched, storeId, localEntry));
-    }
+      return mapApiSubscriptionToMyCampaign(enriched, storeId, localEntry);
+    });
 
     const localOnly = readRawMyCampaigns(storeId)
       .filter(

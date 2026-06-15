@@ -68,6 +68,7 @@ const Staff = () => {
         storeId,
         search: debouncedSearch,
         role: roleFilter,
+        maxPages: 3,
       });
       setStaff(employees);
     } catch (err) {

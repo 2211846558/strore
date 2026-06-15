@@ -2,6 +2,7 @@ import { apiRequest } from './client';
 import { API_ENDPOINTS } from './config';
 import { fetchAllOrders } from './orders';
 import { getStoredUser } from './auth';
+import { staleWhileRevalidate, TTL, clearCache } from './cache';
 
 /** معرّفات مستخدمي المتجر الحالي (المدير) لتمييز رسائل المتجر عن الزبون */
 function getCurrentUserId() {
@@ -175,17 +176,19 @@ function mapOrderToChat(order) {
  * GET /orders/chat — قائمة المحادثات
  * إذا تعارض المسار مع /orders/{id} نستخدم GET /orders كبديل
  */
-export async function fetchChats({ storeId } = {}) {
-  try {
-    const res = await apiRequest(API_ENDPOINTS.ordersChat);
-    return extractList(res).map((row) => mapChat(row));
-  } catch (err) {
-    if (isChatListRouteError(err)) {
-      const orders = await fetchAllOrders({ storeId });
-      return orders.map(mapOrderToChat);
+export async function fetchChats({ storeId } = {}, forceRefresh = false) {
+  return staleWhileRevalidate('chats', async () => {
+    try {
+      const res = await apiRequest(API_ENDPOINTS.ordersChat);
+      return extractList(res).map((row) => mapChat(row));
+    } catch (err) {
+      if (isChatListRouteError(err)) {
+        const orders = await fetchAllOrders({ storeId });
+        return orders.map(mapOrderToChat);
+      }
+      return [];
     }
-    return [];
-  }
+  }, TTL.DYNAMIC, forceRefresh);
 }
 
 /**

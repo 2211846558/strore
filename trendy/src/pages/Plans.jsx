@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search } from 'lucide-react';
+
 import PlanCard from '../components/plans/PlanCard';
 import SubscriptionCard from '../components/plans/SubscriptionCard';
 import PlanSubscribeWalletModal from '../components/plans/PlanSubscribeWalletModal';
@@ -60,49 +60,40 @@ const Plans = ({ onboarding = false }) => {
   useEffect(() => {
     if (!store || !storeId) {
       setSubscriptionDates(null);
-      return;
-    }
-
-    let cancelled = false;
-    resolveStoreSubscriptionDetails(store, storeId, availablePlans)
-      .then((dates) => {
-        if (!cancelled) setSubscriptionDates(dates);
-      })
-      .catch(() => {
-        if (!cancelled) setSubscriptionDates(null);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [store, storeId, availablePlans]);
-
-  useEffect(() => {
-    if (!store || !storeId) {
       setMySubscriptions([]);
       return;
     }
 
     let cancelled = false;
-    setLoadingSubscriptions(true);
-    resolveAllStoreSubscriptions(store, storeId, availablePlans, subscriptionDates)
-      .then((list) => {
+    (async () => {
+      setLoadingSubscriptions(true);
+
+      let dates = null;
+      try {
+        dates = await resolveStoreSubscriptionDetails(store, storeId, availablePlans);
+      } catch {
+        // keep null
+      }
+
+      if (!cancelled) setSubscriptionDates(dates);
+
+      try {
+        const list = await resolveAllStoreSubscriptions(store, storeId, availablePlans, dates);
         if (!cancelled) setMySubscriptions(list);
-      })
-      .catch(() => {
+      } catch {
         if (!cancelled) {
-          const current = mapStoreSubscription(store, availablePlans, subscriptionDates);
+          const current = mapStoreSubscription(store, availablePlans, dates);
           setMySubscriptions(current ? [current] : []);
         }
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setLoadingSubscriptions(false);
-      });
+      }
+    })();
 
     return () => {
       cancelled = true;
     };
-  }, [store, storeId, availablePlans, subscriptionDates]);
+  }, [store, storeId, availablePlans]);
 
   const currentSubscription = useMemo(
     () =>
@@ -283,7 +274,7 @@ const Plans = ({ onboarding = false }) => {
 
       <div className="plans-controls">
         <div className="search-bar">
-          <Search size={20} className="search-icon" />
+          <svg width="20" height="20" className="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           <input
             type="text"
             placeholder="البحث عن خطة..."

@@ -31,4 +31,4 @@ const StatCard = ({ title, value, subtitle, icon: Icon, colorClass, highlightVal
   );
 };
 
-export default StatCard;
+export default React.memo(StatCard);

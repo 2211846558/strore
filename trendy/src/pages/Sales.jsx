@@ -309,11 +309,11 @@ const Sales = () => {
     if (!exchangeTarget) return;
     setIsSaving(true);
     try {
+      const qtyAllocations = [];
       let remainingOld = chosenQty;
       for (let i = 0; i < selectedNewVariants.length; i++) {
         const item = selectedNewVariants[i];
         const isLast = i === selectedNewVariants.length - 1;
-        
         let oldQtyForThis = 0;
         if (isLast) {
           oldQtyForThis = remainingOld;
@@ -321,15 +321,20 @@ const Sales = () => {
           oldQtyForThis = Math.min(item.quantity, remainingOld);
           remainingOld -= oldQtyForThis;
         }
-
-        await exchangePosItem({
-          oldOrderId: exchangeTarget.line.orderId,
-          oldVariantId: exchangeTarget.line.variantId,
-          oldQuantity: oldQtyForThis,
-          newVariantId: item.variant.id,
-          newQuantity: item.quantity,
-        });
+        qtyAllocations.push({ item, oldQtyForThis });
       }
+
+      await Promise.allSettled(
+        qtyAllocations.map(({ item, oldQtyForThis }) =>
+          exchangePosItem({
+            oldOrderId: exchangeTarget.line.orderId,
+            oldVariantId: exchangeTarget.line.variantId,
+            oldQuantity: oldQtyForThis,
+            newVariantId: item.variant.id,
+            newQuantity: item.quantity,
+          }),
+        ),
+      );
 
       const oldTotal = exchangeTarget.line.price * chosenQty;
       const newTotal = selectedNewVariants.reduce((sum, item) => sum + item.price * item.quantity, 0);

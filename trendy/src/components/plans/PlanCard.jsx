@@ -1,15 +1,8 @@
 import React from 'react';
-import { CreditCard } from 'lucide-react';
 import './PlanCard.css';
 
 const PlanCard = ({ title, price, featuresText, isPopular, status = 'available', onSubscribe }) => {
   const isRecommended = isPopular;
-
-  const getButtonText = () => {
-    return 'اشترك في الخطة';
-  };
-
-  const isBtnDisabled = false;
 
   return (
     <div className={`plan-card ${isRecommended ? 'popular recommended' : ''} ${status === 'active' ? 'active' : ''} ${status === 'scheduled' ? 'scheduled' : ''}`} tabIndex={0}>
@@ -31,12 +24,15 @@ const PlanCard = ({ title, price, featuresText, isPopular, status = 'available',
         <p>{featuresText}</p>
       </div>
 
-      <button className={`subscribe-btn ${status}`} onClick={onSubscribe} disabled={isBtnDisabled}>
-        <CreditCard size={18} />
-        {getButtonText()}
+      <button className={`subscribe-btn ${status}`} onClick={onSubscribe}>
+        {getButtonText(status)}
       </button>
     </div>
   );
 };
 
-export default PlanCard;
+const getButtonText = (status) => {
+  return 'اشترك في الخطة';
+};
+
+export default React.memo(PlanCard);

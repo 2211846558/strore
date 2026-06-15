@@ -44,7 +44,7 @@ const Offers = () => {
     setError('');
     try {
       const [promotions, products] = await Promise.all([
-        fetchAllPromotions({ storeId }),
+        fetchAllPromotions({ storeId, maxPages: 3 }),
         fetchStoreProducts({ storeId, status: 'active', perPage: 100 }),
       ]);
       setOffers(promotions);

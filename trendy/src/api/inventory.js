@@ -1,5 +1,6 @@
 import { apiRequest } from './client';
 import { API_ENDPOINTS } from './config';
+import { staleWhileRevalidate, TTL } from './cache';
 import {
   fetchStoreProducts,
   fetchAttributes,
@@ -358,29 +359,31 @@ export async function fetchShipments({
   search,
   perPage = 50,
   page = 1,
-} = {}) {
-  const resolvedStoreId = resolveInventoryStoreId(storeId);
-  const query = new URLSearchParams({
-    per_page: String(perPage),
-    page: String(page),
-  });
-  if (resolvedStoreId) query.set('store_id', String(resolvedStoreId));
-  if (search?.trim()) query.set('search', search.trim());
+} = {}, forceRefresh = false) {
+  return staleWhileRevalidate(`shipments_p${page}_${status || 'all'}`, async () => {
+    const resolvedStoreId = resolveInventoryStoreId(storeId);
+    const query = new URLSearchParams({
+      per_page: String(perPage),
+      page: String(page),
+    });
+    if (resolvedStoreId) query.set('store_id', String(resolvedStoreId));
+    if (search?.trim()) query.set('search', search.trim());
 
-  const apiStatus = mapShipmentStatusFilterToApi(status);
-  if (apiStatus) query.set('status', apiStatus);
+    const apiStatus = mapShipmentStatusFilterToApi(status);
+    if (apiStatus) query.set('status', apiStatus);
 
-  const res = await apiRequest(`${API_ENDPOINTS.inventoryShipments}?${query}`);
-  const shipmentsRaw = extractList(res);
-  const enrichment = await loadVariantEnrichmentContext({ storeId: resolvedStoreId });
-  const allShipments = shipmentsRaw.map((row) => mapShipment(row, enrichment));
-  const shipments = filterShipmentsByStatus(allShipments, status);
+    const res = await apiRequest(`${API_ENDPOINTS.inventoryShipments}?${query}`);
+    const shipmentsRaw = extractList(res);
+    const enrichment = await loadVariantEnrichmentContext({ storeId: resolvedStoreId });
+    const allShipments = shipmentsRaw.map((row) => mapShipment(row, enrichment));
+    const shipments = filterShipmentsByStatus(allShipments, status);
 
-  return {
-    shipments,
-    stats: normalizeShipmentStats(res?.stats, allShipments),
-    meta: res?.meta ?? null,
-  };
+    return {
+      shipments,
+      stats: normalizeShipmentStats(res?.stats, allShipments),
+      meta: res?.meta ?? null,
+    };
+  }, TTL.SEMI, forceRefresh);
 }
 
 /**
@@ -453,13 +456,15 @@ export async function restoreShipment(shipment, { storeId } = {}) {
     throw new Error('لا توجد أصناف مؤرشفة لاستعادتها في هذه الشحنة.');
   }
 
-  for (const item of items) {
-    await adjustInventory({
-      variantShipmentId: item.id,
-      reason: `استعادة شحنة ${shipment.code || shipment.batchNumber || shipment.id}`,
-      storeId: resolvedStoreId,
-    });
-  }
+  await Promise.allSettled(
+    items.map((item) =>
+      adjustInventory({
+        variantShipmentId: item.id,
+        reason: `استعادة شحنة ${shipment.code || shipment.batchNumber || shipment.id}`,
+        storeId: resolvedStoreId,
+      }),
+    ),
+  );
 
   return refreshShipmentRow(shipment, { storeId: resolvedStoreId });
 }
@@ -553,13 +558,15 @@ export async function archiveShipment(shipment, { storeId } = {}) {
     throw new Error('لا توجد أصناف نشطة في هذه الشحنة لأرشفتها.');
   }
 
-  for (const item of items) {
-    await adjustInventory({
-      variantShipmentId: item.id,
-      reason: `أرشفة شحنة ${shipment.code || shipment.batchNumber || shipment.id}`,
-      storeId: resolvedStoreId,
-    });
-  }
+  await Promise.allSettled(
+    items.map((item) =>
+      adjustInventory({
+        variantShipmentId: item.id,
+        reason: `أرشفة شحنة ${shipment.code || shipment.batchNumber || shipment.id}`,
+        storeId: resolvedStoreId,
+      }),
+    ),
+  );
 
   return refreshShipmentRow(shipment, { storeId: resolvedStoreId });
 }
@@ -670,12 +677,16 @@ function isFallbackVariantLabel(label) {
   return /^تنوع #\d+$/.test(String(label ?? '').trim());
 }
 
+const _variantLabelCache = new Map();
+
 async function enrichUnresolvedVariantLabels(variants, catalogAttributes) {
   const unresolved = variants.filter((variant) => isFallbackVariantLabel(variant.label));
   if (!unresolved.length) return variants;
 
   const resolved = await Promise.all(
     unresolved.map(async (variant) => {
+      const cached = _variantLabelCache.get(variant.id);
+      if (cached) return cached;
       try {
         const inv = await fetchInventoryVariant(variant.id);
         const attributeText =
@@ -690,6 +701,7 @@ async function enrichUnresolvedVariantLabels(variants, catalogAttributes) {
           { attributeText },
         );
         if (isFallbackVariantLabel(remapped.label)) return variant;
+        _variantLabelCache.set(variant.id, { ...variant, ...remapped });
         return { ...variant, ...remapped };
       } catch {
         return variant;

@@ -484,17 +484,10 @@ export async function fetchPosInvoices({ search, perPage = 50 } = {}) {
     String(order.order_number ?? '').includes('POS'),
   );
 
-  const detailed = await Promise.all(
-    rows.map(async (row) => {
-      try {
-        return await fetchOrderDetails(row.id);
-      } catch {
-        return row;
-      }
-    }),
-  );
-
-  return detailed.map(mapOrderToInvoice);
+  return rows.map((row) => {
+    const itemsRaw = row.items ?? row.order_items ?? row.products ?? row.line_items ?? [];
+    return mapOrderToInvoice(Array.isArray(itemsRaw) ? { ...row, items: itemsRaw } : row);
+  });
 }
 
 export function getExchangePriceDiff(oldUnitPrice, quantity, newUnitPrice) {

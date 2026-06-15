@@ -1,5 +1,6 @@
 import { apiRequest } from './client';
 import { API_ENDPOINTS } from './config';
+import { staleWhileRevalidate, TTL } from './cache';
 
 function extractList(res) {
   const payload = res?.data ?? res;
@@ -125,27 +126,31 @@ function buildFinanceQuery({ search, status, startDate, endDate, perPage, page }
 /**
  * GET /finance/revenue-overview
  */
-export async function fetchRevenueOverview({ startDate, endDate } = {}) {
-  const query = buildFinanceQuery({ startDate, endDate });
-  const qs = query.toString();
-  const path = qs
-    ? `${API_ENDPOINTS.financeRevenueOverview}?${qs}`
-    : API_ENDPOINTS.financeRevenueOverview;
-  const res = await apiRequest(path);
-  return res?.data ?? res;
+export async function fetchRevenueOverview({ startDate, endDate } = {}, forceRefresh = false) {
+  return staleWhileRevalidate('revenue_overview', async () => {
+    const query = buildFinanceQuery({ startDate, endDate });
+    const qs = query.toString();
+    const path = qs
+      ? `${API_ENDPOINTS.financeRevenueOverview}?${qs}`
+      : API_ENDPOINTS.financeRevenueOverview;
+    const res = await apiRequest(path);
+    return res?.data ?? res;
+  }, TTL.DYNAMIC, forceRefresh);
 }
 
 /**
  * GET /finance/profit-overview
  */
-export async function fetchProfitOverview({ startDate, endDate } = {}) {
-  const query = buildFinanceQuery({ startDate, endDate });
-  const qs = query.toString();
-  const path = qs
-    ? `${API_ENDPOINTS.financeProfitOverview}?${qs}`
-    : API_ENDPOINTS.financeProfitOverview;
-  const res = await apiRequest(path);
-  return res?.data ?? res;
+export async function fetchProfitOverview({ startDate, endDate } = {}, forceRefresh = false) {
+  return staleWhileRevalidate('profit_overview', async () => {
+    const query = buildFinanceQuery({ startDate, endDate });
+    const qs = query.toString();
+    const path = qs
+      ? `${API_ENDPOINTS.financeProfitOverview}?${qs}`
+      : API_ENDPOINTS.financeProfitOverview;
+    const res = await apiRequest(path);
+    return res?.data ?? res;
+  }, TTL.DYNAMIC, forceRefresh);
 }
 
 /** صافي إيرادات المتجر — GET /finance/revenue-overview → total_store_revenue */
@@ -177,15 +182,17 @@ export async function fetchTransactions({
   endDate,
   perPage = 50,
   page = 1,
-} = {}) {
-  const query = buildFinanceQuery({ search, status, startDate, endDate, perPage, page });
-  const res = await apiRequest(`${API_ENDPOINTS.financeTransactions}?${query}`);
-  const rows = extractList(res).map(mapTransaction);
+} = {}, forceRefresh = false) {
+  return staleWhileRevalidate(`transactions_p${page}`, async () => {
+    const query = buildFinanceQuery({ search, status, startDate, endDate, perPage, page });
+    const res = await apiRequest(`${API_ENDPOINTS.financeTransactions}?${query}`);
+    const rows = extractList(res).map(mapTransaction);
 
-  return {
-    transactions: rows,
-    meta: res?.meta ?? null,
-  };
+    return {
+      transactions: rows,
+      meta: res?.meta ?? null,
+    };
+  }, TTL.DYNAMIC, forceRefresh);
 }
 
 /**
@@ -193,23 +200,27 @@ export async function fetchTransactions({
  * (محفظة المتجر — وليس /wallet/logs الذي يعيد محفظة المستخدم)
  */
 export async function fetchAllTransactions(filters = {}) {
-  const perPage = filters.perPage ?? 100;
-  const maxPages = filters.maxPages ?? null;
-  const all = [];
-  let page = 1;
-  let lastPage = 1;
+  const forceRefresh = filters.forceRefresh === true;
+  const cacheKey = `all_transactions_${filters.search || 'all'}`;
+  return staleWhileRevalidate(cacheKey, async () => {
+    const perPage = filters.perPage ?? 100;
+    const maxPages = filters.maxPages ?? null;
+    const all = [];
+    let page = 1;
+    let lastPage = 1;
 
-  do {
-    const result = await fetchTransactions({ ...filters, perPage, page });
-    all.push(...result.transactions);
-    lastPage = Number(result.meta?.last_page ?? 1);
-    page += 1;
-  } while (page <= lastPage && (maxPages == null || page <= maxPages));
+    do {
+      const result = await fetchTransactions({ ...filters, perPage, page }, true);
+      all.push(...result.transactions);
+      lastPage = Number(result.meta?.last_page ?? 1);
+      page += 1;
+    } while (page <= lastPage && (maxPages == null || page <= maxPages));
 
-  return {
-    transactions: all,
-    meta: { total: all.length, last_page: lastPage },
-  };
+    return {
+      transactions: all,
+      meta: { total: all.length, last_page: lastPage },
+    };
+  }, TTL.DYNAMIC, forceRefresh);
 }
 
 /** تحويل معاملة مالية لعرضها في نافذة المحفظة */

@@ -61,7 +61,7 @@ const Chat = () => {
       if (activeChat?.id) {
         loadActiveMessages(activeChat.id, true);
       }
-    }, 15000);
+    }, 30000);
 
     return () => clearInterval(interval);
   }, [loadChats, loadActiveMessages, activeChat?.id]);

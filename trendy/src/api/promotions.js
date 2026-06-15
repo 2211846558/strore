@@ -1,5 +1,6 @@
 import { apiRequest } from './client';
 import { API_ENDPOINTS } from './config';
+import { staleWhileRevalidate, TTL, clearCache } from './cache';
 
 function extractList(res) {
   const payload = res?.data ?? res;
@@ -200,19 +201,23 @@ export async function fetchPromotions({
 }
 
 export async function fetchAllPromotions(filters = {}) {
-  const perPage = filters.perPage ?? 100;
-  const all = [];
-  let page = 1;
-  let lastPage = 1;
+  const forceRefresh = filters.forceRefresh === true;
+  return staleWhileRevalidate('promotions', async () => {
+    const perPage = filters.perPage ?? 100;
+    const maxPages = filters.maxPages ?? null;
+    const all = [];
+    let page = 1;
+    let lastPage = 1;
 
-  do {
-    const result = await fetchPromotions({ ...filters, perPage, page });
-    all.push(...result.promotions);
-    lastPage = Number(result.meta?.last_page ?? 1);
-    page += 1;
-  } while (page <= lastPage);
+    do {
+      const result = await fetchPromotions({ ...filters, perPage, page });
+      all.push(...result.promotions);
+      lastPage = Number(result.meta?.last_page ?? 1);
+      page += 1;
+    } while (page <= lastPage && (maxPages === null || page <= maxPages));
 
-  return all;
+    return all;
+  }, TTL.SEMI, forceRefresh);
 }
 
 /**
@@ -227,6 +232,7 @@ export async function fetchPromotion(id) {
  * POST /promotions
  */
 export async function createPromotion(payload) {
+  clearCache('promotions');
   const res = await apiRequest(API_ENDPOINTS.promotions, {
     method: 'POST',
     body: payload,
@@ -238,6 +244,7 @@ export async function createPromotion(payload) {
  * PATCH /promotions/{id}
  */
 export async function updatePromotion(id, payload) {
+  clearCache('promotions');
   const res = await apiRequest(API_ENDPOINTS.promotion(id), {
     method: 'PATCH',
     body: payload,
@@ -249,6 +256,7 @@ export async function updatePromotion(id, payload) {
  * DELETE /promotions/{id}
  */
 export async function deletePromotion(id) {
+  clearCache('promotions');
   return apiRequest(API_ENDPOINTS.promotion(id), { method: 'DELETE' });
 }
 
@@ -256,5 +264,6 @@ export async function deletePromotion(id) {
  * POST /promotions/{id}/toggle — تفعيل / إلغاء تفعيل
  */
 export async function togglePromotion(id) {
+  clearCache('promotions');
   return apiRequest(API_ENDPOINTS.promotionToggle(id), { method: 'POST' });
 }
