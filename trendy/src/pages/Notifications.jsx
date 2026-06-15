@@ -119,7 +119,7 @@ const Notifications = () => {
     loadNotifications();
     const interval = setInterval(() => {
       loadNotifications(true);
-    }, 15000);
+    }, 60000);
     return () => clearInterval(interval);
   }, []);
 

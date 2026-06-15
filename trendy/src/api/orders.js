@@ -238,6 +238,7 @@ export async function fetchOrders({
 
 export async function fetchAllOrders(filters = {}) {
   const perPage = filters.perPage ?? 100;
+  const maxPages = filters.maxPages ?? null;
   const all = [];
   let page = 1;
   let lastPage = 1;
@@ -247,7 +248,7 @@ export async function fetchAllOrders(filters = {}) {
     all.push(...result.orders);
     lastPage = Number(result.meta?.last_page ?? result.meta?.total_pages ?? 1);
     page += 1;
-  } while (page <= lastPage);
+  } while (page <= lastPage && (maxPages === null || page <= maxPages));
 
   return all;
 }

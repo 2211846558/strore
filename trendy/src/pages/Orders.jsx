@@ -64,6 +64,7 @@ const Orders = () => {
         search: debouncedSearch,
         status: statusFilter === 'تجهيز الطلب' ? 'all' : statusFilter,
         excludePos: false,
+        ...(quiet ? { maxPages: 1 } : {}),
       });
       if (statusFilter === 'تجهيز الطلب') {
         list = list.filter((order) => !order.isPos && canPrepareOrder(order));
@@ -83,7 +84,7 @@ const Orders = () => {
     loadOrders();
     const interval = setInterval(() => {
       loadOrders(true);
-    }, 10000);
+    }, 30000);
     return () => clearInterval(interval);
   }, [loadOrders]);
 

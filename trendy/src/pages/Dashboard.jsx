@@ -125,7 +125,7 @@ const Dashboard = () => {
     loadDashboardData();
     const interval = setInterval(() => {
       loadDashboardData(true);
-    }, 20000);
+    }, 60000);
     return () => clearInterval(interval);
   }, [loadDashboardData]);
 

@@ -202,6 +202,8 @@ export async function createProductVariant(
   return mapped;
 }
 
+const productDetailsCache = new Map();
+
 /**
  * قائمة المنتجات تُرجع thumbnail فقط — نُكمل الصور من تفاصيل كل منتج.
  */
@@ -211,8 +213,17 @@ async function enrichProductsWithImages(products) {
   return Promise.all(
     products.map(async (product) => {
       if (product.status === 'مؤرشف') return product;
+      const cached = productDetailsCache.get(product.id);
+      if (cached) {
+        return { ...product, ...cached };
+      }
       try {
         const details = await fetchProductDetails(product.id);
+        productDetailsCache.set(product.id, {
+          images: details.images,
+          image: details.image,
+          imageCandidates: details.imageCandidates,
+        });
         return {
           ...product,
           images: details.images,
