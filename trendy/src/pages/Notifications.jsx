@@ -75,6 +75,7 @@ const mapNotificationFromBackend = (n) => {
     read: Boolean(n.read),
     actionLabel,
     actionPath,
+    data: n.data,
   };
 };
 
@@ -256,6 +257,7 @@ const Notifications = () => {
         isOpen={!!selectedNotification}
         onClose={handleCloseModal}
         notification={activeNotification}
+        onOrderPrepared={loadNotifications}
       />
 
       {toast && (

@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   RotateCcw,
   ArrowLeftRight,
+  X,
 } from 'lucide-react';
 import {
   fetchPosCatalog,
@@ -23,7 +24,9 @@ import {
   getVariantStock,
   resolveVariant,
   getExchangePriceDiff,
+  mapOrderToInvoice,
 } from '../api/pos';
+import { fetchOrders } from '../api/orders';
 import { getApiErrorMessage } from '../api/stores';
 import { useAuth } from '../context/AuthContext';
 import VariantModal from '../components/sales/VariantModal';
@@ -57,6 +60,14 @@ const Sales = () => {
   const [pendingExchange, setPendingExchange] = useState(null);
   const [toast, setToast] = useState(null);
 
+  const [activeAction, setActiveAction] = useState(null); // 'refund' | 'exchange' | null
+  const [orderSearchQuery, setOrderSearchQuery] = useState('');
+  const [debouncedOrderSearch, setDebouncedOrderSearch] = useState('');
+  const [orderSearchResults, setOrderSearchResults] = useState([]);
+  const [searchingOrders, setSearchingOrders] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+
   const showToast = (message) => {
     setToast(message);
     setTimeout(() => setToast(null), 2800);
@@ -66,6 +77,49 @@ const Sales = () => {
     const timer = setTimeout(() => setDebouncedInvoiceSearch(invoiceSearch), 400);
     return () => clearTimeout(timer);
   }, [invoiceSearch]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedOrderSearch(orderSearchQuery), 400);
+    return () => clearTimeout(timer);
+  }, [orderSearchQuery]);
+
+  const loadSearchOrders = useCallback(async (query = '') => {
+    setSearchingOrders(true);
+    try {
+      const result = await fetchOrders({
+        storeId,
+        search: query,
+        excludePos: false,
+        perPage: 15,
+      });
+      setOrderSearchResults(result.orders || []);
+    } catch (err) {
+      console.error('Error fetching orders for search:', err);
+      setOrderSearchResults([]);
+    } finally {
+      setSearchingOrders(false);
+    }
+  }, [storeId]);
+
+  useEffect(() => {
+    if (activeAction) {
+      loadSearchOrders(debouncedOrderSearch);
+    }
+  }, [activeAction, debouncedOrderSearch, loadSearchOrders]);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (!event.target.closest('.sales-dropdown-wrapper')) {
+        setDropdownOpen(false);
+      }
+    };
+    if (dropdownOpen) {
+      document.addEventListener('click', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('click', handleClickOutside);
+    };
+  }, [dropdownOpen]);
 
   const loadProducts = useCallback(async () => {
     setLoadingProducts(true);
@@ -231,7 +285,7 @@ const Sales = () => {
     }
   };
 
-  const handleRefund = async () => {
+  const handleRefund = async (chosenQty) => {
     if (!refundTarget) return;
     const { line } = refundTarget;
     setIsSaving(true);
@@ -239,7 +293,7 @@ const Sales = () => {
       await refundPosItem({
         orderId: line.orderId,
         variantId: line.variantId,
-        quantity: line.quantity || 1,
+        quantity: chosenQty || line.quantity || 1,
       });
       showToast(`تم استرداد «${line.name}» بنجاح`);
       setRefundTarget(null);
@@ -251,25 +305,97 @@ const Sales = () => {
     }
   };
 
-  const handleExchangeSelect = (newProduct) => {
+  const handleExchangeSelect = async (selectedNewVariants, chosenQty) => {
     if (!exchangeTarget) return;
-    setPendingExchange({
-      orderId: exchangeTarget.line.orderId,
-      variantId: exchangeTarget.line.variantId,
-      oldPrice: exchangeTarget.line.price,
-      quantity: exchangeTarget.line.quantity || 1,
-    });
-    setExchangeTarget(null);
-    setSelectedProduct(products.find((p) => p.id === newProduct.id) ?? newProduct);
-    setVariantOpen(true);
-    showToast('اختر اللون والمقاس للمنتج الجديد');
+    setIsSaving(true);
+    try {
+      let remainingOld = chosenQty;
+      for (let i = 0; i < selectedNewVariants.length; i++) {
+        const item = selectedNewVariants[i];
+        const isLast = i === selectedNewVariants.length - 1;
+        
+        let oldQtyForThis = 0;
+        if (isLast) {
+          oldQtyForThis = remainingOld;
+        } else {
+          oldQtyForThis = Math.min(item.quantity, remainingOld);
+          remainingOld -= oldQtyForThis;
+        }
+
+        await exchangePosItem({
+          oldOrderId: exchangeTarget.line.orderId,
+          oldVariantId: exchangeTarget.line.variantId,
+          oldQuantity: oldQtyForThis,
+          newVariantId: item.variant.id,
+          newQuantity: item.quantity,
+        });
+      }
+
+      const oldTotal = exchangeTarget.line.price * chosenQty;
+      const newTotal = selectedNewVariants.reduce((sum, item) => sum + item.price * item.quantity, 0);
+      const diff = newTotal - oldTotal;
+
+      let msg = `تم استبدال المنتجات بنجاح`;
+      if (diff < 0) msg += ` — يُسترد للعميل ${Math.abs(diff)} د.ل`;
+      else if (diff > 0) msg += ` — مبلغ إضافي ${Math.abs(diff)} د.ل`;
+      
+      showToast(msg);
+      setExchangeTarget(null);
+      await refreshAll();
+    } catch (err) {
+      showToast(getApiErrorMessage(err, 'تعذّر إتمام الاستبدال'));
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
     <div className="sales-page">
       <div className="sales-header">
-        <h1 className="page-title">المبيعات المباشرة</h1>
-        <p className="page-subtitle">إدارة المنتجات المباعة مباشرة من المتجر</p>
+        <div className="sales-header-content">
+          <h1 className="page-title">المبيعات المباشرة</h1>
+          <p className="page-subtitle">إدارة المنتجات المباعة مباشرة من المتجر</p>
+        </div>
+        <div className="sales-header-actions">
+          <button
+            type="button"
+            className={`sales-action-btn refund-btn ${activeAction === 'refund' ? 'active' : ''}`}
+            onClick={() => {
+              if (activeAction === 'refund') {
+                setActiveAction(null);
+                setSelectedOrder(null);
+                setOrderSearchQuery('');
+              } else {
+                setActiveAction('refund');
+                setSelectedOrder(null);
+                setOrderSearchQuery('');
+                setDropdownOpen(true);
+              }
+            }}
+          >
+            <RotateCcw size={16} />
+            عملية استرجاع
+          </button>
+          <button
+            type="button"
+            className={`sales-action-btn exchange-btn ${activeAction === 'exchange' ? 'active' : ''}`}
+            onClick={() => {
+              if (activeAction === 'exchange') {
+                setActiveAction(null);
+                setSelectedOrder(null);
+                setOrderSearchQuery('');
+              } else {
+                setActiveAction('exchange');
+                setSelectedOrder(null);
+                setOrderSearchQuery('');
+                setDropdownOpen(true);
+              }
+            }}
+          >
+            <ArrowLeftRight size={16} />
+            عملية استبدال
+          </button>
+        </div>
       </div>
 
       <div className="sales-tabs">
@@ -292,6 +418,210 @@ const Sales = () => {
       </div>
 
       {error && <p className="sales-error">{error}</p>}
+
+      {activeAction && (
+        <div className="sales-action-panel">
+          <div className="sales-action-panel-header">
+            <h3>
+              {activeAction === 'refund' ? (
+                <>
+                  <RotateCcw size={18} />
+                  عملية استرجاع جديدة
+                </>
+              ) : (
+                <>
+                  <ArrowLeftRight size={18} />
+                  عملية استبدال جديدة
+                </>
+              )}
+            </h3>
+            <button
+              type="button"
+              className="sales-action-panel-close"
+              onClick={() => {
+                setActiveAction(null);
+                setSelectedOrder(null);
+                setOrderSearchQuery('');
+              }}
+              aria-label="إغلاق"
+            >
+              <X size={18} />
+            </button>
+          </div>
+
+          <div className="sales-action-panel-body">
+            <div className="sales-order-search-container">
+              <label className="sales-input-label">
+                ابحث عن الطلب (سواء من المبيعات المباشرة أو طلبات الزبائن):
+              </label>
+              <div className="sales-dropdown-wrapper">
+                <div className="sales-search-input-wrapper">
+                  <Search size={18} className="search-icon" />
+                  <input
+                    type="text"
+                    placeholder="ابحث برقم الطلب، اسم العميل، أو الهاتف..."
+                    value={orderSearchQuery}
+                    onChange={(e) => {
+                      setOrderSearchQuery(e.target.value);
+                      setDropdownOpen(true);
+                    }}
+                    onFocus={() => setDropdownOpen(true)}
+                  />
+                  {orderSearchQuery && (
+                    <button
+                      type="button"
+                      className="clear-search-btn"
+                      onClick={() => {
+                        setOrderSearchQuery('');
+                        setDropdownOpen(true);
+                      }}
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+
+                {dropdownOpen && (
+                  <div className="sales-orders-dropdown-list">
+                    {searchingOrders ? (
+                      <div className="dropdown-message">جاري البحث...</div>
+                    ) : orderSearchResults.length === 0 ? (
+                      <div className="dropdown-message">لا توجد طلبات مطابقة للبحث</div>
+                    ) : (
+                      orderSearchResults.map((order) => (
+                        <div
+                          key={order.orderId}
+                          className="dropdown-item"
+                          onClick={() => {
+                            setSelectedOrder(order);
+                            setDropdownOpen(false);
+                            setOrderSearchQuery(order.id);
+                          }}
+                        >
+                          <div className="dropdown-item-header">
+                            <span className="order-num">طلب رقم: {order.id}</span>
+                            <span className="order-total">{order.total} د.ل</span>
+                          </div>
+                          <div className="dropdown-item-meta">
+                            <span>العميل: {order.customerName}</span>
+                            <span>التاريخ: {order.date}</span>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {selectedOrder && (
+              <div className="sales-selected-order-details">
+                <div className="selected-order-meta-grid">
+                  <div className="meta-col">
+                    <span className="meta-label">رقم الطلب:</span>
+                    <strong className="meta-val">{selectedOrder.id}</strong>
+                  </div>
+                  <div className="meta-col">
+                    <span className="meta-label">العميل:</span>
+                    <strong className="meta-val">{selectedOrder.customerName}</strong>
+                  </div>
+                  <div className="meta-col">
+                    <span className="meta-label">التاريخ:</span>
+                    <strong className="meta-val">{selectedOrder.date}</strong>
+                  </div>
+                  <div className="meta-col">
+                    <span className="meta-label">الحالة:</span>
+                    <strong className="meta-val">{selectedOrder.status}</strong>
+                  </div>
+                </div>
+
+                <div className="selected-order-products-table">
+                  <h5>المنتجات القابلة {activeAction === 'refund' ? 'للإرجاع' : 'للتبديل'}</h5>
+                  <div className="selected-order-products-list">
+                    {selectedOrder.products && selectedOrder.products.length > 0 ? (
+                      selectedOrder.products.map((item, idx) => {
+                        const line = {
+                          lineId: item.lineId ?? idx,
+                          orderId: selectedOrder.orderId,
+                          variantId: item.variantId,
+                          productId: item.productId,
+                          name: item.name,
+                          price: item.price,
+                          quantity: item.quantity,
+                          sku: item.sku || '',
+                          color: item.color || '',
+                          size: item.size || '',
+                        };
+                        return (
+                          <div key={idx} className="selected-order-product-row">
+                            <div className="prod-info">
+                              <span className="prod-name">{item.name}</span>
+                              {(item.color || item.size) ? (
+                                <span className="prod-variant">
+                                  {item.color && `اللون: ${item.color}`}
+                                  {item.color && item.size && ' | '}
+                                  {item.size && `المقاس: ${item.size}`}
+                                </span>
+                              ) : item.variantLabel ? (
+                                <span className="prod-variant">{item.variantLabel}</span>
+                              ) : null}
+                              {item.sku && (
+                                <span className="prod-sku">SKU: {item.sku}</span>
+                              )}
+                            </div>
+                            <div className="prod-meta">
+                              <span>الكمية: {item.quantity}</span>
+                              <span>السعر: {item.price} د.ل</span>
+                              <span className="prod-total">
+                                الإجمالي: {item.price * item.quantity} د.ل
+                              </span>
+                            </div>
+                            <div className="prod-actions">
+                              {activeAction === 'refund' ? (
+                                <button
+                                  type="button"
+                                  className="sales-line-btn refund"
+                                  onClick={() =>
+                                    setRefundTarget({
+                                      invoiceId: selectedOrder.id,
+                                      line,
+                                    })
+                                  }
+                                  disabled={isSaving}
+                                >
+                                  <RotateCcw size={14} />
+                                  استرداد
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="sales-line-btn exchange"
+                                  onClick={() =>
+                                    setExchangeTarget({
+                                      invoiceId: selectedOrder.id,
+                                      line,
+                                    })
+                                  }
+                                  disabled={isSaving}
+                                >
+                                  <ArrowLeftRight size={14} />
+                                  تبديل
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="no-items">لا توجد منتجات في هذا الطلب</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {activeTab === 'cart' ? (
         <div className="sales-layout">
