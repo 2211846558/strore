@@ -66,8 +66,10 @@ export function buildStoreJoinFormData(form, logoFile) {
     fd.append('notes', form.notes.trim());
   }
 
-  if (isLocalStoreType(form.storeType)) {
+  if (form.zoneId) {
     fd.append('zone_id', String(Number(form.zoneId)));
+  }
+  if (form.googleMapUrl) {
     fd.append('google_map_url', form.googleMapUrl.trim());
   }
 
@@ -162,14 +164,11 @@ export function buildStoreUpdateFormData(formData, logoFile) {
     }
   }
 
-  const isLocal = formData.type === 'local' || formData.type === 'محلي';
-  if (isLocal) {
-    if (formData.zoneId) {
-      fd.append('zone_id', String(Number(formData.zoneId)));
-    }
-    if (formData.googleMapUrl !== undefined) {
-      fd.append('google_map_url', formData.googleMapUrl?.trim() || '');
-    }
+  if (formData.zoneId) {
+    fd.append('zone_id', String(Number(formData.zoneId)));
+  }
+  if (formData.googleMapUrl !== undefined) {
+    fd.append('google_map_url', formData.googleMapUrl?.trim() || '');
   }
 
   if (logoFile instanceof File) fd.append('logo', logoFile);

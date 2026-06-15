@@ -144,7 +144,6 @@ const Dashboard = () => {
     try {
       const payload = buildStoreUpdateFormData(formData, logoFile);
       const res = await updateStore(storeId, payload);
-      const isLocal = formData.type === 'local' || formData.type === 'محلي';
       const updated = res?.data ?? {
         ...store,
         name: formData.name,
@@ -152,8 +151,8 @@ const Dashboard = () => {
         phone: formData.phone,
         type: formData.type,
         merchant_data: formData.merchantData,
-        zone_id: isLocal && formData.zoneId ? Number(formData.zoneId) : null,
-        google_map_url: isLocal && formData.googleMapUrl ? formData.googleMapUrl : null,
+        zone_id: formData.zoneId ? Number(formData.zoneId) : null,
+        google_map_url: formData.googleMapUrl ? formData.googleMapUrl : null,
         ...(logoFile ? { logo: formData.image } : {}),
       };
       updateStoreInSession({

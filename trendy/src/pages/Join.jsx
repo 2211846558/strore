@@ -406,7 +406,7 @@ const Join = () => {
             </div>
           </div>
 
-          {isLocalType(formData.storeType) && (
+          {formData.storeType && (
             <>
               <div className="input-group">
                 <label htmlFor="zoneId">المنطقة</label>

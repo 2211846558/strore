@@ -62,7 +62,7 @@ const EditStoreModal = ({ isOpen, onClose, store, onSave, saving = false }) => {
     if (ok !== false) onClose();
   };
 
-  const isLocal = formData.type === 'local' || formData.type === 'محلي';
+
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -138,42 +138,40 @@ const EditStoreModal = ({ isOpen, onClose, store, onSave, saving = false }) => {
             </div>
           </div>
 
-          {isLocal && (
-            <div className="form-row">
-              <div className="form-group">
-                <label htmlFor="zoneId">المنطقة</label>
-                <select
-                  id="zoneId"
-                  name="zoneId"
-                  value={formData.zoneId ?? ''}
-                  onChange={handleChange}
-                  className="form-input form-select"
-                  required={isLocal}
-                  disabled={zonesLoading}
-                >
-                  <option value="">{zonesLoading ? 'جاري تحميل المناطق...' : 'اختر المنطقة'}</option>
-                  {zones.map((zone) => (
-                    <option key={zone.id} value={zone.id}>
-                      {zone.name ?? zone.title ?? `منطقة ${zone.id}`}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="form-group">
-                <label htmlFor="googleMapUrl">رابط خريطة Google</label>
-                <input
-                  type="text"
-                  id="googleMapUrl"
-                  name="googleMapUrl"
-                  value={formData.googleMapUrl || ''}
-                  onChange={handleChange}
-                  className="form-input"
-                  placeholder="https://maps.google.com/..."
-                  required={isLocal}
-                />
-              </div>
+          <div className="form-row">
+            <div className="form-group">
+              <label htmlFor="zoneId">المنطقة</label>
+              <select
+                id="zoneId"
+                name="zoneId"
+                value={formData.zoneId ?? ''}
+                onChange={handleChange}
+                className="form-input form-select"
+                required
+                disabled={zonesLoading}
+              >
+                <option value="">{zonesLoading ? 'جاري تحميل المناطق...' : 'اختر المنطقة'}</option>
+                {zones.map((zone) => (
+                  <option key={zone.id} value={zone.id}>
+                    {zone.name ?? zone.title ?? `منطقة ${zone.id}`}
+                  </option>
+                ))}
+              </select>
             </div>
-          )}
+            <div className="form-group">
+              <label htmlFor="googleMapUrl">رابط خريطة Google</label>
+              <input
+                type="text"
+                id="googleMapUrl"
+                name="googleMapUrl"
+                value={formData.googleMapUrl || ''}
+                onChange={handleChange}
+                className="form-input"
+                placeholder="https://maps.google.com/..."
+                required
+              />
+            </div>
+          </div>
 
           <div className="merchant-data-section">
             <h3 className="section-title">بيانات التاجر</h3>
