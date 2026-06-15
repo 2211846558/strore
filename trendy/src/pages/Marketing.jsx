@@ -13,12 +13,12 @@ import {
   isStoreSubscribedToCampaign,
 } from '../api/campaigns';
 import { getApiErrorMessage } from '../api/stores';
-import { useAuth } from '../context/AuthContext';
+import { useStore } from '../context/AuthContext';
 import { useWallet } from '../context/WalletContext';
 import './Marketing.css';
 
 const Marketing = () => {
-  const { storeId } = useAuth();
+  const { storeId } = useStore();
   const { balance, refreshWallet } = useWallet();
   const [activeTab, setActiveTab] = useState('available');
   const [availableCampaigns, setAvailableCampaigns] = useState([]);

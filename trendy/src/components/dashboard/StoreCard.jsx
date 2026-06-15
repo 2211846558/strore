@@ -80,4 +80,4 @@ const StoreCard = ({ store }) => {
   );
 };
 
-export default StoreCard;
+export default React.memo(StoreCard);

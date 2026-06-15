@@ -14,11 +14,11 @@ import {
 } from '../api/promotions';
 import { fetchStoreProducts } from '../api/products';
 import { getApiErrorMessage } from '../api/stores';
-import { useAuth } from '../context/AuthContext';
+import { useStore } from '../context/AuthContext';
 import './Offers.css';
 
 const Offers = () => {
-  const { storeId } = useAuth();
+  const { storeId } = useStore();
   const [offers, setOffers] = useState([]);
   const [catalogProducts, setCatalogProducts] = useState([]);
   const [catalogProductsWithPrice, setCatalogProductsWithPrice] = useState([]);

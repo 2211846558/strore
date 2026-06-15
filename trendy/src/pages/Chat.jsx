@@ -2,11 +2,11 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Send, User, Search, MessageSquare } from 'lucide-react';
 import { fetchChats, fetchChatMessages, sendChatMessage } from '../api/chat';
 import { getApiErrorMessage } from '../api/stores';
-import { useAuth } from '../context/AuthContext';
+import { useStore } from '../context/AuthContext';
 import './Chat.css';
 
 const Chat = () => {
-  const { storeId } = useAuth();
+  const { storeId } = useStore();
   const [chats, setChats] = useState([]);
   const [activeChat, setActiveChat] = useState(null);
   const [replyText, setReplyText] = useState('');
@@ -20,50 +20,60 @@ const Chat = () => {
   const messagesCountRef = useRef(0);
   const activeChatIdRef = useRef(null);
 
-  const loadChats = useCallback(async (quiet = false) => {
+  const loadChats = useCallback(async (quiet = false, cancelled) => {
     if (!quiet) setLoading(true);
     setError('');
     try {
       const list = await fetchChats({ storeId });
+      if (cancelled?.current) return;
       setChats(list);
     } catch {
+      if (cancelled?.current) return;
       setChats([]);
     } finally {
-      if (!quiet) setLoading(false);
+      if (!quiet && !cancelled?.current) setLoading(false);
     }
   }, [storeId]);
 
-  const loadActiveMessages = useCallback(async (chatId, quiet = false) => {
+  const loadActiveMessages = useCallback(async (chatId, quiet = false, cancelled) => {
     if (!quiet) setLoadingMessages(true);
     try {
       const messages = await fetchChatMessages(chatId);
+      if (cancelled?.current) return;
       setActiveChat((prev) => {
         if (!prev || prev.id !== chatId) return prev;
         return { ...prev, messages };
       });
     } catch (err) {
+      if (cancelled?.current) return;
       if (!quiet) {
         setError(getApiErrorMessage(err, 'تعذّر تحميل الرسائل'));
         setActiveChat(null);
       }
     } finally {
-      if (!quiet) setLoadingMessages(false);
+      if (!quiet && !cancelled?.current) setLoadingMessages(false);
     }
   }, []);
 
   useEffect(() => {
-    loadChats();
+    const cancelled = { current: false };
+    loadChats(false, cancelled);
+    return () => { cancelled.current = true; };
   }, [loadChats]);
 
   useEffect(() => {
+    const cancelled = { current: false };
     const interval = setInterval(() => {
-      loadChats(true);
+      loadChats(true, cancelled);
       if (activeChat?.id) {
-        loadActiveMessages(activeChat.id, true);
+        loadActiveMessages(activeChat.id, true, cancelled);
       }
-    }, 30000);
+    }, 60000);
 
-    return () => clearInterval(interval);
+    return () => {
+      cancelled.current = true;
+      clearInterval(interval);
+    };
   }, [loadChats, loadActiveMessages, activeChat?.id]);
 
   useEffect(() => {

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react';
-import { useAuth } from './AuthContext';
+import { useAuth, useStore, useAuthActions } from './AuthContext';
 import { getStoreWalletBalance, chargeStoreWallet, withdrawStoreWallet, resolveWalletChargeContext } from '../api/wallet';
 import { resolveManagedStoreId } from '../api/auth';
 import { fetchTransactions, mapToWalletLog } from '../api/finance';
@@ -7,7 +7,9 @@ import { fetchTransactions, mapToWalletLog } from '../api/finance';
 const WalletContext = createContext(null);
 
 export const WalletProvider = ({ children }) => {
-  const { isAuthenticated, storeId, user, refreshSession } = useAuth();
+  const { isAuthenticated, user } = useAuth();
+  const { storeId } = useStore();
+  const { refreshSession } = useAuthActions();
   const effectiveStoreId = resolveManagedStoreId(user, storeId) ?? storeId;
   const [balance, setBalance] = useState(0);
   const [status, setStatus] = useState('نشطة');

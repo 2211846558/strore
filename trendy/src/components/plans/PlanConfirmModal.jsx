@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
 import { X, Wallet } from 'lucide-react';
 import { useWallet } from '../../context/WalletContext';
-import { useAuth } from '../../context/AuthContext';
+import { useStore } from '../../context/AuthContext';
 import { subscribeToPlan } from '../../api/plans';
 import { getApiErrorMessage } from '../../api/stores';
 import './PlanConfirmModal.css';
 
 const PlanConfirmModal = ({ isOpen, onClose, plan, onConfirm }) => {
   const { balance, refreshWallet } = useWallet();
-  const { storeId } = useAuth();
+  const { storeId } = useStore();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 

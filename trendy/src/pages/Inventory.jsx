@@ -15,11 +15,11 @@ import {
   SHIPMENT_STATUS_FILTER_OPTIONS,
 } from '../api/inventory';
 import { getApiErrorMessage } from '../api/stores';
-import { useAuth } from '../context/AuthContext';
+import { useStore } from '../context/AuthContext';
 import './Inventory.css';
 
 const Inventory = () => {
-  const { storeId } = useAuth();
+  const { storeId } = useStore();
 
   const [allShipments, setAllShipments] = useState([]);
   const [stats, setStats] = useState({ total: 0, pending: 0, received: 0, totalQty: 0 });

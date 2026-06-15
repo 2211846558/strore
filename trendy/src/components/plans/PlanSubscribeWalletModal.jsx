@@ -8,7 +8,7 @@ import {
   useStripe,
 } from '@stripe/react-stripe-js';
 import { useWallet } from '../../context/WalletContext';
-import { useAuth } from '../../context/AuthContext';
+import { useStore } from '../../context/AuthContext';
 import { subscribeToPlan, renewStorePlan, changeStorePlan, previewSubscribeToPlan } from '../../api/plans';
 import { getApiErrorMessage } from '../../api/stores';
 import {
@@ -40,7 +40,7 @@ const getStripeFieldStyle = () => ({
 
 const usePlanWalletState = (plan) => {
   const { balance, refreshWallet } = useWallet();
-  const { storeId } = useAuth();
+  const { storeId } = useStore();
   const planPrice = Number(plan?.price ?? 0);
   const hasEnoughBalance = balance >= planPrice;
   const missingAmount = Math.max(0, planPrice - balance);

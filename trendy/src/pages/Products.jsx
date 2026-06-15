@@ -15,7 +15,7 @@ import {
   restoreProduct,
 } from '../api/products';
 import { getApiErrorMessage } from '../api/stores';
-import { useAuth } from '../context/AuthContext';
+import { useStore } from '../context/AuthContext';
 import './Products.css';
 
 const STATUS_OPTIONS = [
@@ -25,7 +25,7 @@ const STATUS_OPTIONS = [
 ];
 
 const Products = () => {
-  const { storeId } = useAuth();
+  const { storeId } = useStore();
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');

@@ -28,7 +28,7 @@ import {
 } from '../api/pos';
 import { fetchOrders } from '../api/orders';
 import { getApiErrorMessage } from '../api/stores';
-import { useAuth } from '../context/AuthContext';
+import { useAuth, useStore } from '../context/AuthContext';
 import VariantModal from '../components/sales/VariantModal';
 import CreateInvoiceModal from '../components/sales/CreateInvoiceModal';
 import RefundModal from '../components/sales/RefundModal';
@@ -39,7 +39,8 @@ const calcInvoiceTotal = (items) =>
   items.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
 const Sales = () => {
-  const { storeId, user } = useAuth();
+  const { user } = useAuth();
+  const { storeId } = useStore();
   const [activeTab, setActiveTab] = useState('cart');
   const [products, setProducts] = useState([]);
   const [cart, setCart] = useState([]);

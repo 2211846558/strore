@@ -18,7 +18,7 @@ import WalletModal from '../components/finance/WalletModal';
 import TransactionDetailModal from '../components/finance/TransactionDetailModal';
 import { fetchCustodyLogs, fetchCustodySummary } from '../api/custody';
 import { useWallet } from '../context/WalletContext';
-import { useAuth } from '../context/AuthContext';
+import { useStore } from '../context/AuthContext';
 import {
   fetchAllTransactions,
   fetchTransactionDetails,
@@ -42,7 +42,7 @@ const formatMoney = (value) =>
   });
 
 const Finance = () => {
-  const { storeId } = useAuth();
+  const { storeId } = useStore();
   const { balance: walletBalance } = useWallet();
   const [transactions, setTransactions] = useState([]);
   const [chartData, setChartData] = useState([]);
@@ -73,7 +73,7 @@ const Finance = () => {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  const loadFinanceData = useCallback(async () => {
+  const loadFinanceData = useCallback(async (cancelled) => {
     setLoading(true);
     setError('');
     try {
@@ -83,34 +83,42 @@ const Finance = () => {
           status: statusFilter !== 'all' ? statusFilter : undefined,
           perPage: 100,
           maxPages: 3,
-        }),
+        }).catch(() => ({ transactions: [] })),
         fetchRevenueOverview().catch(() => null),
         fetchProfitOverview().catch(() => null),
         fetchCustodySummary({ storeId }).catch(() => null),
         fetchCustodyLogs({ storeId, perPage: 20 }).catch(() => ({ data: [] })),
       ]);
 
+      if (cancelled?.current) return;
       setTransactions(txResult.transactions);
       setRevenueOverview(revenue);
       setProfitOverview(profit);
       setCustodySummary(custody);
       setCustodyLogs(logs?.data ?? []);
     } catch (err) {
+      if (cancelled?.current) return;
       setError(getApiErrorMessage(err, 'تعذّر تحميل البيانات المالية'));
       setTransactions([]);
     } finally {
-      setLoading(false);
+      if (!cancelled?.current) setLoading(false);
     }
   }, [debouncedSearch, statusFilter, storeId]);
 
   useEffect(() => {
-    loadFinanceData();
+    const cancelled = { current: false };
+    loadFinanceData(cancelled);
+    return () => { cancelled.current = true; };
   }, [loadFinanceData]);
 
   useEffect(() => {
-    fetchMonthlyRevenueChart(5)
-      .then(setChartData)
-      .catch(() => setChartData([]));
+    const cancelled = { current: false };
+    fetchMonthlyRevenueChart(5).then((data) => {
+      if (!cancelled.current) setChartData(data);
+    }).catch(() => {
+      if (!cancelled.current) setChartData([]);
+    });
+    return () => { cancelled.current = true; };
   }, [storeId]);
 
   const filteredTransactions = filterTransactionsByType(transactions, typeFilter);

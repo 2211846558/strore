@@ -92,10 +92,11 @@ const Notifications = () => {
     setTimeout(() => setToast(null), 2800);
   };
 
-  const loadNotifications = async (quiet = false) => {
+  const loadNotifications = async (quiet = false, cancelled) => {
     try {
       if (!quiet) setLoading(true);
       const res = await fetchNotifications({ perPage: 100 });
+      if (cancelled?.current) return;
       const rawList = res?.data || [];
       const mapped = rawList.map(mapNotificationFromBackend);
       setNotifications(mapped);
@@ -103,24 +104,28 @@ const Notifications = () => {
       const count = res?.unread_count ?? mapped.filter((n) => !n.read).length;
       setUnreadCount(count);
       
-      // Dispatch event to update sidebar
       window.dispatchEvent(new CustomEvent('unread-notifications-changed', { detail: count }));
       
       setError(null);
     } catch (err) {
+      if (cancelled?.current) return;
       console.error('Error fetching notifications:', err);
       if (!quiet) setError('تعذر تحميل الإشعارات. يرجى التحقق من اتصالك بالإنترنت.');
     } finally {
-      if (!quiet) setLoading(false);
+      if (!quiet && !cancelled?.current) setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadNotifications();
+    const cancelled = { current: false };
+    loadNotifications(false, cancelled);
     const interval = setInterval(() => {
-      loadNotifications(true);
-    }, 60000);
-    return () => clearInterval(interval);
+      loadNotifications(true, cancelled);
+    }, 120000);
+    return () => {
+      cancelled.current = true;
+      clearInterval(interval);
+    };
   }, []);
 
   const handleMarkAsRead = async (id) => {

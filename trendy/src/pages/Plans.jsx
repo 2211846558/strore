@@ -15,12 +15,13 @@ import {
   buildSubscriptionPeriod,
 } from '../api/plans';
 import { getApiErrorMessage } from '../api/stores';
-import { useAuth } from '../context/AuthContext';
+import { useStore, useAuthActions } from '../context/AuthContext';
 import './Plans.css';
 
 const Plans = ({ onboarding = false }) => {
   const navigate = useNavigate();
-  const { store, storeId, updateStoreInSession, refreshSession } = useAuth();
+  const { store, storeId } = useStore();
+  const { updateStoreInSession, refreshSession } = useAuthActions();
   const [activeTab, setActiveTab] = useState('available');
   const [searchQuery, setSearchQuery] = useState('');
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);

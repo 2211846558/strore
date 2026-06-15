@@ -1,5 +1,6 @@
+import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './context/AuthContext';
+import { AuthProvider, useAuth, useStore, useAuthActions } from './context/AuthContext';
 import { WalletProvider } from './context/WalletContext';
 import { StripeProvider } from './providers/StripeProvider';
 import DashboardLayout from './components/layout/DashboardLayout';
@@ -20,10 +21,18 @@ import Orders from './pages/Orders';
 import Notifications from './pages/Notifications';
 import Chat from './pages/Chat';
 import Attributes from './pages/Attributes';
+import { setCacheKeyPrefix } from './api/cache';
 import './App.css';
 
 function AppRoutes() {
-  const { isAuthenticated, hasActivePlan, logout } = useAuth();
+  const { isAuthenticated } = useAuth();
+  const { hasActivePlan, storeId } = useStore();
+  const { logout } = useAuthActions();
+
+  useEffect(() => {
+    if (storeId) setCacheKeyPrefix(`s${storeId}`);
+    else setCacheKeyPrefix('');
+  }, [storeId]);
 
   const handleLogout = async () => {
     await logout();
@@ -37,9 +46,11 @@ function AppRoutes() {
         <Route
           path="/plans"
           element={
-            <PlansOnboardingLayout onLogout={handleLogout}>
-              <Plans onboarding />
-            </PlansOnboardingLayout>
+            <WalletProvider>
+              <PlansOnboardingLayout onLogout={handleLogout}>
+                <Plans onboarding />
+              </PlansOnboardingLayout>
+            </WalletProvider>
           }
         />
         <Route path="*" element={<Navigate to="/plans" replace />} />
@@ -84,7 +95,9 @@ function AppRoutes() {
         path="/"
         element={
           isAuthenticated ? (
-            <DashboardLayout onLogout={handleLogout} />
+            <WalletProvider>
+              <DashboardLayout onLogout={handleLogout} />
+            </WalletProvider>
           ) : (
             <Navigate to="/login" replace />
           )
@@ -112,15 +125,13 @@ function AppRoutes() {
 function App() {
   return (
     <AuthProvider>
-      <WalletProvider>
-        <StripeProvider>
-          <BrowserRouter>
-            <div className="app-container">
-              <AppRoutes />
-            </div>
-          </BrowserRouter>
-        </StripeProvider>
-      </WalletProvider>
+      <StripeProvider>
+        <BrowserRouter>
+          <div className="app-container">
+            <AppRoutes />
+          </div>
+        </BrowserRouter>
+      </StripeProvider>
     </AuthProvider>
   );
 }

@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, ArrowRight, Hash } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth, useAuthActions } from '../context/AuthContext';
 import { getActiveStore, storeHasActivePlan } from '../api/auth';
 import { getApiErrorMessage } from '../api/stores';
 import './Login.css';
 
 const Login = () => {
-  const { login, isLoading } = useAuth();
+  const { isLoading } = useAuth();
+  const { login } = useAuthActions();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');

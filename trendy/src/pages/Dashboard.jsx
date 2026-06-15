@@ -6,7 +6,7 @@ import ChartsSection from '../components/dashboard/ChartsSection';
 import { Edit, Package, ShoppingCart, DollarSign, TrendingUp, Users } from 'lucide-react';
 import ChatBadge from '../components/chat/ChatBadge';
 import SupportBadge from '../components/chat/SupportBadge';
-import { useAuth } from '../context/AuthContext';
+import { useAuth, useStore, useAuthActions } from '../context/AuthContext';
 import {
   updateStore,
   buildStoreUpdateFormData,
@@ -66,7 +66,9 @@ const formatMoney = (value) =>
   });
 
 const Dashboard = () => {
-  const { user, store, storeId, updateStoreInSession } = useAuth();
+  const { user } = useAuth();
+  const { store, storeId } = useStore();
+  const { updateStoreInSession } = useAuthActions();
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [storeData, setStoreData] = useState(() => mapStoreToForm(store, null, user));
   const [toast, setToast] = useState(null);
@@ -76,32 +78,38 @@ const Dashboard = () => {
   const [stats, setStats] = useState(null);
   const [monthlyRevenue, setMonthlyRevenue] = useState([]);
 
-  const loadStoreProfile = useCallback(async () => {
+  const loadStoreProfile = useCallback(async (cancelled) => {
     if (!storeId) return;
     try {
       const [storeDetails, ratings] = await Promise.all([
         fetchStore(storeId),
         fetchStoreRatings(storeId),
       ]);
+      if (cancelled?.current) return;
       const merged = mergeStoreProfile(storeDetails, store, user);
       setStoreData(mapStoreToForm(merged, ratings.average, user));
     } catch {
+      if (cancelled?.current) return;
       if (store) setStoreData(mapStoreToForm(store, null, user));
     }
   }, [storeId, store, user]);
 
   useEffect(() => {
-    loadStoreProfile();
+    const cancelled = { current: false };
+    loadStoreProfile(cancelled);
+    return () => { cancelled.current = true; };
   }, [loadStoreProfile]);
 
-  const loadDashboardData = useCallback(async (quiet = false) => {
+  const loadDashboardData = useCallback(async (quiet = false, cancelled) => {
     if (!quiet) setStatsLoading(true);
     setStatsError('');
     try {
       const { stats, monthlyRevenue } = await fetchStoreDashboard({ storeId });
+      if (cancelled?.current) return;
       setStats(stats);
       setMonthlyRevenue(monthlyRevenue);
     } catch (err) {
+      if (cancelled?.current) return;
       if (err?.status === 401 || err?.isUnauthorized) {
         setStatsError('');
         setStats(null);
@@ -114,16 +122,14 @@ const Dashboard = () => {
         setMonthlyRevenue([]);
       }
     } finally {
-      if (!quiet) setStatsLoading(false);
+      if (!quiet && !cancelled?.current) setStatsLoading(false);
     }
   }, [storeId]);
 
   useEffect(() => {
-    loadDashboardData();
-    const interval = setInterval(() => {
-      loadDashboardData(true);
-    }, 60000);
-    return () => clearInterval(interval);
+    const cancelled = { current: false };
+    loadDashboardData(false, cancelled);
+    return () => { cancelled.current = true; };
   }, [loadDashboardData]);
 
   const showToast = (message) => {

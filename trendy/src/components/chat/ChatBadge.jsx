@@ -2,11 +2,11 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { MessageCircle, X, Send, User, ChevronLeft } from 'lucide-react';
 import { fetchChats, fetchChatMessages, sendChatMessage } from '../../api/chat';
 import { getApiErrorMessage } from '../../api/stores';
-import { useAuth } from '../../context/AuthContext';
+import { useStore } from '../../context/AuthContext';
 import './ChatBadge.css';
 
 const ChatBadge = () => {
-  const { storeId } = useAuth();
+  const { storeId } = useStore();
   const [isOpen, setIsOpen] = useState(false);
   const [chats, setChats] = useState([]);
   const [activeChat, setActiveChat] = useState(null);

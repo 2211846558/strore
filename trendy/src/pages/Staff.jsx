@@ -16,11 +16,11 @@ import {
   EMPLOYEE_ROLE_OPTIONS,
 } from '../api/employees';
 import { getApiErrorMessage } from '../api/stores';
-import { useAuth } from '../context/AuthContext';
+import { useStore } from '../context/AuthContext';
 import './Staff.css';
 
 const Staff = () => {
-  const { storeId } = useAuth();
+  const { storeId } = useStore();
   const [staff, setStaff] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');

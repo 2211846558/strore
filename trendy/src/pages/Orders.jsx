@@ -11,7 +11,7 @@ import {
   canPrepareOrder,
 } from '../api/orders';
 import { getApiErrorMessage } from '../api/stores';
-import { useAuth } from '../context/AuthContext';
+import { useStore } from '../context/AuthContext';
 import {
   STATUS_FILTER_OPTIONS,
   getStatusBadgeClass,
@@ -33,7 +33,7 @@ function formatOrderProductsLabel(products = []) {
 }
 
 const Orders = () => {
-  const { storeId } = useAuth();
+  const { storeId } = useStore();
   const [orders, setOrders] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -55,7 +55,7 @@ const Orders = () => {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  const loadOrders = useCallback(async (quiet = false) => {
+  const loadOrders = useCallback(async (quiet = false, cancelled) => {
     if (!quiet) setLoading(true);
     setError('');
     try {
@@ -66,26 +66,32 @@ const Orders = () => {
         excludePos: false,
         ...(quiet ? { maxPages: 1 } : {}),
       });
+      if (cancelled?.current) return;
       if (statusFilter === 'تجهيز الطلب') {
         list = list.filter((order) => !order.isPos && canPrepareOrder(order));
       }
       setOrders(list);
     } catch (err) {
+      if (cancelled?.current) return;
       if (!quiet) {
         setError(getApiErrorMessage(err, 'تعذّر تحميل الطلبات'));
         setOrders([]);
       }
     } finally {
-      if (!quiet) setLoading(false);
+      if (!quiet && !cancelled?.current) setLoading(false);
     }
   }, [storeId, debouncedSearch, statusFilter]);
 
   useEffect(() => {
-    loadOrders();
+    const cancelled = { current: false };
+    loadOrders(false, cancelled);
     const interval = setInterval(() => {
-      loadOrders(true);
-    }, 30000);
-    return () => clearInterval(interval);
+      loadOrders(true, cancelled);
+    }, 120000);
+    return () => {
+      cancelled.current = true;
+      clearInterval(interval);
+    };
   }, [loadOrders]);
 
   const handleCancel = async (order) => {

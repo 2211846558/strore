@@ -1,4 +1,13 @@
 const CACHE_PREFIX = 'trendy_api_cache_';
+let keyPrefix = '';
+
+export function setCacheKeyPrefix(prefix) {
+  keyPrefix = prefix || '';
+}
+
+function pkey(key) {
+  return keyPrefix ? `${keyPrefix}_${key}` : key;
+}
 
 export const TTL = {
   STATIC:   3600000, // 1 hour
@@ -9,7 +18,7 @@ export const TTL = {
 
 export function readCache(key) {
   try {
-    const raw = localStorage.getItem(CACHE_PREFIX + key);
+    const raw = localStorage.getItem(CACHE_PREFIX + pkey(key));
     if (!raw) return null;
     const { data, ts, ttl } = JSON.parse(raw);
     if (Date.now() - ts > ttl) {
@@ -24,7 +33,7 @@ export function readCache(key) {
 
 export function writeCache(key, data, ttl) {
   try {
-    localStorage.setItem(CACHE_PREFIX + key, JSON.stringify({ data, ts: Date.now(), ttl }));
+    localStorage.setItem(CACHE_PREFIX + pkey(key), JSON.stringify({ data, ts: Date.now(), ttl }));
   } catch {
     // quota exceeded
   }
@@ -32,7 +41,7 @@ export function writeCache(key, data, ttl) {
 
 export function clearCache(pattern) {
   try {
-    const prefix = CACHE_PREFIX + pattern;
+    const prefix = CACHE_PREFIX + pkey(pattern);
     Object.keys(localStorage)
       .filter((k) => k.startsWith(prefix))
       .forEach((k) => localStorage.removeItem(k));
