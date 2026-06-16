@@ -360,14 +360,17 @@ export async function fetchShipments({
   perPage = 50,
   page = 1,
 } = {}, forceRefresh = false) {
-  return staleWhileRevalidate(`shipments_p${page}_${status || 'all'}`, async () => {
+  const searchKey = search?.trim() || '';
+  return staleWhileRevalidate(
+    `shipments_p${page}_${status || 'all'}_s${searchKey}`,
+    async () => {
     const resolvedStoreId = resolveInventoryStoreId(storeId);
     const query = new URLSearchParams({
       per_page: String(perPage),
       page: String(page),
     });
     if (resolvedStoreId) query.set('store_id', String(resolvedStoreId));
-    if (search?.trim()) query.set('search', search.trim());
+    if (searchKey) query.set('search', searchKey);
 
     const apiStatus = mapShipmentStatusFilterToApi(status);
     if (apiStatus) query.set('status', apiStatus);

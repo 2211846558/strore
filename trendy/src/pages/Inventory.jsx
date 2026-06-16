@@ -18,6 +18,22 @@ import { getApiErrorMessage } from '../api/stores';
 import { useStore } from '../context/AuthContext';
 import './Inventory.css';
 
+function matchesShipmentSearch(shipment, term) {
+  const q = term.trim().toLowerCase();
+  if (!q) return true;
+
+  const fields = [
+    shipment.code,
+    shipment.batchNumber,
+    shipment.supplierName,
+    ...(shipment.items || []).map((item) => item.name),
+  ];
+
+  return fields.some(
+    (value) => value && String(value).toLowerCase().includes(q),
+  );
+}
+
 const Inventory = () => {
   const { storeId } = useStore();
 
@@ -50,11 +66,15 @@ const Inventory = () => {
     setIsLoading(true);
     setError('');
     try {
-      const result = await fetchShipments({
-        storeId,
-        status: statusFilter,
-        search: debouncedSearch,
-      });
+      const searchTerm = debouncedSearch.trim();
+      const result = await fetchShipments(
+        {
+          storeId,
+          status: statusFilter,
+          search: searchTerm || undefined,
+        },
+        Boolean(searchTerm),
+      );
       setAllShipments(result.shipments || []);
       setStats({
         total: result.stats?.total || 0,
@@ -72,6 +92,10 @@ const Inventory = () => {
   useEffect(() => {
     loadShipments();
   }, [loadShipments]);
+
+  const displayedShipments = debouncedSearch.trim()
+    ? allShipments.filter((shipment) => matchesShipmentSearch(shipment, debouncedSearch))
+    : allShipments;
 
   /* ── حفظ شحنة ── */
   const handleSaveShipment = async (shipmentData) => {
@@ -251,16 +275,16 @@ const Inventory = () => {
               <tr>
                 <td colSpan="6" className="no-results-cell">جاري تحميل الشحنات...</td>
               </tr>
-            ) : allShipments.length === 0 ? (
+            ) : displayedShipments.length === 0 ? (
               <tr>
                 <td colSpan="6" className="no-results-cell">
-                  {allShipments.length === 0 && !debouncedSearch && statusFilter === 'all'
+                  {allShipments.length === 0 && !debouncedSearch.trim() && statusFilter === 'all'
                     ? 'لا توجد شحنات بعد. اضغط «إضافة شحنة» لإنشاء أول شحنة.'
                     : 'لا توجد شحنات تطابق البحث أو الفلتر.'}
                 </td>
               </tr>
             ) : (
-              allShipments.map((shipment) => {
+              displayedShipments.map((shipment) => {
                 /* حساب الكمية الفعلية من مجموع تنوعات الشحنة */
                 const computedQty = (shipment.items || []).reduce(
                   (sum, item) => sum + Number(item.quantity || 0),
