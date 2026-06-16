@@ -3,6 +3,7 @@ import { X, Wallet, Plus, ArrowDownLeft, ArrowUpRight, Minus } from 'lucide-reac
 import SadadRechargeModal from './SadadRechargeModal';
 import { useWallet } from '../../context/WalletContext';
 import { getApiErrorMessage } from '../../api/stores';
+import { isValidDecimalInput, preventWheelChange } from '../../utils/numericInput';
 import './WalletModal.css';
 
 const WalletModal = ({ isOpen, onClose, onToast }) => {
@@ -84,11 +85,15 @@ const WalletModal = ({ isOpen, onClose, onToast }) => {
           {withdrawOpen && (
             <div className="wallet-withdraw-form">
               <input
-                type="number"
-                min="1"
+                type="text"
+                inputMode="decimal"
                 placeholder="المبلغ (د.ل)"
                 value={withdrawAmount}
-                onChange={(e) => setWithdrawAmount(e.target.value)}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  if (isValidDecimalInput(raw)) setWithdrawAmount(raw);
+                }}
+                onWheel={preventWheelChange}
                 dir="ltr"
               />
               <input

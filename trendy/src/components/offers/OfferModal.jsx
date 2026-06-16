@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { getApiErrorMessage } from '../../api/stores';
+import {
+  isValidDecimalInput,
+  isValidIntegerInput,
+  preventWheelChange,
+} from '../../utils/numericInput';
 import './OfferModal.css';
 
 const DISCOUNT_TYPES = ['نسبة مئوية %', 'قيمة ثابتة'];
@@ -150,9 +155,18 @@ const OfferModal = ({
             <div className="form-group">
               <label>قيمة الخصم</label>
               <input
-                type="number"
+                type="text"
+                inputMode={form.type === 'نسبة مئوية %' ? 'numeric' : 'decimal'}
                 value={form.value}
-                onChange={(e) => handleChange('value', e.target.value)}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  const valid =
+                    form.type === 'نسبة مئوية %'
+                      ? isValidIntegerInput(raw)
+                      : isValidDecimalInput(raw);
+                  if (valid) handleChange('value', raw);
+                }}
+                onWheel={preventWheelChange}
                 placeholder={form.type === 'نسبة مئوية %' ? '20' : '50'}
               />
             </div>

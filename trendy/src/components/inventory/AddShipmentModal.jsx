@@ -7,6 +7,11 @@ import {
   suggestBatchNumber,
 } from '../../api/inventory';
 import { getApiErrorMessage } from '../../api/stores';
+import {
+  isValidDecimalInput,
+  isValidIntegerInput,
+  preventWheelChange,
+} from '../../utils/numericInput';
 import { ARCHIVE_SHIPMENT_CONFIRM } from './shipmentStatusConfirm';
 import './AddShipmentModal.css';
 
@@ -127,10 +132,10 @@ const AddShipmentModal = ({
   const selectedProduct = catalog.find((p) => String(p.id) === String(selectedProductId));
 
   const handleQuantityChange = (variantId, val) => {
-    const num = val === '' ? '' : Math.max(0, parseInt(val, 10) || 0);
+    if (!isValidIntegerInput(val)) return;
     setQuantities((prev) => ({
       ...prev,
-      [variantId]: num,
+      [variantId]: val,
     }));
   };
 
@@ -321,11 +326,14 @@ const AddShipmentModal = ({
                 سعر الشراء <span className="required-mark">*</span>
               </label>
               <input
-                type="number"
-                min="0"
-                step="0.01"
+                type="text"
+                inputMode="decimal"
                 value={purchasePrice}
-                onChange={(e) => setPurchasePrice(e.target.value)}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  if (isValidDecimalInput(raw)) setPurchasePrice(raw);
+                }}
+                onWheel={preventWheelChange}
                 placeholder="ينطبق على جميع التنوعات"
               />
             </div>
@@ -334,11 +342,14 @@ const AddShipmentModal = ({
                 سعر البيع <span className="required-mark">*</span>
               </label>
               <input
-                type="number"
-                min="0"
-                step="0.01"
+                type="text"
+                inputMode="decimal"
                 value={sellingPrice}
-                onChange={(e) => setSellingPrice(e.target.value)}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  if (isValidDecimalInput(raw)) setSellingPrice(raw);
+                }}
+                onWheel={preventWheelChange}
                 placeholder="ينطبق على جميع التنوعات"
               />
             </div>
@@ -376,10 +387,11 @@ const AddShipmentModal = ({
                           <td className="current-qty">{v.quantity ?? 0} قطعة</td>
                           <td className="input-qty">
                             <input
-                              type="number"
-                              min="0"
+                              type="text"
+                              inputMode="numeric"
                               value={quantities[v.id] ?? ''}
                               onChange={(e) => handleQuantityChange(v.id, e.target.value)}
+                              onWheel={preventWheelChange}
                               placeholder="0"
                             />
                           </td>

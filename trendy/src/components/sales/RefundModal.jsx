@@ -1,17 +1,27 @@
 import { useState } from 'react';
 import { X } from 'lucide-react';
+import {
+  clampInteger,
+  clampIntegerInput,
+  isValidIntegerInput,
+  parseIntegerInput,
+  preventWheelChange,
+} from '../../utils/numericInput';
 import './SalesModals.css';
 
 const RefundModal = ({ isOpen, onClose, item, onConfirm, isSaving = false }) => {
-  const [refundQty, setRefundQty] = useState(1);
+  const [refundQty, setRefundQty] = useState('1');
   const [prevItem, setPrevItem] = useState(null);
 
   if (item !== prevItem) {
     setPrevItem(item);
-    setRefundQty(item ? (item.quantity || 1) : 1);
+    setRefundQty(item ? String(item.quantity || 1) : '1');
   }
 
   if (!isOpen || !item) return null;
+
+  const maxQty = item.quantity;
+  const refundQtyNum = clampInteger(parseIntegerInput(refundQty, 1), 1, maxQty);
 
   return (
     <div className="sales-modal-overlay" onClick={onClose}>
@@ -45,44 +55,45 @@ const RefundModal = ({ isOpen, onClose, item, onConfirm, isSaving = false }) => 
                   type="button"
                   className="sales-btn-secondary"
                   style={{ padding: '6px 12px', minWidth: '40px', cursor: 'pointer' }}
-                  onClick={() => setRefundQty((prev) => Math.max(1, prev - 1))}
-                  disabled={refundQty <= 1 || isSaving}
+                  onClick={() => setRefundQty(String(Math.max(1, refundQtyNum - 1)))}
+                  disabled={refundQtyNum <= 1 || isSaving}
                 >
                   -
                 </button>
                 <input
                   id="refund-qty"
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
                   className="sales-form-input"
                   style={{ textAlign: 'center', width: '80px', padding: '6px 12px', cursor: 'default' }}
-                  min="1"
-                  max={item.quantity}
                   value={refundQty}
                   onChange={(e) => {
-                    const val = Math.max(1, Math.min(item.quantity, Number(e.target.value) || 1));
-                    setRefundQty(val);
+                    const raw = e.target.value;
+                    if (isValidIntegerInput(raw)) setRefundQty(raw);
                   }}
+                  onBlur={() => setRefundQty(clampIntegerInput(refundQty, 1, maxQty))}
+                  onWheel={preventWheelChange}
                   disabled={isSaving}
                 />
                 <button
                   type="button"
                   className="sales-btn-secondary"
                   style={{ padding: '6px 12px', minWidth: '40px', cursor: 'pointer' }}
-                  onClick={() => setRefundQty((prev) => Math.min(item.quantity, prev + 1))}
-                  disabled={refundQty >= item.quantity || isSaving}
+                  onClick={() => setRefundQty(String(Math.min(maxQty, refundQtyNum + 1)))}
+                  disabled={refundQtyNum >= maxQty || isSaving}
                 >
                   +
                 </button>
               </div>
             </div>
           )}
-          <p className="sales-refund-amount" style={{ marginTop: '12px' }}>- {item.price * refundQty} د.ل</p>
+          <p className="sales-refund-amount" style={{ marginTop: '12px' }}>- {item.price * refundQtyNum} د.ل</p>
         </div>
         <div className="sales-modal-footer">
           <button
             type="button"
             className="sales-btn-primary"
-            onClick={() => onConfirm(refundQty)}
+            onClick={() => onConfirm(refundQtyNum)}
             disabled={isSaving}
           >
             {isSaving ? 'جاري الاسترداد...' : 'تأكيد الاسترداد'}

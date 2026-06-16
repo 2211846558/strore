@@ -5,10 +5,17 @@ import {
   getVariantStock,
   fetchVariantStockPrice,
 } from '../../api/pos';
+import {
+  clampInteger,
+  clampIntegerInput,
+  isValidIntegerInput,
+  parseIntegerInput,
+  preventWheelChange,
+} from '../../utils/numericInput';
 import './SalesModals.css';
 
 const ExchangeModal = ({ isOpen, onClose, item, products = [], onConfirm }) => {
-  const [exchangeQty, setExchangeQty] = useState(1);
+  const [exchangeQty, setExchangeQty] = useState('1');
   const [selectedNewItems, setSelectedNewItems] = useState([]);
   const [prevItem, setPrevItem] = useState(null);
 
@@ -20,12 +27,12 @@ const ExchangeModal = ({ isOpen, onClose, item, products = [], onConfirm }) => {
   const [liveStock, setLiveStock] = useState(null);
   const [livePrice, setLivePrice] = useState(null);
   const [loadingStock, setLoadingStock] = useState(false);
-  const [addItemQty, setAddItemQty] = useState(1);
+  const [addItemQty, setAddItemQty] = useState('1');
 
   // Reset/Initialize modal state when item changes
   if (item !== prevItem) {
     setPrevItem(item);
-    setExchangeQty(item ? (item.quantity || 1) : 1);
+    setExchangeQty(item ? String(item.quantity || 1) : '1');
     setSelectedNewItems([]);
     setCurrentProductId('');
     setColor('');
@@ -33,7 +40,7 @@ const ExchangeModal = ({ isOpen, onClose, item, products = [], onConfirm }) => {
     setSelectedVariantId('');
     setLiveStock(null);
     setLivePrice(null);
-    setAddItemQty(1);
+    setAddItemQty('1');
   }
 
   const currentProduct = products.find((p) => String(p.id) === String(currentProductId));
@@ -73,6 +80,13 @@ const ExchangeModal = ({ isOpen, onClose, item, products = [], onConfirm }) => {
     selectionReady &&
     currentVariant &&
     (stock > 0 || currentVariant?.stockUnknown);
+
+  const addItemMaxQty = currentVariant?.stockUnknown ? 999 : stock;
+  const addItemQtyNum = clampInteger(
+    parseIntegerInput(addItemQty, 1),
+    1,
+    Math.max(1, addItemMaxQty),
+  );
 
   // Fetch live stock and price when currentVariant changes
   useEffect(() => {
@@ -114,7 +128,7 @@ const ExchangeModal = ({ isOpen, onClose, item, products = [], onConfirm }) => {
     setSelectedVariantId('');
     setLiveStock(null);
     setLivePrice(null);
-    setAddItemQty(1);
+    setAddItemQty('1');
 
     const nextProd = products.find((p) => String(p.id) === String(prodId));
     if (nextProd) {
@@ -140,7 +154,7 @@ const ExchangeModal = ({ isOpen, onClose, item, products = [], onConfirm }) => {
       color: useDirectSelection ? currentVariant.color ?? '—' : color,
       size: useDirectSelection ? currentVariant.size ?? '—' : effectiveSize,
       price,
-      quantity: addItemQty,
+      quantity: addItemQtyNum,
       stock,
       stockUnknown: Boolean(currentVariant.stockUnknown),
     };
@@ -149,7 +163,7 @@ const ExchangeModal = ({ isOpen, onClose, item, products = [], onConfirm }) => {
       const existingIdx = prev.findIndex((item) => item.id === currentVariant.id);
       if (existingIdx > -1) {
         const updated = [...prev];
-        const nextQty = updated[existingIdx].quantity + addItemQty;
+        const nextQty = updated[existingIdx].quantity + addItemQtyNum;
         if (!currentVariant.stockUnknown && nextQty > stock) {
           updated[existingIdx].quantity = stock;
         } else {
@@ -168,7 +182,7 @@ const ExchangeModal = ({ isOpen, onClose, item, products = [], onConfirm }) => {
     setSelectedVariantId('');
     setLiveStock(null);
     setLivePrice(null);
-    setAddItemQty(1);
+    setAddItemQty('1');
   };
 
   // Modify quantity of item in selected list
@@ -193,16 +207,22 @@ const ExchangeModal = ({ isOpen, onClose, item, products = [], onConfirm }) => {
 
   if (!isOpen || !item) return null;
 
+  const exchangeQtyNum = clampInteger(
+    parseIntegerInput(exchangeQty, 1),
+    1,
+    item.quantity,
+  );
+
   // Calculate totals and validation
   const totalNewQty = selectedNewItems.reduce((sum, item) => sum + item.quantity, 0);
-  const oldTotal = item.price * exchangeQty;
+  const oldTotal = item.price * exchangeQtyNum;
   const newTotal = selectedNewItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const diff = newTotal - oldTotal;
   const diffAmount = Math.abs(diff);
 
   const handleConfirm = () => {
     if (selectedNewItems.length === 0) return;
-    onConfirm(selectedNewItems, exchangeQty);
+    onConfirm(selectedNewItems, exchangeQtyNum);
   };
 
   return (
@@ -231,41 +251,42 @@ const ExchangeModal = ({ isOpen, onClose, item, products = [], onConfirm }) => {
                 type="button"
                 className="sales-btn-secondary"
                 style={{ padding: '6px 12px', minWidth: '40px', cursor: 'pointer' }}
-                onClick={() => setExchangeQty((prev) => Math.max(1, prev - 1))}
-                disabled={exchangeQty <= 1}
+                onClick={() => setExchangeQty(String(Math.max(1, exchangeQtyNum - 1)))}
+                disabled={exchangeQtyNum <= 1}
               >
                 -
               </button>
               <input
                 id="exchange-qty"
-                type="number"
+                type="text"
+                inputMode="numeric"
                 className="sales-form-input"
                 style={{ textAlign: 'center', width: '80px', padding: '6px 12px', cursor: 'default' }}
-                min="1"
-                max={item.quantity}
                 value={exchangeQty}
                 onChange={(e) => {
-                  const val = Math.max(1, Math.min(item.quantity, Number(e.target.value) || 1));
-                  setExchangeQty(val);
+                  const raw = e.target.value;
+                  if (isValidIntegerInput(raw)) setExchangeQty(raw);
                 }}
+                onBlur={() => setExchangeQty(clampIntegerInput(exchangeQty, 1, item.quantity))}
+                onWheel={preventWheelChange}
               />
               <button
                 type="button"
                 className="sales-btn-secondary"
                 style={{ padding: '6px 12px', minWidth: '40px', cursor: 'pointer' }}
-                onClick={() => setExchangeQty((prev) => Math.min(item.quantity, prev + 1))}
-                disabled={exchangeQty >= item.quantity}
+                onClick={() => setExchangeQty(String(Math.min(item.quantity, exchangeQtyNum + 1)))}
+                disabled={exchangeQtyNum >= item.quantity}
               >
                 +
               </button>
             </div>
           </div>
-          <p className="sales-refund-amount" style={{ marginTop: '12px' }}>{item.price * exchangeQty} د.ل</p>
+          <p className="sales-refund-amount" style={{ marginTop: '12px' }}>{item.price * exchangeQtyNum} د.ل</p>
         </div>
 
         {/* Selected replacement items list */}
         <div className="sales-form-group">
-          <label style={{ fontWeight: 'bold', fontSize: '14px' }}>المنتجات البديلة المحددة ({totalNewQty} من {exchangeQty}):</label>
+          <label style={{ fontWeight: 'bold', fontSize: '14px' }}>المنتجات البديلة المحددة ({totalNewQty} من {exchangeQtyNum}):</label>
           {selectedNewItems.length === 0 ? (
             <div style={{
               textAlign: 'center',
@@ -442,34 +463,31 @@ const ExchangeModal = ({ isOpen, onClose, item, products = [], onConfirm }) => {
                       type="button"
                       className="sales-btn-secondary"
                       style={{ padding: '6px 12px', minWidth: '40px', cursor: 'pointer' }}
-                      onClick={() => setAddItemQty((prev) => Math.max(1, prev - 1))}
-                      disabled={addItemQty <= 1}
+                      onClick={() => setAddItemQty(String(Math.max(1, addItemQtyNum - 1)))}
+                      disabled={addItemQtyNum <= 1}
                     >
                       -
                     </button>
                     <input
                       id="add-item-qty"
-                      type="number"
+                      type="text"
+                      inputMode="numeric"
                       className="sales-form-input"
                       style={{ textAlign: 'center', width: '80px', padding: '6px 12px', cursor: 'default' }}
-                      min="1"
-                      max={currentVariant?.stockUnknown ? undefined : stock}
                       value={addItemQty}
                       onChange={(e) => {
-                        const maxLimit = currentVariant?.stockUnknown ? 999 : stock;
-                        const val = Math.max(1, Math.min(maxLimit, Number(e.target.value) || 1));
-                        setAddItemQty(val);
+                        const raw = e.target.value;
+                        if (isValidIntegerInput(raw)) setAddItemQty(raw);
                       }}
+                      onBlur={() => setAddItemQty(clampIntegerInput(addItemQty, 1, addItemMaxQty))}
+                      onWheel={preventWheelChange}
                     />
                     <button
                       type="button"
                       className="sales-btn-secondary"
                       style={{ padding: '6px 12px', minWidth: '40px', cursor: 'pointer' }}
-                      onClick={() => setAddItemQty((prev) => {
-                        const maxLimit = currentVariant?.stockUnknown ? 999 : stock;
-                        return Math.min(maxLimit, prev + 1);
-                      })}
-                      disabled={!currentVariant?.stockUnknown && addItemQty >= stock}
+                      onClick={() => setAddItemQty(String(Math.min(addItemMaxQty, addItemQtyNum + 1)))}
+                      disabled={!currentVariant?.stockUnknown && addItemQtyNum >= stock}
                     >
                       +
                     </button>
@@ -503,7 +521,7 @@ const ExchangeModal = ({ isOpen, onClose, item, products = [], onConfirm }) => {
             color: 'var(--text-primary)',
             border: '1px solid var(--border-color)'
           }}>
-            <span>كمية المنتج القديم للتبديل: {exchangeQty} قطعة | كمية المنتجات البديلة المحددة: {totalNewQty} قطعة</span>
+            <span>كمية المنتج القديم للتبديل: {exchangeQtyNum} قطعة | كمية المنتجات البديلة المحددة: {totalNewQty} قطعة</span>
           </div>
         )}
 
@@ -512,7 +530,7 @@ const ExchangeModal = ({ isOpen, onClose, item, products = [], onConfirm }) => {
           <div className={`sales-exchange-diff ${diff > 0 ? 'pay' : diff < 0 ? 'refund' : 'equal'}`} style={{ marginTop: '8px' }}>
             <div className="sales-exchange-diff-rows">
               <div className="sales-exchange-diff-row">
-                <span>إجمالي المنتجات القديمة ({exchangeQty} قطعة):</span>
+                <span>إجمالي المنتجات القديمة ({exchangeQtyNum} قطعة):</span>
                 <strong>{oldTotal} د.ل</strong>
               </div>
               <div className="sales-exchange-diff-row">

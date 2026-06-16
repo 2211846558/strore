@@ -13,6 +13,7 @@ import {
   STRIPE_PUBLISHABLE_KEY,
   translateStripeError,
 } from '../../api/stripe';
+import { isValidDecimalInput, preventWheelChange } from '../../utils/numericInput';
 import './SadadRechargeModal.css';
 
 const getStripeFieldStyle = () => ({
@@ -149,12 +150,15 @@ const WalletRechargeForm = ({ onClose, onConfirm }) => {
       </p>
 
       <input
-        type="number"
+        type="text"
+        inputMode="decimal"
         placeholder="المبلغ (د.ل)"
         value={amount}
-        onChange={(e) => setAmount(e.target.value)}
-        min="1"
-        step="0.01"
+        onChange={(e) => {
+          const raw = e.target.value;
+          if (isValidDecimalInput(raw)) setAmount(raw);
+        }}
+        onWheel={preventWheelChange}
         dir="ltr"
         required
       />

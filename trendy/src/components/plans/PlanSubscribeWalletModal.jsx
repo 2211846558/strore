@@ -17,6 +17,7 @@ import {
   STRIPE_PUBLISHABLE_KEY,
   translateStripeError,
 } from '../../api/stripe';
+import { isValidDecimalInput, preventWheelChange } from '../../utils/numericInput';
 import './PlanSubscribeWalletModal.css';
 
 const getStripeFieldStyle = () => ({
@@ -280,12 +281,15 @@ const PlanSubscribeWalletForm = ({ plan, action = 'subscribe', onClose, onConfir
 
         <label className="plan-wallet-field-label">المبلغ (د.ل)</label>
         <input
-          type="number"
+          type="text"
+          inputMode="decimal"
           placeholder="المبلغ"
           value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          min="1"
-          step="0.01"
+          onChange={(e) => {
+            const raw = e.target.value;
+            if (isValidDecimalInput(raw)) setAmount(raw);
+          }}
+          onWheel={preventWheelChange}
           dir="ltr"
           className="plan-wallet-input"
           required
