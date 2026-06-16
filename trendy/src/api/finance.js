@@ -127,7 +127,8 @@ function buildFinanceQuery({ search, status, startDate, endDate, perPage, page }
  * GET /finance/revenue-overview
  */
 export async function fetchRevenueOverview({ startDate, endDate } = {}, forceRefresh = false) {
-  return staleWhileRevalidate('revenue_overview', async () => {
+  const cacheKey = `revenue_overview_${startDate || 'all'}_${endDate || 'all'}`;
+  return staleWhileRevalidate(cacheKey, async () => {
     const query = buildFinanceQuery({ startDate, endDate });
     const qs = query.toString();
     const path = qs
@@ -142,7 +143,8 @@ export async function fetchRevenueOverview({ startDate, endDate } = {}, forceRef
  * GET /finance/profit-overview
  */
 export async function fetchProfitOverview({ startDate, endDate } = {}, forceRefresh = false) {
-  return staleWhileRevalidate('profit_overview', async () => {
+  const cacheKey = `profit_overview_${startDate || 'all'}_${endDate || 'all'}`;
+  return staleWhileRevalidate(cacheKey, async () => {
     const query = buildFinanceQuery({ startDate, endDate });
     const qs = query.toString();
     const path = qs
@@ -276,7 +278,7 @@ export async function exportFinanceReport({ search, status, startDate, endDate }
 }
 
 /**
- * إيرادات شهرية — استدعاء profit-overview لكل شهر
+ * إيرادات شهرية — استدعاء revenue-overview لكل شهر
  */
 export async function fetchMonthlyRevenueChart(monthCount = 5) {
   const now = new Date();
@@ -287,13 +289,13 @@ export async function fetchMonthlyRevenueChart(monthCount = 5) {
       const monthEnd = new Date(now.getFullYear(), now.getMonth() - offset + 1, 0);
 
       try {
-        const profit = await fetchProfitOverview({
+        const overview = await fetchRevenueOverview({
           startDate: formatYmd(monthStart),
           endDate: formatYmd(monthEnd),
         });
         return {
           month: AR_MONTHS[monthStart.getMonth()],
-          revenue: Number(profit?.net_profit ?? profit?.total_revenue ?? 0),
+          revenue: resolveStoreNetRevenue(overview),
         };
       } catch {
         return {
