@@ -10,7 +10,6 @@ const CampaignCard = ({
   type,
   description,
   duration,
-  productsCount,
   price,
   bannerImage,
   status = 'active',
@@ -72,9 +71,6 @@ const CampaignCard = ({
         <div className="campaign-stats">
           <div className="stat">
             <span className="stat-value">{duration} أيام</span>
-          </div>
-          <div className="stat">
-            <span className="stat-value">{productsCount} منتجات</span>
           </div>
         </div>
       </div>

@@ -14,7 +14,6 @@ const ProductSelectionModal = ({
 }) => {
   const [selectedProducts, setSelectedProducts] = useState([]);
   const [productsList, setProductsList] = useState([]);
-  const [discountPercentage, setDiscountPercentage] = useState('10');
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [error, setError] = useState('');
 
@@ -22,7 +21,6 @@ const ProductSelectionModal = ({
     if (!isOpen) return undefined;
 
     setSelectedProducts([]);
-    setDiscountPercentage('10');
     setError('');
 
     if (!storeId) {
@@ -51,14 +49,12 @@ const ProductSelectionModal = ({
 
   if (!isOpen || !campaign) return null;
 
-  const maxAllowed = Number(campaign.productsCount) || 10;
-
   const handleProductToggle = (product) => {
     const isSelected = selectedProducts.find((p) => p.id === product.id);
 
     if (isSelected) {
       setSelectedProducts(selectedProducts.filter((p) => p.id !== product.id));
-    } else if (selectedProducts.length < maxAllowed) {
+    } else {
       setSelectedProducts([...selectedProducts, product]);
     }
   };
@@ -68,16 +64,11 @@ const ProductSelectionModal = ({
   };
 
   const handleActivate = () => {
-    const discount = Number(discountPercentage);
-    if (!discount || discount < 1 || discount > 99) {
-      setError('نسبة الخصم يجب أن تكون بين 1% و 99%');
-      return;
-    }
     if (selectedProducts.length === 0) {
       setError('يرجى اختيار منتج واحد على الأقل');
       return;
     }
-    onActivate(campaign, selectedProducts, discount);
+    onActivate(campaign, selectedProducts);
   };
 
   return (
@@ -97,27 +88,11 @@ const ProductSelectionModal = ({
             <span className="selection-label">الحملة المختارة:</span>
             <span className="selection-value">{campaign.title}</span>
           </div>
-          <div className="selection-detail-row">
-            <span className="selection-label">عدد المنتجات المسموح:</span>
-            <span className="selection-value">{maxAllowed} منتجات</span>
-          </div>
-          <div className="selection-detail-row">
-            <span className="selection-label">نسبة الخصم في الحملة:</span>
-            <input
-              type="number"
-              min="1"
-              max="99"
-              value={discountPercentage}
-              onChange={(e) => setDiscountPercentage(e.target.value)}
-              className="selection-discount-input"
-              dir="ltr"
-            />
-          </div>
 
           <div className="selection-counter-row">
             <span className="selection-label">المنتجات المختارة:</span>
-            <span className={`selection-counter ${selectedProducts.length === maxAllowed ? 'max-reached' : ''}`}>
-              {maxAllowed} / {selectedProducts.length}
+            <span className="selection-counter">
+              {selectedProducts.length}
             </span>
           </div>
         </div>

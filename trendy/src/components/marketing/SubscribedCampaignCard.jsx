@@ -11,7 +11,6 @@ const SubscribedCampaignCard = ({
   description,
   price,
   duration,
-  productsCount,
   dateRange,
   status,
   bannerImage,
@@ -73,9 +72,6 @@ const SubscribedCampaignCard = ({
           <div className="sub-campaign-products-header">
             <Package size={18} />
             <span>المنتجات المختارة للحملة</span>
-            <span className="sub-campaign-products-count">
-              ({selectedProducts.length} / {productsCount})
-            </span>
           </div>
           <div className="sub-campaign-products-list">
             {selectedProducts.map((product) => (
@@ -94,7 +90,6 @@ const SubscribedCampaignCard = ({
         </div>
         <div className="sub-campaign-stats">
           <span>{duration} أيام</span>
-          <span>{selectedProducts.length || productsCount} منتج</span>
         </div>
       </div>
     </div>

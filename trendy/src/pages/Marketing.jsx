@@ -94,7 +94,7 @@ const Marketing = () => {
     setIsProductModalOpen(true);
   };
 
-  const handleCampaignActivate = async (campaign, selectedProducts, discountPercentage) => {
+  const handleCampaignActivate = async (campaign, selectedProducts) => {
     if (!storeId) {
       showToast('لم يتم تحديد المتجر. يرجى تسجيل الدخول مرة أخرى.');
       return;
@@ -106,13 +106,11 @@ const Marketing = () => {
         storeId,
         megaCampaignId: campaign.megaCampaignId ?? campaign.id,
         productIds: selectedProducts.map((p) => p.id),
-        discountPercentage,
       });
 
       const entry = buildSubscriptionEntry(
         { ...campaign, bannerImage: getCampaignBanner(campaign) ?? campaign.bannerImage },
         selectedProducts,
-        discountPercentage,
         apiRes,
       );
       saveMyCampaign(storeId, entry);
@@ -178,7 +176,6 @@ const Marketing = () => {
                   type={campaign.type}
                   description={campaign.description}
                   duration={campaign.duration}
-                  productsCount={campaign.productsCount}
                   price={campaign.price}
                   bannerImage={getCampaignBanner(campaign)}
                   status={campaign.status}
@@ -200,7 +197,6 @@ const Marketing = () => {
                   description={campaign.description}
                   price={campaign.price}
                   duration={campaign.duration}
-                  productsCount={campaign.productsCount}
                   dateRange={campaign.dateRange}
                   status={campaign.status}
                   bannerImage={getCampaignBanner(campaign)}

@@ -237,20 +237,18 @@ export async function fetchStoreProducts({ storeId, perPage = 50 } = {}) {
 
 /**
  * POST /api/stores/{store}/campaigns/subscribe
- * body: { mega_campaign_id, product_ids, discount_percentage }
+ * body: { mega_campaign_id, product_ids }
  */
 export async function subscribeToCampaign({
   storeId,
   megaCampaignId,
   productIds,
-  discountPercentage,
 }) {
   return apiRequest(API_ENDPOINTS.storeCampaignSubscribe(storeId), {
     method: 'POST',
     body: {
       mega_campaign_id: Number(megaCampaignId),
       product_ids: productIds.map((id) => Number(id)),
-      discount_percentage: Number(discountPercentage),
     },
   });
 }
@@ -395,7 +393,7 @@ export async function enrichMyCampaigns(storeId, availableCampaigns = null) {
   return fetchMyCampaigns(storeId, availableCampaigns);
 }
 
-export function buildSubscriptionEntry(campaign, selectedProducts, discountPercentage, apiResponse = null) {
+export function buildSubscriptionEntry(campaign, selectedProducts, apiResponse = null) {
   if (apiResponse?.subscription || apiResponse?.campaign_subscription || apiResponse?.data?.subscription) {
     return mapSubscriptionFromApiResponse(apiResponse, campaign, selectedProducts);
   }
@@ -422,7 +420,6 @@ export function buildSubscriptionEntry(campaign, selectedProducts, discountPerce
       end: formatDate(endDate),
     },
     selectedProducts,
-    discountPercentage,
     bannerImage: campaign.bannerImage ?? null,
   };
 }
