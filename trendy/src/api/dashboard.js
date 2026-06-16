@@ -119,40 +119,15 @@ export async function fetchStoreMonthlyRevenueChart(monthCount = 5) {
 }
 
 /**
- * استدعاء لوحة التحكم الموحّدة — يُعيد الإحصائيات + الرسم البياني في طلب واحد
- * GET /stores/dashboard
+ * لوحة التحكم — يجمع الإحصائيات والرسم البياني من مسارات الـ API المتوفرة
+ * (total-new-orders, total-employees, finance/revenue-overview, ...)
  */
 export async function fetchStoreDashboard({ storeId } = {}, forceRefresh = false) {
   return staleWhileRevalidate('dashboard', async () => {
-    const query = new URLSearchParams();
-    if (storeId) query.set('store_id', String(storeId));
-    const qs = query.toString();
-    const path = qs ? `${API_ENDPOINTS.storeDashboard}?${qs}` : API_ENDPOINTS.storeDashboard;
-
-    const res = await apiRequest(path);
-    const data = res?.data ?? res ?? {};
-
-    const hasTrend = (v) => v != null && v !== '';
-
-    const stats = {
-      newOrders: data.new_orders ?? 0,
-      totalRevenue: data.total_revenue ?? 0,
-      activeProducts: data.active_products ?? 0,
-      totalEmployees: data.total_employees ?? 0,
-      salesGrowth: data.sales_growth ?? null,
-      trends: {
-        newOrders: hasTrend(data.new_orders_trend) ? formatDashboardTrend(data.new_orders_trend) : null,
-        revenue: hasTrend(data.revenue_trend) ? formatDashboardTrend(data.revenue_trend) : null,
-        products: hasTrend(data.products_trend) ? formatDashboardTrend(data.products_trend) : null,
-        growth: hasTrend(data.growth_trend) ? formatDashboardTrend(data.growth_trend) : null,
-      },
-    };
-
-    const monthlyRevenue = (data.monthly_revenue ?? []).map((item) => ({
-      name: AR_MONTHS[item.month] ?? item.month_name ?? '',
-      revenue: item.revenue ?? 0,
-    }));
-
+    const [stats, monthlyRevenue] = await Promise.all([
+      fetchDashboardStats({ storeId }),
+      fetchStoreMonthlyRevenueChart(5),
+    ]);
     return { stats, monthlyRevenue };
   }, TTL.FAST, forceRefresh);
 }

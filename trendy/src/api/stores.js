@@ -291,10 +291,10 @@ export function getApiErrorMessage(error, fallback = 'تعذّر إرسال ال
       return 'تعذّر تحميل بيانات المنتج بسبب خطأ في الخادم. حاول مرة أخرى لاحقاً.';
     }
     if (/undefined method/i.test(msg) || /App\\Models/i.test(msg)) {
-      return 'حدث خطأ في الخادم. حاول مرة أخرى لاحقاً.';
+      return 'تعذّر تنفيذ الطلب حالياً بسبب مشكلة في الخادم. حاول مرة أخرى بعد قليل.';
     }
     if (/App\\Http\\Controllers/i.test(msg) || /vendor\\laravel/i.test(msg)) {
-      return 'حدث خطأ في الخادم. حاول مرة أخرى لاحقاً.';
+      return 'تعذّر تنفيذ الطلب حالياً بسبب مشكلة في الخادم. حاول مرة أخرى بعد قليل.';
     }
     return msg;
   }

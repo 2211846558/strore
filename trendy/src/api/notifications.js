@@ -12,7 +12,8 @@ export async function fetchNotifications(params = {}, forceRefresh = false) {
   
   const queryString = query.toString();
   const path = `${API_ENDPOINTS.notifications}${queryString ? `?${queryString}` : ''}`;
-  return staleWhileRevalidate('notifications', () => apiRequest(path), TTL.DYNAMIC, forceRefresh);
+  const cacheKey = `notifications${queryString ? `:${queryString}` : ''}`;
+  return staleWhileRevalidate(cacheKey, () => apiRequest(path), TTL.DYNAMIC, forceRefresh);
 }
 
 /**
