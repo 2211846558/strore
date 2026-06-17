@@ -1,6 +1,6 @@
 import { apiRequest } from './client';
 import { API_ENDPOINTS } from './config';
-import { staleWhileRevalidate, TTL, clearCache } from './cache';
+
 
 function extractList(res) {
   const payload = res?.data ?? res;
@@ -282,23 +282,20 @@ export async function fetchEmployees({
 }
 
 export async function fetchAllEmployees(filters = {}) {
-  const forceRefresh = filters.forceRefresh === true;
-  return staleWhileRevalidate('employees', async () => {
-    const perPage = filters.perPage ?? 100;
-    const maxPages = filters.maxPages ?? null;
-    const all = [];
-    let page = 1;
-    let lastPage = 1;
+  const perPage = filters.perPage ?? 100;
+  const maxPages = filters.maxPages ?? null;
+  const all = [];
+  let page = 1;
+  let lastPage = 1;
 
-    do {
-      const result = await fetchEmployees({ ...filters, perPage, page });
-      all.push(...result.employees);
-      lastPage = Number(result.meta?.last_page ?? 1);
-      page += 1;
-    } while (page <= lastPage && (maxPages === null || page <= maxPages));
+  do {
+    const result = await fetchEmployees({ ...filters, perPage, page });
+    all.push(...result.employees);
+    lastPage = Number(result.meta?.last_page ?? 1);
+    page += 1;
+  } while (page <= lastPage && (maxPages === null || page <= maxPages));
 
-    return all;
-  }, TTL.SEMI, forceRefresh);
+  return all;
 }
 
 /**
@@ -313,7 +310,6 @@ export async function fetchEmployee(id) {
  * POST /employees — إضافة موظف
  */
 export async function createEmployee(payload) {
-  clearCache('employees');
   const res = await apiRequest(API_ENDPOINTS.employees, {
     method: 'POST',
     body: payload,
@@ -325,7 +321,6 @@ export async function createEmployee(payload) {
  * PATCH /employees/{id} — تعديل موظف
  */
 export async function updateEmployee(id, payload) {
-  clearCache('employees');
   const res = await apiRequest(API_ENDPOINTS.employee(id), {
     method: 'PATCH',
     body: payload,
@@ -337,7 +332,6 @@ export async function updateEmployee(id, payload) {
  * POST /employees/{id}/toggle — تفعيل / تعطيل
  */
 export async function toggleEmployee(id) {
-  clearCache('employees');
   const res = await apiRequest(API_ENDPOINTS.employeeToggle(id), { method: 'POST' });
   return mapEmployee(res?.data ?? res);
 }
@@ -346,7 +340,6 @@ export async function toggleEmployee(id) {
  * DELETE /employees/{id} — حذف موظف
  */
 export async function deleteEmployee(id) {
-  clearCache('employees');
   const res = await apiRequest(API_ENDPOINTS.employee(id), {
     method: 'DELETE',
   });

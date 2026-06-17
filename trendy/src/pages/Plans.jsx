@@ -4,8 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import PlanCard from '../components/plans/PlanCard';
 import SubscriptionCard from '../components/plans/SubscriptionCard';
 import PlanSubscribeWalletModal from '../components/plans/PlanSubscribeWalletModal';
+import { usePlans } from '../api/hooks/usePlans';
 import {
-  fetchPlans,
   mapPlanFromApi,
   mapStoreSubscription,
   extractStoreFromSubscriptionResponse,
@@ -27,36 +27,16 @@ const Plans = ({ onboarding = false }) => {
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [subscribeAction, setSubscribeAction] = useState('subscribe');
-  const [availablePlans, setAvailablePlans] = useState([]);
   const [subscriptionDates, setSubscriptionDates] = useState(null);
   const [mySubscriptions, setMySubscriptions] = useState([]);
   const [loadingSubscriptions, setLoadingSubscriptions] = useState(false);
-  const [loadingPlans, setLoadingPlans] = useState(true);
-  const [plansError, setPlansError] = useState('');
   const [toast, setToast] = useState(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setLoadingPlans(true);
-      setPlansError('');
-      try {
-        const plans = await fetchPlans();
-        if (!cancelled) {
-          setAvailablePlans(plans.map(mapPlanFromApi));
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setPlansError(getApiErrorMessage(err, 'تعذّر تحميل الخطط'));
-        }
-      } finally {
-        if (!cancelled) setLoadingPlans(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const { data: plansData, isLoading: loadingPlans, error: plansError } = usePlans();
+  const availablePlans = useMemo(
+    () => (plansData ?? []).map(mapPlanFromApi),
+    [plansData],
+  );
 
   useEffect(() => {
     if (!store || !storeId) {
@@ -307,7 +287,7 @@ const Plans = ({ onboarding = false }) => {
         {activeTab === 'available' && (
           <div className="plans-grid available-plans">
             {loadingPlans && <p className="no-results">جاري تحميل الخطط...</p>}
-            {!loadingPlans && plansError && <p className="no-results">{plansError}</p>}
+            {!loadingPlans && plansError && <p className="no-results">{plansError?.message || 'تعذّر تحميل الخطط'}</p>}
             {!loadingPlans && !plansError && filteredAvailablePlans.length > 0 ? (
               filteredAvailablePlans.map((plan) => (
                 <PlanCard

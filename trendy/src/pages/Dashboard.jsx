@@ -16,7 +16,7 @@ import {
   mergeStoreProfile,
   resolveStoreEmail,
 } from '../api/stores';
-import { fetchStoreDashboard } from '../api/dashboard';
+import { useDashboard } from '../api/hooks/useDashboard';
 import { getStoreLogoCandidates, resolveStoreLogoUrl } from '../api/media';
 import './Dashboard.css';
 
@@ -73,10 +73,14 @@ const Dashboard = () => {
   const [storeData, setStoreData] = useState(() => mapStoreToForm(store, null, user));
   const [toast, setToast] = useState(null);
   const [saving, setSaving] = useState(false);
-  const [statsLoading, setStatsLoading] = useState(true);
-  const [statsError, setStatsError] = useState('');
-  const [stats, setStats] = useState(null);
-  const [monthlyRevenue, setMonthlyRevenue] = useState([]);
+
+  const {
+    data: dashData,
+    isLoading: statsLoading,
+    error: statsError,
+  } = useDashboard(storeId);
+  const stats = dashData?.stats ?? null;
+  const monthlyRevenue = dashData?.monthlyRevenue ?? [];
 
   const loadStoreProfile = useCallback(async (cancelled) => {
     if (!storeId) return;
@@ -99,38 +103,6 @@ const Dashboard = () => {
     loadStoreProfile(cancelled);
     return () => { cancelled.current = true; };
   }, [loadStoreProfile]);
-
-  const loadDashboardData = useCallback(async (quiet = false, cancelled) => {
-    if (!quiet) setStatsLoading(true);
-    setStatsError('');
-    try {
-      const { stats, monthlyRevenue } = await fetchStoreDashboard({ storeId });
-      if (cancelled?.current) return;
-      setStats(stats);
-      setMonthlyRevenue(monthlyRevenue);
-    } catch (err) {
-      if (cancelled?.current) return;
-      if (err?.status === 401 || err?.isUnauthorized) {
-        setStatsError('');
-        setStats(null);
-        setMonthlyRevenue([]);
-        return;
-      }
-      if (!quiet) {
-        setStatsError(getApiErrorMessage(err, 'تعذّر تحميل إحصائيات لوحة التحكم'));
-        setStats(null);
-        setMonthlyRevenue([]);
-      }
-    } finally {
-      if (!quiet && !cancelled?.current) setStatsLoading(false);
-    }
-  }, [storeId]);
-
-  useEffect(() => {
-    const cancelled = { current: false };
-    loadDashboardData(false, cancelled);
-    return () => { cancelled.current = true; };
-  }, [loadDashboardData]);
 
   const showToast = (message) => {
     setToast(message);
@@ -200,7 +172,7 @@ const Dashboard = () => {
         <StoreCard store={storeData} />
       </div>
 
-      {statsError && <div className="dashboard-error">{statsError}</div>}
+      {statsError && <div className="dashboard-error">{statsError.message || 'تعذّر تحميل الإحصائيات'}</div>}
 
       <ChartsSection data={monthlyRevenue} loading={statsLoading} />
 

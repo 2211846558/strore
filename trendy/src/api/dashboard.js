@@ -1,7 +1,7 @@
 import { apiRequest } from './client';
 import { API_ENDPOINTS } from './config';
 import { fetchRevenueOverview, fetchProfitOverview } from './finance';
-import { staleWhileRevalidate, TTL } from './cache';
+
 
 const AR_MONTHS = [
   'يناير',
@@ -122,14 +122,12 @@ export async function fetchStoreMonthlyRevenueChart(monthCount = 5) {
  * لوحة التحكم — يجمع الإحصائيات والرسم البياني من مسارات الـ API المتوفرة
  * (total-new-orders, total-employees, finance/revenue-overview, ...)
  */
-export async function fetchStoreDashboard({ storeId } = {}, forceRefresh = false) {
-  return staleWhileRevalidate('dashboard', async () => {
-    const [stats, monthlyRevenue] = await Promise.all([
-      fetchDashboardStats({ storeId }),
-      fetchStoreMonthlyRevenueChart(5),
-    ]);
-    return { stats, monthlyRevenue };
-  }, TTL.FAST, forceRefresh);
+export async function fetchStoreDashboard({ storeId } = {}) {
+  const [stats, monthlyRevenue] = await Promise.all([
+    fetchDashboardStats({ storeId }),
+    fetchStoreMonthlyRevenueChart(5),
+  ]);
+  return { stats, monthlyRevenue };
 }
 
 async function safeDashboardCall(fn, fallback) {
@@ -144,47 +142,45 @@ async function safeDashboardCall(fn, fallback) {
 /**
  * إحصائيات لوحة التحكم من الـ API الموجودة فقط
  */
-export async function fetchDashboardStats({ storeId } = {}, forceRefresh = false) {
-  return staleWhileRevalidate('dashboard_stats', async () => {
-    const [newOrders, revenueOverview, profitOverview, activeProducts, totalEmployees] =
-      await Promise.all([
-        safeDashboardCall(fetchTotalNewOrders, 0),
-        safeDashboardCall(() => fetchRevenueOverview(), {}),
-        safeDashboardCall(() => fetchProfitOverview(), {}),
-        safeDashboardCall(() => fetchActiveProductsCount({ storeId }), 0),
-        safeDashboardCall(fetchTotalEmployees, 0),
-      ]);
+export async function fetchDashboardStats({ storeId } = {}) {
+  const [newOrders, revenueOverview, profitOverview, activeProducts, totalEmployees] =
+    await Promise.all([
+      safeDashboardCall(fetchTotalNewOrders, 0),
+      safeDashboardCall(() => fetchRevenueOverview(), {}),
+      safeDashboardCall(() => fetchProfitOverview(), {}),
+      safeDashboardCall(() => fetchActiveProductsCount({ storeId }), 0),
+      safeDashboardCall(fetchTotalEmployees, 0),
+    ]);
 
-    const totalRevenue = pickNumber(
-      revenueOverview?.total_revenue,
-      revenueOverview?.revenue,
-      revenueOverview?.net_revenue,
-      revenueOverview?.amount,
-    ) ?? 0;
+  const totalRevenue = pickNumber(
+    revenueOverview?.total_revenue,
+    revenueOverview?.revenue,
+    revenueOverview?.net_revenue,
+    revenueOverview?.amount,
+  ) ?? 0;
 
-    const salesGrowth = pickNumber(
-      profitOverview?.growth_rate,
-      profitOverview?.sales_growth,
-      profitOverview?.growth_percentage,
-      profitOverview?.growth,
-      revenueOverview?.growth_rate,
-      revenueOverview?.growth_percentage,
-    );
+  const salesGrowth = pickNumber(
+    profitOverview?.growth_rate,
+    profitOverview?.sales_growth,
+    profitOverview?.growth_percentage,
+    profitOverview?.growth,
+    revenueOverview?.growth_rate,
+    revenueOverview?.growth_percentage,
+  );
 
-    return {
-      newOrders,
-      totalRevenue,
-      activeProducts,
-      totalEmployees,
-      salesGrowth,
-      trends: {
-        newOrders: formatDashboardTrend(
-          pickGrowth(revenueOverview) ?? pickNumber(revenueOverview?.orders_change),
-        ),
-        revenue: formatDashboardTrend(pickGrowth(revenueOverview) ?? pickGrowth(profitOverview)),
-        products: formatDashboardTrend(revenueOverview?.products_change),
-        growth: formatDashboardTrend(pickGrowth(profitOverview)),
-      },
-    };
-  }, TTL.FAST, forceRefresh);
+  return {
+    newOrders,
+    totalRevenue,
+    activeProducts,
+    totalEmployees,
+    salesGrowth,
+    trends: {
+      newOrders: formatDashboardTrend(
+        pickGrowth(revenueOverview) ?? pickNumber(revenueOverview?.orders_change),
+      ),
+      revenue: formatDashboardTrend(pickGrowth(revenueOverview) ?? pickGrowth(profitOverview)),
+      products: formatDashboardTrend(revenueOverview?.products_change),
+      growth: formatDashboardTrend(pickGrowth(profitOverview)),
+    },
+  };
 }

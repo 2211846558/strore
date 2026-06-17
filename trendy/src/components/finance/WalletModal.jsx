@@ -1,14 +1,37 @@
 import React, { useState, useEffect } from 'react';
 import { X, Wallet, Plus, ArrowDownLeft, ArrowUpRight, Minus } from 'lucide-react';
 import SadadRechargeModal from './SadadRechargeModal';
-import { useWallet } from '../../context/WalletContext';
+import { useWalletBalance, useChargeWallet, useWithdrawWallet } from '../../api/hooks/useWallet';
+import { resolveWalletChargeContext } from '../../api/wallet';
+import { useStore } from '../../context/AuthContext';
 import { getApiErrorMessage } from '../../api/stores';
 import { isValidDecimalInput, preventWheelChange } from '../../utils/numericInput';
 import './WalletModal.css';
 
 const WalletModal = ({ isOpen, onClose, onToast }) => {
-  const { balance, status, transactions, loading, rechargeViaStripe, withdrawFromWallet, refreshWallet } =
-    useWallet();
+  const { storeId } = useStore();
+  const { data: walletData, isLoading, refetch: refreshWallet } = useWalletBalance();
+  const chargeMutation = useChargeWallet();
+  const withdrawMutation = useWithdrawWallet();
+  const balance = walletData?.balance ?? 0;
+  const status = walletData?.status === 'active' ? 'نشطة' : walletData?.status === 'suspended' ? 'معلّقة' : walletData?.status === 'inactive' ? 'غير نشطة' : walletData?.status === 'frozen' ? 'مجمّدة' : 'نشطة';
+  const transactions = [];
+  const loading = isLoading;
+  const rechargeViaStripe = async ({ paymentMethodId, amount, cardLast4 }) => {
+    const charged = await chargeMutation.mutateAsync({ storeId, amount: Number(amount), paymentMethodId });
+    await refreshWallet();
+    return charged?.balance ?? Number(amount);
+  };
+  const withdrawFromWallet = async ({ amount, cardNumber }) => {
+    const value = Number(amount);
+    if (!value || value <= 0) throw new Error('يرجى إدخال مبلغ صالح');
+    if (!cardNumber?.trim()) throw new Error('يرجى إدخال رقم البطاقة');
+    const chargeContext = await resolveWalletChargeContext(storeId);
+    const targetStoreId = chargeContext.storeId;
+    await withdrawMutation.mutateAsync({ storeId: targetStoreId, amount: value, cardNumber: cardNumber.trim() });
+    await refreshWallet();
+    return value;
+  };
   const [rechargeOpen, setRechargeOpen] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState('');

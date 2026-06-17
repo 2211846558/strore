@@ -1,10 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import CampaignCard from '../components/marketing/CampaignCard';
 import SubscribedCampaignCard from '../components/marketing/SubscribedCampaignCard';
 import CampaignPaymentModal from '../components/marketing/CampaignPaymentModal';
 import ProductSelectionModal from '../components/marketing/ProductSelectionModal';
 import {
-  fetchAvailableCampaigns,
   fetchMyCampaigns,
   saveMyCampaign,
   subscribeToCampaign,
@@ -12,20 +11,19 @@ import {
   resolveCampaignBanner,
   isStoreSubscribedToCampaign,
 } from '../api/campaigns';
+import { useCampaigns } from '../api/hooks/useCampaigns';
 import { getApiErrorMessage } from '../api/stores';
 import { useStore } from '../context/AuthContext';
-import { useWallet } from '../context/WalletContext';
+import { useWalletBalance } from '../api/hooks/useWallet';
 import './Marketing.css';
 
 const Marketing = () => {
   const { storeId } = useStore();
-  const { balance, refreshWallet } = useWallet();
+  const { data: walletData, refetch: refreshWallet } = useWalletBalance();
+  const balance = walletData?.balance ?? 0;
   const [activeTab, setActiveTab] = useState('available');
-  const [availableCampaigns, setAvailableCampaigns] = useState([]);
   const [myCampaigns, setMyCampaigns] = useState([]);
-  const [loadingCampaigns, setLoadingCampaigns] = useState(true);
   const [loadingMyCampaigns, setLoadingMyCampaigns] = useState(false);
-  const [campaignsError, setCampaignsError] = useState('');
   const [toast, setToast] = useState('');
 
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
@@ -38,24 +36,9 @@ const Marketing = () => {
     setTimeout(() => setToast(null), 3000);
   };
 
-  const loadCampaigns = useCallback(async () => {
-    setLoadingCampaigns(true);
-    setCampaignsError('');
-    try {
-      const campaigns = await fetchAvailableCampaigns();
-      setAvailableCampaigns(campaigns);
-    } catch (err) {
-      setCampaignsError(getApiErrorMessage(err, 'تعذّر تحميل الحملات المتاحة'));
-    } finally {
-      setLoadingCampaigns(false);
-    }
-  }, []);
+  const { data: availableCampaigns = [], isLoading: loadingCampaigns, error: campaignsError } = useCampaigns();
 
-  useEffect(() => {
-    loadCampaigns();
-  }, [loadCampaigns]);
-
-  const loadMyCampaigns = useCallback(async () => {
+  const loadMyCampaigns = async () => {
     if (!storeId) {
       setMyCampaigns([]);
       return;
@@ -69,13 +52,13 @@ const Marketing = () => {
     } finally {
       setLoadingMyCampaigns(false);
     }
-  }, [storeId, availableCampaigns]);
+  };
 
   useEffect(() => {
     if (activeTab === 'my-campaigns') {
       loadMyCampaigns();
     }
-  }, [activeTab, loadMyCampaigns]);
+  }, [activeTab, availableCampaigns]);
 
   const getCampaignBanner = (campaign) =>
     resolveCampaignBanner(campaign, availableCampaigns);
@@ -114,9 +97,7 @@ const Marketing = () => {
         apiRes,
       );
       saveMyCampaign(storeId, entry);
-      const campaigns = await fetchAvailableCampaigns();
-      setAvailableCampaigns(campaigns);
-      setMyCampaigns(await fetchMyCampaigns(storeId, campaigns));
+      setMyCampaigns(await fetchMyCampaigns(storeId, availableCampaigns));
       await refreshWallet();
 
       setIsProductModalOpen(false);
@@ -164,7 +145,7 @@ const Marketing = () => {
         {activeTab === 'available' && (
           <>
             {loadingCampaigns && <p className="no-results">جاري تحميل الحملات...</p>}
-            {campaignsError && <p className="form-error-banner">{campaignsError}</p>}
+            {campaignsError && <p className="form-error-banner">{campaignsError?.message || 'تعذّر تحميل الحملات المتاحة'}</p>}
             {!loadingCampaigns && !campaignsError && visibleCampaigns.length === 0 && (
               <p className="no-results">لا توجد حملات متاحة حالياً.</p>
             )}

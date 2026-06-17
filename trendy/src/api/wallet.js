@@ -1,7 +1,7 @@
 import { apiRequest } from './client';
 import { API_ENDPOINTS } from './config';
 import { extractListFromResponse } from './finance';
-import { staleWhileRevalidate, TTL, clearCache } from './cache';
+
 import {
   fetchCurrentUser,
   getStoredUser,
@@ -14,11 +14,9 @@ import {
 /**
  * GET /api/wallet/balance
  */
-export async function getWalletBalance(forceRefresh = false) {
-  return staleWhileRevalidate('wallet', async () => {
-    const res = await apiRequest(API_ENDPOINTS.walletBalance);
-    return res?.data ?? res;
-  }, TTL.DYNAMIC, forceRefresh);
+export async function getWalletBalance() {
+  const res = await apiRequest(API_ENDPOINTS.walletBalance);
+  return res?.data ?? res;
 }
 
 export async function getStoreWalletBalance({ storeId } = {}) {

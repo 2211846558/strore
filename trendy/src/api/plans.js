@@ -1,7 +1,7 @@
 import { apiRequest } from './client';
 import { API_ENDPOINTS } from './config';
 import { fetchTransactions, fetchAllTransactions } from './finance';
-import { staleWhileRevalidate, TTL, clearCache } from './cache';
+
 
 function extractList(res) {
   const payload = res?.data ?? res;
@@ -780,18 +780,15 @@ export function extractStoreFromSubscriptionResponse(response, plan) {
 /**
  * GET /api/plans — الخطط النشطة المتاحة للتجار
  */
-export async function fetchPlans(forceRefresh = false) {
-  return staleWhileRevalidate('plans', async () => {
-    const res = await apiRequest(API_ENDPOINTS.plans);
-    return extractList(res);
-  }, TTL.STATIC, forceRefresh);
+export async function fetchPlans() {
+  const res = await apiRequest(API_ENDPOINTS.plans);
+  return extractList(res);
 }
 
 /**
  * POST /api/stores/subscribe — body: { plan_id, store_id }
  */
 export async function subscribeToPlan({ planId, storeId }) {
-  clearCache('plans');
   return apiRequest(API_ENDPOINTS.storeSubscribe, {
     method: 'POST',
     body: {
@@ -805,7 +802,6 @@ export async function subscribeToPlan({ planId, storeId }) {
  * POST /api/stores/{store}/renew
  */
 export async function renewStorePlan(storeId) {
-  clearCache('plans');
   return apiRequest(API_ENDPOINTS.storePlanRenew(storeId), { method: 'POST' });
 }
 
@@ -813,7 +809,6 @@ export async function renewStorePlan(storeId) {
  * POST /api/stores/{store}/change-plan/{plan}
  */
 export async function changeStorePlan(storeId, planId) {
-  clearCache('plans');
   return apiRequest(API_ENDPOINTS.storePlanChange(storeId, planId), { method: 'POST' });
 }
 

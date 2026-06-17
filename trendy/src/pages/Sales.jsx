@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   ShoppingCart,
   FileText,
@@ -11,11 +12,6 @@ import {
   X,
 } from 'lucide-react';
 import {
-  fetchPosInit,
-  fetchPosCart,
-  addToPosCart,
-  removeFromPosCart,
-  checkoutPosCart,
   refundPosItem,
   exchangePosItem,
   fetchPosInvoices,
@@ -24,10 +20,16 @@ import {
   getVariantStock,
   resolveVariant,
   getExchangePriceDiff,
-  mapOrderToInvoice,
 } from '../api/pos';
 import { fetchOrders } from '../api/orders';
 import { getApiErrorMessage } from '../api/stores';
+import {
+  usePosInit,
+  usePosCart,
+  useAddToCart,
+  useRemoveFromCart,
+  useCheckoutCart,
+} from '../api/hooks/usePos';
 import { useAuth, useStore } from '../context/AuthContext';
 import VariantModal from '../components/sales/VariantModal';
 import CreateInvoiceModal from '../components/sales/CreateInvoiceModal';
@@ -41,17 +43,13 @@ const calcInvoiceTotal = (items) =>
 const Sales = () => {
   const { user } = useAuth();
   const { storeId } = useStore();
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState('cart');
-  const [products, setProducts] = useState([]);
-  const [cart, setCart] = useState([]);
-  const [cartTotal, setCartTotal] = useState(0);
   const [invoices, setInvoices] = useState([]);
   const [invoiceSearch, setInvoiceSearch] = useState('');
   const [debouncedInvoiceSearch, setDebouncedInvoiceSearch] = useState('');
-  const [loadingProducts, setLoadingProducts] = useState(true);
-  const [loadingCart, setLoadingCart] = useState(true);
   const [loadingInvoices, setLoadingInvoices] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+  const [isManualSaving, setIsManualSaving] = useState(false);
   const [error, setError] = useState('');
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [variantOpen, setVariantOpen] = useState(false);
@@ -61,7 +59,7 @@ const Sales = () => {
   const [pendingExchange, setPendingExchange] = useState(null);
   const [toast, setToast] = useState(null);
 
-  const [activeAction, setActiveAction] = useState(null); // 'refund' | 'exchange' | null
+  const [activeAction, setActiveAction] = useState(null);
   const [orderSearchQuery, setOrderSearchQuery] = useState('');
   const [debouncedOrderSearch, setDebouncedOrderSearch] = useState('');
   const [orderSearchResults, setOrderSearchResults] = useState([]);
@@ -122,39 +120,15 @@ const Sales = () => {
     };
   }, [dropdownOpen]);
 
-  const loadInitData = useCallback(async () => {
-    setLoadingProducts(true);
-    setLoadingCart(true);
-    try {
-      const { catalog, cart } = await fetchPosInit();
-      setProducts(catalog);
-      setCart(cart.items);
-      setCartTotal(cart.total);
-    } catch (err) {
-      setError(getApiErrorMessage(err, 'تعذّر تحميل بيانات المبيعات'));
-      setProducts([]);
-      setCart([]);
-      setCartTotal(0);
-    } finally {
-      setLoadingProducts(false);
-      setLoadingCart(false);
-    }
-  }, []);
+  const { data: posData, isLoading: loadingProducts } = usePosInit();
+  const { data: cartData, isLoading: loadingCart } = usePosCart();
+  const addMutation = useAddToCart();
+  const removeMutation = useRemoveFromCart();
+  const checkoutMutation = useCheckoutCart();
 
-  const loadCart = useCallback(async () => {
-    setLoadingCart(true);
-    try {
-      const result = await fetchPosCart();
-      setCart(result.items);
-      setCartTotal(result.total);
-    } catch (err) {
-      setError(getApiErrorMessage(err, 'تعذّر تحميل السلة'));
-      setCart([]);
-      setCartTotal(0);
-    } finally {
-      setLoadingCart(false);
-    }
-  }, []);
+  const products = posData?.catalog ?? [];
+  const cart = cartData?.items ?? [];
+  const cartTotal = cartData?.total ?? 0;
 
   const loadInvoices = useCallback(async () => {
     setLoadingInvoices(true);
@@ -170,10 +144,6 @@ const Sales = () => {
   }, [debouncedInvoiceSearch]);
 
   useEffect(() => {
-    loadInitData();
-  }, [loadInitData]);
-
-  useEffect(() => {
     if (activeTab === 'invoices') loadInvoices();
   }, [activeTab, loadInvoices]);
 
@@ -186,8 +156,12 @@ const Sales = () => {
   }, [invoices, invoiceSearch]);
 
   const refreshAll = async () => {
-    await Promise.all([loadInitData(), activeTab === 'invoices' ? loadInvoices() : Promise.resolve()]);
+    queryClient.invalidateQueries({ queryKey: ['posInit'] });
+    queryClient.invalidateQueries({ queryKey: ['posCart'] });
+    if (activeTab === 'invoices') await loadInvoices();
   };
+
+  const isSaving = addMutation.isPending || removeMutation.isPending || checkoutMutation.isPending || isManualSaving;
 
   const openProduct = (product) => {
     if (!isProductAvailable(product)) {
@@ -210,7 +184,7 @@ const Sales = () => {
     }
 
     if (pendingExchange) {
-      setIsSaving(true);
+      setIsManualSaving(true);
       try {
         await exchangePosItem({
           oldOrderId: pendingExchange.orderId,
@@ -235,7 +209,7 @@ const Sales = () => {
       } catch (err) {
         showToast(getApiErrorMessage(err, 'تعذّر إتمام التبديل'));
       } finally {
-        setIsSaving(false);
+        setIsManualSaving(false);
       }
       return;
     }
@@ -251,50 +225,38 @@ const Sales = () => {
       return;
     }
 
-    setIsSaving(true);
     try {
-      await addToPosCart({ variantId: resolved.id, quantity: 1 });
-      await loadCart();
+      await addMutation.mutateAsync({ variantId: resolved.id, quantity: 1 });
       showToast(`تمت إضافة «${product.name}» إلى السلة`);
     } catch (err) {
       showToast(getApiErrorMessage(err, 'تعذّر إضافة المنتج للسلة'));
-    } finally {
-      setIsSaving(false);
     }
   };
 
   const removeFromCart = async (cartItemId) => {
-    setIsSaving(true);
     try {
-      await removeFromPosCart(cartItemId);
-      await loadCart();
+      await removeMutation.mutateAsync(cartItemId);
       showToast('تم حذف المنتج من السلة');
     } catch (err) {
       showToast(getApiErrorMessage(err, 'تعذّر حذف المنتج'));
-    } finally {
-      setIsSaving(false);
     }
   };
 
   const handleCreateInvoice = async (customerId) => {
-    setIsSaving(true);
     try {
-      const invoice = await checkoutPosCart({ customerId });
-      await loadCart();
+      const invoice = await checkoutMutation.mutateAsync({ customerId });
       await loadInvoices();
       setActiveTab('invoices');
       showToast(`تم إنشاء الفاتورة ${invoice.id} بنجاح`);
     } catch (err) {
       throw err;
-    } finally {
-      setIsSaving(false);
     }
   };
 
   const handleRefund = async (chosenQty) => {
     if (!refundTarget) return;
     const { line } = refundTarget;
-    setIsSaving(true);
+    setIsManualSaving(true);
     try {
       await refundPosItem({
         orderId: line.orderId,
@@ -307,13 +269,13 @@ const Sales = () => {
     } catch (err) {
       showToast(getApiErrorMessage(err, 'تعذّر إتمام الاسترداد'));
     } finally {
-      setIsSaving(false);
+      setIsManualSaving(false);
     }
   };
 
   const handleExchangeSelect = async (selectedNewVariants, chosenQty) => {
     if (!exchangeTarget) return;
-    setIsSaving(true);
+    setIsManualSaving(true);
     try {
       const qtyAllocations = [];
       let remainingOld = chosenQty;
@@ -356,7 +318,7 @@ const Sales = () => {
     } catch (err) {
       showToast(getApiErrorMessage(err, 'تعذّر إتمام الاستبدال'));
     } finally {
-      setIsSaving(false);
+      setIsManualSaving(false);
     }
   };
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Search, Plus, Eye, Package, CheckCircle2,
   Truck, Clock, BarChart2, Edit2
@@ -7,14 +7,16 @@ import AddShipmentModal from '../components/inventory/AddShipmentModal';
 import ShipmentDetailModal from '../components/inventory/ShipmentDetailModal';
 import ShipmentStatusControl from '../components/inventory/ShipmentStatusControl';
 import {
-  createShipment,
-  updateShipment,
-  fetchShipments,
-  archiveShipment,
-  updateShipmentStatus,
   SHIPMENT_STATUS_FILTER_OPTIONS,
 } from '../api/inventory';
 import { getApiErrorMessage } from '../api/stores';
+import {
+  useShipments,
+  useCreateShipment,
+  useUpdateShipment,
+  useArchiveShipment,
+  useUpdateShipmentStatus,
+} from '../api/hooks/useInventory';
 import { useStore } from '../context/AuthContext';
 import './Inventory.css';
 
@@ -37,18 +39,12 @@ function matchesShipmentSearch(shipment, term) {
 const Inventory = () => {
   const { storeId } = useStore();
 
-  const [allShipments, setAllShipments] = useState([]);
-  const [stats, setStats] = useState({ total: 0, pending: 0, received: 0, totalQty: 0 });
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [isSaving, setIsSaving] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
   const [isShipmentModalOpen, setIsShipmentModalOpen] = useState(false);
   const [editingShipment, setEditingShipment] = useState(null);
   const [detailShipment, setDetailShipment] = useState(null);
-  const [statusUpdatingId, setStatusUpdatingId] = useState(null);
   const [toast, setToast] = useState(null);
 
   const showToast = (message) => {
@@ -61,75 +57,59 @@ const Inventory = () => {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  const loadShipments = useCallback(async () => {
-    if (!storeId) return;
-    setIsLoading(true);
-    setError('');
-    try {
-      const searchTerm = debouncedSearch.trim();
-      const result = await fetchShipments(
-        {
-          storeId,
-          status: statusFilter,
-          search: searchTerm || undefined,
-        },
-        Boolean(searchTerm),
-      );
-      setAllShipments(result.shipments || []);
-      setStats({
-        total: result.stats?.total || 0,
-        pending: result.stats?.pending || 0,
-        received: result.stats?.received || 0,
-        totalQty: result.stats?.totalQty || 0,
-      });
-    } catch (err) {
-      setError(getApiErrorMessage(err, 'تعذّر تحميل الشحنات من الخادم.'));
-    } finally {
-      setIsLoading(false);
-    }
-  }, [storeId, statusFilter, debouncedSearch]);
+  const filters = useMemo(
+    () => ({
+      storeId,
+      status: statusFilter,
+      search: debouncedSearch.trim() || undefined,
+    }),
+    [storeId, statusFilter, debouncedSearch],
+  );
 
-  useEffect(() => {
-    loadShipments();
-  }, [loadShipments]);
+  const { data: shipmentsData, isLoading, error } = useShipments(filters);
+  const allShipments = shipmentsData?.shipments ?? [];
+  const stats = shipmentsData?.stats ?? { total: 0, pending: 0, received: 0, totalQty: 0 };
 
   const displayedShipments = debouncedSearch.trim()
     ? allShipments.filter((shipment) => matchesShipmentSearch(shipment, debouncedSearch))
     : allShipments;
 
+  const createMutation = useCreateShipment();
+  const updateMutation = useUpdateShipment();
+  const archiveMutation = useArchiveShipment();
+  const statusMutation = useUpdateShipmentStatus();
+
+  const isSaving =
+    createMutation.isPending ||
+    updateMutation.isPending ||
+    archiveMutation.isPending;
+  const statusUpdatingId = statusMutation.isPending
+    ? (statusMutation.variables?.shipment?.id ?? null)
+    : null;
+
   /* ── حفظ شحنة ── */
   const handleSaveShipment = async (shipmentData) => {
-    setIsSaving(true);
-    try {
-      const payload = {
-        storeId,
-        productId: shipmentData.productId,
-        items: shipmentData.items,
-        batchNumber: shipmentData.batchNumber,
-        supplierName: shipmentData.supplierName,
-        costPrice: shipmentData.costPrice ?? shipmentData.items[0]?.unitCost,
-        sellingPrice: shipmentData.sellingPrice ?? shipmentData.items[0]?.sellingPrice,
-      };
+    const payload = {
+      storeId,
+      productId: shipmentData.productId,
+      items: shipmentData.items,
+      batchNumber: shipmentData.batchNumber,
+      supplierName: shipmentData.supplierName,
+      costPrice: shipmentData.costPrice ?? shipmentData.items[0]?.unitCost,
+      sellingPrice: shipmentData.sellingPrice ?? shipmentData.items[0]?.sellingPrice,
+    };
 
-      if (editingShipment?.id) {
-        await updateShipment(editingShipment.id, payload);
-        showToast(`تم تحديث الشحنة بنجاح.`);
-      } else {
-        await createShipment(payload);
-        showToast(`تمت إضافة الشحنة بنجاح.`);
-      }
-
-      loadShipments();
-      setIsShipmentModalOpen(false);
-      setEditingShipment(null);
-    } catch (err) {
-      setError(getApiErrorMessage(err, 'تعذّر حفظ الشحنة.'));
-      throw err;
-    } finally {
-      setIsSaving(false);
+    if (editingShipment?.id) {
+      await updateMutation.mutateAsync({ id: editingShipment.id, ...payload });
+      showToast('تم تحديث الشحنة بنجاح.');
+    } else {
+      await createMutation.mutateAsync(payload);
+      showToast('تمت إضافة الشحنة بنجاح.');
     }
-  };
 
+    setIsShipmentModalOpen(false);
+    setEditingShipment(null);
+  };
 
   const handleOpenAdd = () => {
     setEditingShipment(null);
@@ -147,40 +127,26 @@ const Inventory = () => {
 
   const handleArchiveShipment = async (shipment) => {
     if (!shipment?.id) return;
-    setIsSaving(true);
-    setError('');
     try {
-      await archiveShipment(shipment, { storeId });
+      await archiveMutation.mutateAsync({ shipment, storeId });
       showToast('تم أرشفة الشحنة بنجاح.');
       setIsShipmentModalOpen(false);
       setEditingShipment(null);
       setDetailShipment(null);
-      await loadShipments();
     } catch (err) {
-      const message = getApiErrorMessage(err, 'تعذّر تحديث حالة الشحنة.');
-      setError(message);
-      showToast(message);
+      showToast(getApiErrorMessage(err, 'تعذّر تحديث حالة الشحنة.'));
       throw err;
-    } finally {
-      setIsSaving(false);
     }
   };
 
   const handleStatusChange = async (shipment, targetStatus) => {
     if (!shipment?.id) return;
-    setStatusUpdatingId(shipment.id);
-    setError('');
     try {
-      await updateShipmentStatus(shipment, targetStatus, { storeId });
+      await statusMutation.mutateAsync({ shipment, targetStatus, storeId });
       showToast('تم تحديث حالة الشحنة بنجاح.');
-      await loadShipments();
     } catch (err) {
-      const message = getApiErrorMessage(err, 'تعذّر تحديث حالة الشحنة.');
-      setError(message);
-      showToast(message);
+      showToast(getApiErrorMessage(err, 'تعذّر تحديث حالة الشحنة.'));
       throw err;
-    } finally {
-      setStatusUpdatingId(null);
     }
   };
 
@@ -255,7 +221,7 @@ const Inventory = () => {
         </div>
       </div>
 
-      {error && <p className="inventory-error">{error}</p>}
+      {error && <p className="inventory-error">{error?.message || 'تعذّر تحميل الشحنات من الخادم.'}</p>}
 
       {/* ── Shipments Table ── */}
       <div className="shipment-table-wrapper">
@@ -285,13 +251,11 @@ const Inventory = () => {
               </tr>
             ) : (
               displayedShipments.map((shipment) => {
-                /* حساب الكمية الفعلية من مجموع تنوعات الشحنة */
                 const computedQty = (shipment.items || []).reduce(
                   (sum, item) => sum + Number(item.quantity || 0),
                   0
                 );
 
-                /* أسماء المنتجات الفريدة */
                 const productNames = [
                   ...new Set(
                     (shipment.items || [])
@@ -338,7 +302,7 @@ const Inventory = () => {
                       <ShipmentStatusControl
                         shipment={shipment}
                         onStatusChange={handleStatusChange}
-                        disabled={statusUpdatingId === shipment.id || isSaving}
+                        disabled={!!statusUpdatingId || isSaving}
                       />
                     </td>
                     <td onClick={(e) => e.stopPropagation()}>

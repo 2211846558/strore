@@ -1,6 +1,6 @@
 import { API_ENDPOINTS } from './config';
 import { apiRequest } from './client';
-import { staleWhileRevalidate, TTL } from './cache';
+
 
 const FIELD_LABELS = {
   user_name: 'اسم مدير المتجر',
@@ -97,14 +97,12 @@ export async function submitStoreJoinRequest(form, logoFile) {
 /**
  * GET /api/zones — قائمة المناطق (للمتاجر المحلية)
  */
-export async function fetchZones(forceRefresh = false) {
-  return staleWhileRevalidate('zones', async () => {
-    const res = await apiRequest(API_ENDPOINTS.zones, { auth: false });
-    const payload = res?.data ?? res;
-    if (Array.isArray(payload)) return payload;
-    if (Array.isArray(payload?.data)) return payload.data;
-    return [];
-  }, TTL.STATIC, forceRefresh);
+export async function fetchZones() {
+  const res = await apiRequest(API_ENDPOINTS.zones, { auth: false });
+  const payload = res?.data ?? res;
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.data)) return payload.data;
+  return [];
 }
 
 const translateValidationMessage = (message, field) => {
@@ -220,11 +218,9 @@ export function mergeStoreProfile(apiStore, sessionStore, user = null) {
 /**
  * GET /api/stores/{store}
  */
-export async function fetchStore(storeId, forceRefresh = false) {
-  return staleWhileRevalidate(`store_${storeId}`, async () => {
-    const res = await apiRequest(API_ENDPOINTS.storeShow(storeId));
-    return res?.data ?? res;
-  }, TTL.SEMI, forceRefresh);
+export async function fetchStore(storeId) {
+  const res = await apiRequest(API_ENDPOINTS.storeShow(storeId));
+  return res?.data ?? res;
 }
 
 /**

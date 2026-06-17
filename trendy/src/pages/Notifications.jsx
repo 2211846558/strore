@@ -1,11 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { Eye, CheckCheck, CheckCircle2, Package, Store, AlertCircle, Bell, Loader } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Eye, CheckCheck, CheckCircle2, Package, Store, AlertCircle, Bell } from 'lucide-react';
 import NotificationDetailModal from '../components/notifications/NotificationDetailModal';
-import {
-  fetchNotifications,
-  markNotificationAsRead,
-  markAllNotificationsAsRead,
-} from '../api/notifications';
+import { useNotifications, useMarkAsRead, useMarkAllAsRead } from '../api/hooks/useNotifications';
 import './Notifications.css';
 
 const ICONS = {
@@ -80,67 +76,30 @@ const mapNotificationFromBackend = (n) => {
 };
 
 const Notifications = () => {
-  const [notifications, setNotifications] = useState([]);
-  const [unreadCount, setUnreadCount] = useState(0);
   const [selectedNotification, setSelectedNotification] = useState(null);
   const [toast, setToast] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
 
   const showToast = (message) => {
     setToast(message);
     setTimeout(() => setToast(null), 2800);
   };
 
-  const loadNotifications = async (quiet = false, cancelled) => {
-    try {
-      if (!quiet) setLoading(true);
-      const res = await fetchNotifications({ perPage: 100 });
-      if (cancelled?.current) return;
-      const rawList = res?.data || [];
-      const mapped = rawList.map(mapNotificationFromBackend);
-      setNotifications(mapped);
-      
-      const count = res?.unread_count ?? mapped.filter((n) => !n.read).length;
-      setUnreadCount(count);
-      
-      window.dispatchEvent(new CustomEvent('unread-notifications-changed', { detail: count }));
-      
-      setError(null);
-    } catch (err) {
-      if (cancelled?.current) return;
-      console.error('Error fetching notifications:', err);
-      if (!quiet) setError('تعذر تحميل الإشعارات. يرجى التحقق من اتصالك بالإنترنت.');
-    } finally {
-      if (!quiet && !cancelled?.current) setLoading(false);
-    }
-  };
+  const { data: notifRes, isLoading: loading, error } = useNotifications({ perPage: 100 });
+  const markReadMutation = useMarkAsRead();
+  const markAllMutation = useMarkAllAsRead();
+
+  const rawList = notifRes?.data ?? [];
+  const notifications = rawList.map(mapNotificationFromBackend);
+
+  const unreadCount = notifRes?.unread_count ?? notifications.filter((n) => !n.read).length;
 
   useEffect(() => {
-    const cancelled = { current: false };
-    loadNotifications(false, cancelled);
-    const interval = setInterval(() => {
-      loadNotifications(true, cancelled);
-    }, 120000);
-    return () => {
-      cancelled.current = true;
-      clearInterval(interval);
-    };
-  }, []);
+    window.dispatchEvent(new CustomEvent('unread-notifications-changed', { detail: unreadCount }));
+  }, [unreadCount]);
 
   const handleMarkAsRead = async (id) => {
     try {
-      await markNotificationAsRead(id);
-      
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === id ? { ...n, read: true } : n))
-      );
-      
-      setUnreadCount((prev) => {
-        const next = Math.max(0, prev - 1);
-        window.dispatchEvent(new CustomEvent('unread-notifications-changed', { detail: next }));
-        return next;
-      });
+      await markReadMutation.mutateAsync(id);
     } catch (err) {
       console.error('Error marking notification as read:', err);
     }
@@ -149,10 +108,7 @@ const Notifications = () => {
   const handleMarkAllRead = async () => {
     if (unreadCount === 0) return;
     try {
-      await markAllNotificationsAsRead();
-      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-      setUnreadCount(0);
-      window.dispatchEvent(new CustomEvent('unread-notifications-changed', { detail: 0 }));
+      await markAllMutation.mutateAsync();
       showToast('تم تحديد جميع الإشعارات كمقروءة');
     } catch (err) {
       console.error('Error marking all notifications as read:', err);
@@ -203,18 +159,12 @@ const Notifications = () => {
       {error && (
         <div className="notifications-error-box">
           <AlertCircle size={20} />
-          <span>{error}</span>
-          <button type="button" onClick={loadNotifications} className="retry-btn">
-            إعادة المحاولة
-          </button>
+          <span>{error?.message || 'تعذر تحميل الإشعارات. يرجى التحقق من اتصالك بالإنترنت.'}</span>
         </div>
       )}
 
       {loading ? (
-        <div className="notifications-loading-container">
-          <Loader size={32} />
-          <p>جاري تحميل الإشعارات...</p>
-        </div>
+        <p className="notifications-empty">جاري تحميل الإشعارات...</p>
       ) : (
         <div className="notifications-list">
           {notifications.length > 0 ? (

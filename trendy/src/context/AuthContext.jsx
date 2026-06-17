@@ -12,6 +12,7 @@ import {
   persistAuthSession,
   AUTH_UNAUTHORIZED_EVENT,
 } from '../api/auth';
+import { useCurrentUser } from '../api/hooks/useAuth';
 
 const AuthStateContext = createContext(null);
 const StoreContext = createContext(null);
@@ -25,6 +26,8 @@ export const AuthProvider = ({ children }) => {
   const userRef = useRef(user);
   userRef.current = user;
 
+  const { data: freshUser, isSuccess, isError } = useCurrentUser();
+
   useEffect(() => {
     const storedUser = getStoredUser();
     const id = resolveManagedStoreId(storedUser) || null;
@@ -32,23 +35,17 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   useEffect(() => {
-    const token = getAuthToken();
-    if (!token) return;
-
-    fetchCurrentUser()
-      .then((freshUser) => {
-        if (!freshUser) return;
-        persistAuthSession({ token, user: freshUser });
-        setUser(freshUser);
-        const id = resolveManagedStoreId(freshUser);
-        if (id) setStoreId(id);
-      })
-      .catch(() => {
-        setUser(null);
-        setStoreId(null);
-        setIsAuthenticated(false);
-      });
-  }, []);
+    if (isSuccess && freshUser) {
+      persistAuthSession({ token: getAuthToken(), user: freshUser });
+      setUser(freshUser);
+      const id = resolveManagedStoreId(freshUser);
+      if (id) setStoreId(id);
+    } else if (isError) {
+      setUser(null);
+      setStoreId(null);
+      setIsAuthenticated(false);
+    }
+  }, [isSuccess, isError, freshUser]);
 
   useEffect(() => {
     const handleUnauthorized = () => {

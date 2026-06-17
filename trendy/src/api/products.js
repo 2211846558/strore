@@ -5,7 +5,7 @@ import {
   getProductImageCandidates,
   productPlaceholderImage,
 } from './media';
-import { staleWhileRevalidate, TTL, clearCache } from './cache';
+
 
 function resolveProductStoreId(storeId) {
   return resolveManagedStoreId(getStoredUser(), storeId);
@@ -97,26 +97,22 @@ function mapAttributeValues(attr) {
 /**
  * GET /api/catalog/categories
  */
-export async function fetchCategories(forceRefresh = false) {
-  return staleWhileRevalidate('categories', async () => {
-    const res = await apiRequest(API_ENDPOINTS.catalogCategories, { auth: false });
-    return extractList(res).map((c) => ({ id: c.id, name: c.name }));
-  }, TTL.STATIC, forceRefresh);
+export async function fetchCategories() {
+  const res = await apiRequest(API_ENDPOINTS.catalogCategories, { auth: false });
+  return extractList(res).map((c) => ({ id: c.id, name: c.name }));
 }
 
 /**
  * GET /api/catalog/attributes — الخصائص وقيمها (لون، مقاس، ...)
  */
-export async function fetchAttributes({ perPage = 50 } = {}, forceRefresh = false) {
-  return staleWhileRevalidate('attributes', async () => {
-    const query = new URLSearchParams({ per_page: String(perPage) });
-    const res = await apiRequest(`${API_ENDPOINTS.catalogAttributes}?${query}`, { auth: false });
-    return extractList(res).map((attr) => ({
-      id: attr.id,
-      name: attr.name,
-      values: mapAttributeValues(attr),
-    }));
-  }, TTL.STATIC, forceRefresh);
+export async function fetchAttributes({ perPage = 50 } = {}) {
+  const query = new URLSearchParams({ per_page: String(perPage) });
+  const res = await apiRequest(`${API_ENDPOINTS.catalogAttributes}?${query}`, { auth: false });
+  return extractList(res).map((attr) => ({
+    id: attr.id,
+    name: attr.name,
+    values: mapAttributeValues(attr),
+  }));
 }
 
 const DEFAULT_COLOR_DOTS = {
@@ -217,20 +213,17 @@ export async function fetchStoreProducts({
   status,
   storeId,
   perPage = 50,
-} = {}, forceRefresh = false) {
-  const cacheKey = `products_${status || 'all'}_${categoryId || 'all'}`;
-  return staleWhileRevalidate(cacheKey, async () => {
-    const query = new URLSearchParams({ per_page: String(perPage) });
-    const resolvedStoreId = resolveProductStoreId(storeId);
-    if (resolvedStoreId) query.set('store_id', String(resolvedStoreId));
-    if (name?.trim()) query.set('name', name.trim());
-    if (categoryId && categoryId !== 'all') query.set('category_id', String(categoryId));
-    if (status && status !== 'all') query.set('status', status);
+} = {}) {
+  const query = new URLSearchParams({ per_page: String(perPage) });
+  const resolvedStoreId = resolveProductStoreId(storeId);
+  if (resolvedStoreId) query.set('store_id', String(resolvedStoreId));
+  if (name?.trim()) query.set('name', name.trim());
+  if (categoryId && categoryId !== 'all') query.set('category_id', String(categoryId));
+  if (status && status !== 'all') query.set('status', status);
 
-    const res = await apiRequest(`${API_ENDPOINTS.myStoreProducts}?${query}`);
-    const list = extractList(res).map(mapProductFromList);
-    return list;
-  }, TTL.SEMI, forceRefresh);
+  const res = await apiRequest(`${API_ENDPOINTS.myStoreProducts}?${query}`);
+  const list = extractList(res).map(mapProductFromList);
+  return list;
 }
 
 /**
@@ -665,7 +658,6 @@ async function verifyCreatedProduct(productId) {
  * POST /api/my-store/products
  */
 export async function createProduct(payload) {
-  clearCache('products_');
   const fd = buildProductFormData(payload);
   const res = await apiRequest(API_ENDPOINTS.myStoreProducts, {
     method: 'POST',
@@ -680,7 +672,6 @@ export async function createProduct(payload) {
  * Laravel/PHP لا يقرأ الملفات في طلب PUT — نستخدم POST مع _method=PUT
  */
 export async function updateProduct(id, payload) {
-  clearCache('products_');
   const fd = buildProductFormData(payload);
   fd.append('_method', 'PUT');
   const res = await apiRequest(API_ENDPOINTS.myStoreProduct(id), {
@@ -695,7 +686,6 @@ export async function updateProduct(id, payload) {
  * POST /api/my-store/products/{id}/archive
  */
 export async function archiveProduct(id) {
-  clearCache('products_');
   const res = await apiRequest(API_ENDPOINTS.myStoreProductArchive(id), { method: 'POST' });
   const item = res?.data ?? res;
   return mapProductFromDetails(item);
@@ -705,7 +695,6 @@ export async function archiveProduct(id) {
  * POST /api/my-store/products/{id}/restore
  */
 export async function restoreProduct(id) {
-  clearCache('products_');
   const res = await apiRequest(API_ENDPOINTS.myStoreProductRestore(id), { method: 'POST' });
   const item = res?.data ?? res;
   return mapProductFromDetails(item);
@@ -823,15 +812,13 @@ export async function deleteProductVariant(productId, variantId) {
 /**
  * GET /api/v1/admin/attributes — قائمة الخصائص للإدارة
  */
-export async function fetchAdminAttributes(forceRefresh = false) {
-  return staleWhileRevalidate('admin_attributes', async () => {
-    const res = await apiRequest('/admin/attributes');
-    return extractList(res).map((attr) => ({
-      id: attr.id,
-      name: attr.name,
-      values: mapAttributeValues(attr),
-    }));
-  }, TTL.STATIC, forceRefresh);
+export async function fetchAdminAttributes() {
+  const res = await apiRequest('/admin/attributes');
+  return extractList(res).map((attr) => ({
+    id: attr.id,
+    name: attr.name,
+    values: mapAttributeValues(attr),
+  }));
 }
 
 /**
