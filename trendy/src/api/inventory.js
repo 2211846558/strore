@@ -272,6 +272,8 @@ function filterShipmentsByStatus(shipments, status) {
 /** تحويل فلتر الواجهة إلى query param لـ GET /inventory/shipments */
 function mapShipmentStatusFilterToApi(status) {
   if (!status || status === 'all') return null;
+  // pending/received حالات FIFO ديناميكية (dynamic_status) وليست قيمة status في الجدول
+  if (status === 'pending' || status === 'received') return null;
   if (status === 'cancelled') return 'archived';
   return status;
 }

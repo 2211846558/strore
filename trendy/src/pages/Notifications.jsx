@@ -84,11 +84,7 @@ const Notifications = () => {
     setTimeout(() => setToast(null), 2800);
   };
 
-<<<<<<< HEAD
   const { data: notifRes, isLoading: loading, error, refetch } = useNotifications({ perPage: 100 });
-=======
-  const { data: notifRes, isLoading: loading, error, refetch: loadNotifications } = useNotifications({ perPage: 100 });
->>>>>>> f2fc93ee94dad6f7b18ba7a5a7ff252a70f1e8ee
   const markReadMutation = useMarkAsRead();
   const markAllMutation = useMarkAllAsRead();
 

@@ -137,7 +137,9 @@ function mergeUserSession(freshUser) {
 
 export function storeHasActivePlan(store) {
   if (!store) return false;
-  if (store.status === 'active') return true;
+  const status = String(store.status ?? '').toLowerCase();
+  if (status === 'active') return true;
+  if (status === 'inactive' || status === 'deactivated') return false;
 
   const planId = store.plan_id ?? store.plan?.id ?? store.subscription?.plan_id;
   if (!planId) return false;

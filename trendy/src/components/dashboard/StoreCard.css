@@ -39,7 +39,10 @@
   background: rgba(34, 197, 94, 0.92);
 }
 
-.open-badge.status-inactive,
+.open-badge.status-inactive {
+  background: rgba(239, 68, 68, 0.92);
+}
+
 .open-badge.status-pending {
   background: rgba(107, 114, 128, 0.92);
 }

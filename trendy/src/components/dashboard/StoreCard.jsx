@@ -40,8 +40,8 @@ const StoreCard = ({ store }) => {
           className="store-cover-image"
           onError={handleImageError}
         />
-        {store.statusLabel && (
-          <span className={`open-badge status-${store.statusRaw || 'inactive'}`}>
+        {(store.statusRaw === 'active' || store.statusRaw === 'inactive') && (
+          <span className={`open-badge status-${store.statusRaw}`}>
             {store.statusLabel}
           </span>
         )}

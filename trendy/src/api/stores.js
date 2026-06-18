@@ -203,13 +203,85 @@ export function resolveStoreEmail(store, user = null) {
   return '';
 }
 
+export const STORE_STATUS_LABELS = {
+  active: 'نشط',
+  inactive: 'معطل',
+  deactivated: 'معطل',
+  pending: 'قيد المراجعة',
+};
+
+export function isStoreActiveStatus(statusRaw) {
+  return statusRaw === 'active';
+}
+
+/**
+ * توحيد حالة المتجر (active | inactive | pending)
+ */
+export function normalizeStoreStatus(raw) {
+  if (raw == null || raw === '') return 'inactive';
+  if (typeof raw === 'boolean') return raw ? 'active' : 'inactive';
+  if (typeof raw === 'number') return raw > 0 ? 'active' : 'inactive';
+
+  const normalized = String(raw).trim().toLowerCase();
+  if (normalized === 'active' || normalized === 'نشط') return 'active';
+  if (
+    normalized === 'inactive'
+    || normalized === 'deactivated'
+    || normalized === 'غير نشط'
+    || normalized === 'معطل'
+  ) {
+    return 'inactive';
+  }
+  if (normalized === 'pending' || normalized === 'قيد المراجعة') return 'pending';
+
+  return normalized;
+}
+
+/**
+ * استخراج حالة المتجر من الجلسة أو owned_stores عند غيابها في استجابة الـ API
+ */
+export function resolveStoreStatus(store, user = null, storeId = null) {
+  const id = storeId ?? store?.id;
+  let status = store?.status ?? store?.store_status;
+
+  if ((status == null || status === '') && user && id != null) {
+    const owned = user.owned_stores || user.ownedStores || [];
+    const match = owned.find((entry) => Number(entry?.id) === Number(id));
+    if (match?.status != null && match.status !== '') status = match.status;
+  }
+
+  if ((status == null || status === '') && user?.store && Number(user.store.id) === Number(id)) {
+    status = user.store.status;
+  }
+
+  if ((status == null || status === '') && user?.store_status) {
+    status = user.store_status;
+  }
+
+  return normalizeStoreStatus(status);
+}
+
+export function getStoreStatusLabel(statusRaw) {
+  return STORE_STATUS_LABELS[statusRaw] ?? statusRaw ?? '—';
+}
+
 /**
  * دمج بيانات المتجر من API مع الجلسة دون فقدان الحقول الناقصة في الاستجابة
  */
 export function mergeStoreProfile(apiStore, sessionStore, user = null) {
-  const base = { ...sessionStore, ...apiStore };
+  const id = apiStore?.id ?? sessionStore?.id;
+  const apiStatus = apiStore?.status;
+  const hasApiStatus = apiStatus != null && String(apiStatus).trim() !== '';
+  const merged = {
+    ...sessionStore,
+    ...apiStore,
+    status: hasApiStatus ? apiStatus : sessionStore?.status,
+  };
+  const status = resolveStoreStatus(merged, hasApiStatus ? null : user, id);
+
   return {
-    ...base,
+    ...merged,
+    status,
     store_email: resolveStoreEmail(apiStore, user) || resolveStoreEmail(sessionStore, user),
     email: resolveStoreEmail(apiStore, user) || resolveStoreEmail(sessionStore, user),
   };
@@ -221,6 +293,35 @@ export function mergeStoreProfile(apiStore, sessionStore, user = null) {
 export async function fetchStore(storeId) {
   const res = await apiRequest(API_ENDPOINTS.storeShow(storeId));
   return res?.data ?? res;
+}
+
+/**
+ * GET /api/my-store — ملف المتجر للمدير/الموظف (status الحقيقي حتى لو معطّل)
+ */
+export async function fetchManagedStoreProfile(storeId = null) {
+  const query = storeId ? `?store_id=${encodeURIComponent(String(storeId))}` : '';
+  const res = await apiRequest(`${API_ENDPOINTS.myStoreProfile}${query}`);
+  return res?.data ?? res;
+}
+
+/**
+ * جلب ملف المتجر — يفضّل /my-store ثم المسار العام للزبائن
+ */
+export async function fetchStoreProfile(storeId, sessionStore = null, user = null) {
+  try {
+    const apiStore = await fetchManagedStoreProfile(storeId);
+    return mergeStoreProfile(apiStore, sessionStore, user);
+  } catch (managedErr) {
+    try {
+      const apiStore = await fetchStore(storeId);
+      return mergeStoreProfile(apiStore, sessionStore, user);
+    } catch (publicErr) {
+      if ((managedErr?.status === 404 || publicErr?.status === 404) && sessionStore) {
+        return mergeStoreProfile(sessionStore, sessionStore, user);
+      }
+      throw managedErr;
+    }
+  }
 }
 
 /**
