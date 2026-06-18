@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Eye, CheckCheck, CheckCircle2, Package, Store, AlertCircle, Bell } from 'lucide-react';
 import NotificationDetailModal from '../components/notifications/NotificationDetailModal';
 import { useNotifications, useMarkAsRead, useMarkAllAsRead } from '../api/hooks/useNotifications';
@@ -84,11 +84,15 @@ const Notifications = () => {
     setTimeout(() => setToast(null), 2800);
   };
 
-  const { data: notifRes, isLoading: loading, error } = useNotifications({ perPage: 100 });
+  const { data: notifRes, isLoading: loading, error, refetch } = useNotifications({ perPage: 100 });
   const markReadMutation = useMarkAsRead();
   const markAllMutation = useMarkAllAsRead();
 
-  const rawList = notifRes?.data ?? [];
+  const rawList = Array.isArray(notifRes?.data)
+    ? notifRes.data
+    : Array.isArray(notifRes?.data?.data)
+      ? notifRes.data.data
+      : [];
   const notifications = rawList.map(mapNotificationFromBackend);
 
   const unreadCount = notifRes?.unread_count ?? notifications.filter((n) => !n.read).length;
@@ -212,7 +216,7 @@ const Notifications = () => {
         isOpen={!!selectedNotification}
         onClose={handleCloseModal}
         notification={activeNotification}
-        onOrderPrepared={loadNotifications}
+        onOrderPrepared={() => refetch()}
       />
 
       {toast && (

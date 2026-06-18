@@ -247,6 +247,34 @@
   gap: 6px;
 }
 
+.action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background-color: transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.action-btn:hover {
+  background-color: var(--bg-main);
+}
+
+.action-btn.view-btn {
+  color: var(--primary);
+}
+
+.action-btn.view-btn:hover {
+  background-color: rgba(139, 61, 255, 0.12);
+  border-color: var(--primary);
+}
+
 .row-btn {
   display: inline-flex;
   align-items: center;

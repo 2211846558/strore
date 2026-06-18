@@ -1,14 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Search, Plus, CheckCircle2 } from 'lucide-react';
+import { Search, Plus, CheckCircle2, Eye } from 'lucide-react';
 
 import ProductModal from '../components/products/ProductModal';
 import ProductVariantModal from '../components/products/ProductVariantModal';
 import ArchiveConfirmModal from '../components/products/ArchiveConfirmModal';
 import ProductDetailModal from '../components/products/ProductDetailModal';
-import {
-  fetchProductDetails,
-} from '../api/products';
 import { getApiErrorMessage } from '../api/stores';
 import {
   useProducts,
@@ -40,7 +37,6 @@ const Products = () => {
   const [editingProduct, setEditingProduct] = useState(null);
   const [archiveTarget, setArchiveTarget] = useState(null);
   const [toast, setToast] = useState(null);
-  const [loadingEdit, setLoadingEdit] = useState(false);
   const [variantProduct, setVariantProduct] = useState(null);
   const [detailProduct, setDetailProduct] = useState(null);
 
@@ -128,18 +124,14 @@ const Products = () => {
     setVariantProduct(product);
   };
 
-  const openEdit = async (product) => {
-    setLoadingEdit(true);
+  const openDetails = (product) => {
+    setDetailProduct(product);
+  };
+
+  const openEditFromDetails = (details) => {
+    setDetailProduct(null);
+    setEditingProduct(details);
     setIsModalOpen(true);
-    try {
-      const details = await fetchProductDetails(product.id);
-      setEditingProduct(details);
-    } catch (err) {
-      setIsModalOpen(false);
-      showToast(getApiErrorMessage(err, 'تعذّر تحميل بيانات المنتج'));
-    } finally {
-      setLoadingEdit(false);
-    }
   };
 
   const isSaving = createMutation.isPending || updateMutation.isPending;
@@ -218,12 +210,7 @@ const Products = () => {
                 return (
                   <tr key={product.id} className={isArchived ? 'row-archived' : ''}>
                      <td className="td-product-name">
-                       <div 
-                         className="product-name-cell clickable-name-cell"
-                         onClick={() => setDetailProduct(product)}
-                         style={{ cursor: 'pointer' }}
-                         title="عرض التفاصيل وسجل الشحنات"
-                       >
+                       <div className="product-name-cell">
                          <img
                            className="product-thumb"
                            src={product.image}
@@ -258,6 +245,14 @@ const Products = () => {
                     </td>
                     <td className="td-actions">
                       <div className="row-actions">
+                        <button
+                          type="button"
+                          className="action-btn view-btn"
+                          onClick={() => openDetails(product)}
+                          title="عرض التفاصيل"
+                        >
+                          <Eye size={16} />
+                        </button>
                         {!isArchived && (
                           <button
                             type="button"
@@ -268,14 +263,6 @@ const Products = () => {
                             تنوع
                           </button>
                         )}
-                        <button
-                          type="button"
-                          className="row-btn btn-edit"
-                          onClick={() => openEdit(product)}
-                          title="تعديل"
-                        >
-                          تعديل
-                        </button>
                         <button
                           type="button"
                           className={`row-btn ${isArchived ? 'btn-restore' : 'btn-archive'}`}
@@ -299,7 +286,7 @@ const Products = () => {
       </div>
 
       <ProductModal
-        isOpen={isModalOpen && !loadingEdit}
+        isOpen={isModalOpen}
         onClose={() => {
           setIsModalOpen(false);
           setEditingProduct(null);
@@ -339,6 +326,7 @@ const Products = () => {
         onClose={() => setDetailProduct(null)}
         product={detailProduct}
         storeId={storeId}
+        onEdit={openEditFromDetails}
       />
 
       {toast && (

@@ -25,7 +25,6 @@ import {
   exportFinanceReport,
   filterTransactionsByType,
   FINANCE_TYPE_OPTIONS,
-  FINANCE_STATUS_OPTIONS,
 } from '../api/finance';
 import {
   useTransactions,
@@ -49,7 +48,6 @@ const Finance = () => {
   const walletBalance = walletData?.balance ?? 0;
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [isWalletOpen, setIsWalletOpen] = useState(false);
@@ -71,11 +69,10 @@ const Finance = () => {
   const txFilters = useMemo(
     () => ({
       search: debouncedSearch,
-      status: statusFilter !== 'all' ? statusFilter : undefined,
       perPage: 100,
       maxPages: 3,
     }),
-    [debouncedSearch, statusFilter],
+    [debouncedSearch],
   );
 
   const { data: txResult, isLoading: txLoading, error: txError } = useTransactions(txFilters);
@@ -115,7 +112,6 @@ const Finance = () => {
     try {
       const apiRes = await exportFinanceReport({
         search: debouncedSearch,
-        status: statusFilter !== 'all' ? statusFilter : undefined,
       });
       if (apiRes?.message) {
         showToast(apiRes.message);
@@ -251,15 +247,6 @@ const Finance = () => {
         </div>
 
         <div className="finance-controls">
-          <div className="filter-dropdown">
-            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-              {FINANCE_STATUS_OPTIONS.map((s) => (
-                <option key={s.value} value={s.value}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
-          </div>
           <div className="filter-dropdown">
             <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
               {FINANCE_TYPE_OPTIONS.map((t) => (

@@ -35,11 +35,6 @@ export const FINANCE_TYPE_OPTIONS = [
   { value: 'استرداد', label: 'استرداد' },
 ];
 
-export const FINANCE_STATUS_OPTIONS = [
-  { value: 'all', label: 'جميع الحالات' },
-  { value: 'ناجح', label: 'ناجح' },
-];
-
 const TRANSACTION_TYPE_AR = {
   order_payment: 'مبيعات',
   order_sale: 'مبيعات',

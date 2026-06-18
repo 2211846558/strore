@@ -227,11 +227,24 @@ export async function fetchStoreProducts({
 }
 
 /**
- * GET /api/products/{id} — تفاصيل المنتج للتعديل
+ * GET /api/v1/products/{id} — [5.3] تفاصيل المنتج الكاملة
  */
 export async function fetchProductDetails(id) {
   const res = await apiRequest(API_ENDPOINTS.product(id));
   return mapProductFromDetails(unwrapApiEntity(res));
+}
+
+/**
+ * تفاصيل المنتج لإدارة المتجر — GET /products/{id} مع fallback لـ /my-store/products/{id}
+ * (المنتجات المؤرشفة تُعيد 404 من المسار العام)
+ */
+export async function fetchManagedProductDetails(id) {
+  try {
+    return await fetchProductDetails(id);
+  } catch {
+    const res = await apiRequest(API_ENDPOINTS.myStoreProduct(id));
+    return mapProductFromDetails(unwrapApiEntity(res));
+  }
 }
 
 export function unwrapApiEntity(res) {

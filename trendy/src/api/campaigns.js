@@ -154,6 +154,36 @@ function findLocalCampaignEntry(storeId, megaCampaignId) {
   );
 }
 
+function normalizeSelectedProducts(source) {
+  if (!source) return [];
+  const list = Array.isArray(source) ? source : [];
+  return list
+    .map((product) => {
+      if (product == null) return null;
+      if (typeof product === 'number' || typeof product === 'string') {
+        const id = Number(product);
+        return Number.isFinite(id) ? { id, name: `منتج #${id}` } : null;
+      }
+      const id = product.id ?? product.product_id;
+      if (id == null) return null;
+      return {
+        id,
+        name: product.name ?? product.product_name ?? product.title ?? `منتج #${id}`,
+      };
+    })
+    .filter(Boolean);
+}
+
+function extractStoreSubscriptionProducts(storeSub) {
+  if (!storeSub) return [];
+  return normalizeSelectedProducts(
+    storeSub.products ??
+      storeSub.selected_products ??
+      storeSub.selectedProducts ??
+      storeSub.product_ids,
+  );
+}
+
 function mapApiSubscriptionToMyCampaign(campaign, storeId, localEntry = null) {
   const storeSub = (campaign.stores ?? []).find(
     (store) => Number(store.id) === Number(storeId),
@@ -164,6 +194,9 @@ function mapApiSubscriptionToMyCampaign(campaign, storeId, localEntry = null) {
   const isActive =
     campaign.status === 'active' &&
     (!endDate || endDate.getTime() >= Date.now());
+
+  const apiProducts = extractStoreSubscriptionProducts(storeSub);
+  const localProducts = normalizeSelectedProducts(localEntry?.selectedProducts);
 
   return {
     id: localEntry?.id ?? storeSub?.subscription_id ?? `sub-${campaign.megaCampaignId ?? campaign.id}`,
@@ -182,7 +215,7 @@ function mapApiSubscriptionToMyCampaign(campaign, storeId, localEntry = null) {
             end: formatDate(endDate),
           }
         : { start: '—', end: '—' }),
-    selectedProducts: localEntry?.selectedProducts ?? [],
+    selectedProducts: apiProducts.length > 0 ? apiProducts : localProducts,
     discountPercentage:
       storeSub?.discount_percentage ?? localEntry?.discountPercentage ?? null,
     bannerImage: resolveCampaignBanner(campaign),
@@ -378,7 +411,44 @@ export async function fetchMyCampaigns(storeId, availableCampaigns = null) {
       )
       .map(mapStoredSubscription);
 
-    return [...apiSubscribed, ...localOnly];
+    let merged = [...apiSubscribed, ...localOnly];
+
+    const needsProductNames = merged.some((campaign) =>
+      (campaign.selectedProducts ?? []).some(
+        (product) => !product.name || String(product.name).startsWith('منتج #'),
+      ),
+    );
+
+    if (needsProductNames) {
+      try {
+        const storeProducts = await fetchStoreProducts({ storeId });
+        const namesById = Object.fromEntries(
+          storeProducts.map((product) => [Number(product.id), product.name]),
+        );
+        merged = merged.map((campaign) => ({
+          ...campaign,
+          selectedProducts: (campaign.selectedProducts ?? []).map((product) => ({
+            ...product,
+            name: namesById[Number(product.id)] ?? product.name,
+          })),
+        }));
+      } catch {
+        // أسماء المنتجات اختيارية — نُبقي المعرفات إن فشل التحميل
+      }
+    }
+
+    merged.forEach((campaign) => {
+      if (!campaign.selectedProducts?.length) return;
+      const localEntry = findLocalCampaignEntry(storeId, campaign.megaCampaignId);
+      if (localEntry?.selectedProducts?.length) return;
+      saveMyCampaign(storeId, {
+        ...localEntry,
+        ...campaign,
+        status: campaign.status === 'منتهية' ? 'منتهية' : 'نشطة',
+      });
+    });
+
+    return merged;
   } catch {
     return loadMyCampaigns(storeId);
   }
