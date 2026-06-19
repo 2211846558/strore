@@ -24,7 +24,7 @@ import './App.css';
 
 function AppRoutes() {
   const { isAuthenticated } = useAuth();
-  const { hasActivePlan, storeId } = useStore();
+  const { hasActivePlan, planChecking } = useStore();
   const { logout } = useAuthActions();
 
   const handleLogout = async () => {
@@ -32,6 +32,15 @@ function AppRoutes() {
   };
 
   const authHome = hasActivePlan ? '/' : '/plans';
+
+  if (isAuthenticated && planChecking) {
+    return (
+      <div className="app-plan-check" role="status" aria-live="polite">
+        <span className="loader" />
+        <p>جاري التحقق من حالة الاشتراك...</p>
+      </div>
+    );
+  }
 
   if (isAuthenticated && !hasActivePlan) {
     return (

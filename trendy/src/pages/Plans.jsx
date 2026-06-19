@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Search } from 'lucide-react';
 
 import PlanCard from '../components/plans/PlanCard';
-import SubscriptionCard from '../components/plans/SubscriptionCard';
 import PlanSubscribeWalletModal from '../components/plans/PlanSubscribeWalletModal';
 import { usePlans } from '../api/hooks/usePlans';
 import {
@@ -20,8 +20,8 @@ import './Plans.css';
 
 const Plans = ({ onboarding = false }) => {
   const navigate = useNavigate();
-  const { store, storeId } = useStore();
-  const { updateStoreInSession, refreshSession } = useAuthActions();
+  const { store, storeId, subscriptionExpired } = useStore();
+  const { updateStoreInSession, refreshSession, refreshPlanAccess } = useAuthActions();
   const [activeTab, setActiveTab] = useState('available');
   const [searchQuery, setSearchQuery] = useState('');
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
@@ -90,8 +90,8 @@ const Plans = ({ onboarding = false }) => {
 
   const resolveSubscribeAction = (plan) => {
     if (!currentSubscription) return 'subscribe';
-    if (currentSubscription.isExpired && currentSubscription.planId === plan.id) return 'renew';
-    if (!currentSubscription.isExpired && currentSubscription.planId === plan.id) return null;
+    if (currentSubscription.isExpired) return 'subscribe';
+    if (currentSubscription.planId === plan.id) return null;
     if (currentSubscription.planId) return 'change';
     return 'subscribe';
   };
@@ -163,6 +163,7 @@ const Plans = ({ onboarding = false }) => {
 
     try {
       await refreshSession();
+      await refreshPlanAccess(storeId);
       if (storeId) {
         const isScheduled = finalStarts.getTime() > Date.now();
         if (!isScheduled) {
@@ -227,7 +228,7 @@ const Plans = ({ onboarding = false }) => {
     [mySubscriptions]
   );
 
-  const hasNoSubscriptions = !activeSubscription && scheduledSubscriptions.length === 0;
+  const hasNoSubscriptions = mySubscriptions.length === 0;
 
   const getProgressPercent = (sub) => {
     if (!sub || !sub.durationDays) return 0;
@@ -244,14 +245,23 @@ const Plans = ({ onboarding = false }) => {
     <div className="plans-page">
       <header className="page-header plans-header">
         <div className="header-title-wrapper">
-          <h1 className="page-title">إدارة الخطط</h1>
+          <h1 className="page-title">{onboarding && subscriptionExpired ? 'تجديد الاشتراك' : 'إدارة الخطط'}</h1>
           <p className="page-subtitle">
             {onboarding
-              ? 'اختر خطة اشتراك للبدء في استخدام لوحة تحكم المتجر'
+              ? subscriptionExpired
+                ? 'انتهى اشتراك متجرك. اشترك في خطة أو جدّد اشتراكك للعودة إلى لوحة التحكم.'
+                : 'اختر خطة اشتراك للبدء في استخدام لوحة تحكم المتجر'
               : 'عرض الخطط المتاحة، الاشتراك، وتجديد الاشتراك من المحفظة'}
           </p>
         </div>
       </header>
+
+      {onboarding && subscriptionExpired && (
+        <div className="plans-expired-notice" role="alert">
+          <strong>تم إيقاف الوصول إلى لوحة التحكم</strong>
+          <span>لا يمكنك تصفح المتجر أو إدارته حتى تجدّد اشتراكك في إحدى الخطط المتاحة.</span>
+        </div>
+      )}
 
       <div className="plans-controls">
         <div className="search-bar">

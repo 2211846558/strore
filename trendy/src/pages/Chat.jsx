@@ -1,57 +1,49 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Send, User, Search, MessageSquare } from 'lucide-react';
-import { fetchChats } from '../api/chat';
-import { useChatMessages, useSendMessage } from '../api/hooks/useChat';
+import {
+  useChats,
+  useChatMessages,
+  useSendMessage,
+  LIVE_CHATS_INTERVAL,
+} from '../api/hooks/useChat';
 import { getApiErrorMessage } from '../api/stores';
 import { useStore } from '../context/AuthContext';
 import './Chat.css';
 
 const Chat = () => {
   const { storeId } = useStore();
-  const [chats, setChats] = useState([]);
   const [activeChat, setActiveChat] = useState(null);
   const [replyText, setReplyText] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
   const messagesCountRef = useRef(0);
   const activeChatIdRef = useRef(null);
 
-  const loadChats = useCallback(async (quiet = false, cancelled) => {
-    if (!quiet) setLoading(true);
-    setError('');
-    try {
-      const list = await fetchChats({ storeId });
-      if (cancelled?.current) return;
-      setChats(list);
-    } catch {
-      if (cancelled?.current) return;
-      setChats([]);
-    } finally {
-      if (!quiet && !cancelled?.current) setLoading(false);
-    }
-  }, [storeId]);
+  const {
+    data: chatsData = [],
+    isLoading: loading,
+    error: chatsError,
+  } = useChats(
+    { storeId },
+    { refetchInterval: LIVE_CHATS_INTERVAL },
+  );
 
-  useEffect(() => {
-    const cancelled = { current: false };
-    loadChats(false, cancelled);
-    return () => { cancelled.current = true; };
-  }, [loadChats]);
+  const chats = useMemo(
+    () =>
+      chatsData.map((chat) =>
+        chat.id === activeChat?.id ? { ...chat, unread: 0 } : chat,
+      ),
+    [chatsData, activeChat?.id],
+  );
 
-  useEffect(() => {
-    const cancelled = { current: false };
-    const interval = setInterval(() => {
-      loadChats(true, cancelled);
-    }, 60000);
-    return () => {
-      cancelled.current = true;
-      clearInterval(interval);
-    };
-  }, [loadChats]);
+  const {
+    data: messages = [],
+    isLoading: messagesLoading,
+    error: messagesError,
+  } = useChatMessages(activeChat?.id);
 
-  const { data: messages = [], isLoading: messagesLoading, error: messagesError } = useChatMessages(activeChat?.id);
   const sendMutation = useSendMessage();
 
   useEffect(() => {
@@ -72,7 +64,10 @@ const Chat = () => {
       const isNewChat = prevChatId !== activeChat.id;
       const hasNewMessages = newCount > prevCount;
       const lastMsg = messages[newCount - 1];
-      const sentByMe = lastMsg?.sender === 'store' || lastMsg?.sender === 'employee' || lastMsg?.sender === 'admin';
+      const sentByMe =
+        lastMsg?.sender === 'store' ||
+        lastMsg?.sender === 'employee' ||
+        lastMsg?.sender === 'admin';
 
       let isNearBottom = true;
       if (messagesContainerRef.current) {
@@ -96,8 +91,7 @@ const Chat = () => {
   );
 
   const handleSelectChat = (chat) => {
-    setActiveChat({ ...chat, messages: [] });
-    setChats((prev) => prev.map((c) => (c.id === chat.id ? { ...c, unread: 0 } : c)));
+    setActiveChat(chat);
   };
 
   const handleSendReply = async () => {
@@ -105,13 +99,6 @@ const Chat = () => {
 
     try {
       await sendMutation.mutateAsync({ orderId: activeChat.id, message: replyText.trim() });
-      setChats((prev) =>
-        prev.map((c) =>
-          c.id === activeChat.id
-            ? { ...c, lastTime: 'الآن', lastPreview: replyText.trim() }
-            : c,
-        ),
-      );
       setReplyText('');
     } catch (err) {
       setError(getApiErrorMessage(err, 'تعذّر إرسال الرسالة'));
@@ -123,14 +110,17 @@ const Chat = () => {
   };
 
   const totalUnread = chats.reduce((sum, c) => sum + c.unread, 0);
-  const displayError = error || (messagesError ? getApiErrorMessage(messagesError, 'تعذّر تحميل الرسائل') : '');
+  const displayError =
+    error ||
+    (chatsError ? getApiErrorMessage(chatsError, 'تعذّر تحميل المحادثات') : '') ||
+    (messagesError ? getApiErrorMessage(messagesError, 'تعذّر تحميل الرسائل') : '');
 
   return (
     <div className="chat-page">
       <header className="page-header">
         <div className="header-title-wrapper">
           <h1 className="page-title">شات المتجر</h1>
-          <p className="page-subtitle">تواصل مع زبائنك ورد على استفساراتهم</p>
+          <p className="page-subtitle">تواصل مع زبائنك ورد على استفساراتهم — مباشر</p>
         </div>
       </header>
 
@@ -215,7 +205,7 @@ const Chat = () => {
               </div>
 
               <div className="chat-main-messages" ref={messagesContainerRef}>
-                {messagesLoading ? (
+                {messagesLoading && messages.length === 0 ? (
                   <div className="chat-messages-loading">جاري تحميل الرسائل...</div>
                 ) : (
                   messages.map((msg) => (
@@ -236,12 +226,12 @@ const Chat = () => {
                   value={replyText}
                   onChange={(e) => setReplyText(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  disabled={sendMutation.isPending || messagesLoading}
+                  disabled={sendMutation.isPending}
                 />
                 <button
                   className="chat-main-send"
                   onClick={handleSendReply}
-                  disabled={sendMutation.isPending || messagesLoading || !replyText.trim()}
+                  disabled={sendMutation.isPending || !replyText.trim()}
                 >
                   <Send size={18} />
                   <span>{sendMutation.isPending ? 'جاري الإرسال...' : 'إرسال'}</span>

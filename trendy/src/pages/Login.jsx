@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, ArrowRight, Hash } from 'lucide-react';
 import { useAuth, useAuthActions } from '../context/AuthContext';
-import { getActiveStore, storeHasActivePlan } from '../api/auth';
 import { getApiErrorMessage } from '../api/stores';
 import './Login.css';
 
@@ -19,13 +18,12 @@ const Login = () => {
     e.preventDefault();
     setError('');
     try {
-      const data = await login({
+      await login({
         email: email.trim(),
         password,
         storeCode: storeCode.trim(),
       });
-      const store = getActiveStore(data.user);
-      navigate(storeHasActivePlan(store) ? '/' : '/plans');
+      navigate('/');
     } catch (err) {
       setError(getApiErrorMessage(err, 'فشل تسجيل الدخول. تحقق من البيانات.'));
     }
