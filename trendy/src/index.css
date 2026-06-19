@@ -38,28 +38,42 @@
   --shadow-lg: 0 14px 32px rgba(0, 0, 0, 0.5);
   --shadow-card: 0 4px 20px rgba(0, 0, 0, 0.35);
   --shadow-primary: 0 4px 14px rgba(139, 61, 255, 0.4);
+
+  --btn-on-gradient-text: #ffffff;
 }
 
 [data-theme='light'] {
-  --bg-main: #edeef6;
-  --bg-card: #f4f5fb;
-  --bg-sidebar: #edeef6;
+  --primary: #5d59af;
+  --primary-hover: #4a46a0;
+  --primary-light: rgba(93, 89, 175, 0.12);
+  --primary-dark: #4a46a0;
+
+  --gradient-primary: linear-gradient(135deg, #b533ff 0%, #9333ea 42%, #4285f4 100%);
+  --gradient-primary-hover: linear-gradient(135deg, #a020f0 0%, #7e22ce 42%, #3b82f6 100%);
+  --gradient-soft: #e9f0f8;
+  --gradient-sidebar: linear-gradient(180deg, #5d59af 0%, #4f4ba3 55%, #5a56b8 100%);
+
+  --bg-main: #e9f0f8;
+  --bg-card: #ffffff;
+  --bg-sidebar: #5d59af;
   --bg-input: #ffffff;
 
-  --text-primary: #131127;
-  --text-secondary: #4b4868;
-  --text-muted: #7b7898;
+  --text-primary: #2d2d2d;
+  --text-secondary: #757575;
+  --text-muted: #9e9e9e;
 
-  --border-color: rgba(19, 17, 39, 0.06);
-  --border-focus: rgba(19, 17, 39, 0.15);
+  --success: #00c853;
 
-  --gradient-soft: linear-gradient(160deg, #edeef6 0%, #e2e4ef 100%);
-  --gradient-sidebar: linear-gradient(180deg, #edeef6 0%, #e2e4ef 100%);
+  --btn-on-gradient-text: #1e293b;
 
-  --shadow-sm: 0 1px 2px rgba(19, 17, 39, 0.05);
-  --shadow-md: 0 4px 6px -1px rgba(19, 17, 39, 0.08);
-  --shadow-lg: 0 10px 15px -3px rgba(19, 17, 39, 0.08);
-  --shadow-card: 0 4px 10px rgba(19, 17, 39, 0.05);
+  --border-color: rgba(93, 89, 175, 0.12);
+  --border-focus: rgba(93, 89, 175, 0.28);
+
+  --shadow-sm: 0 2px 8px rgba(93, 89, 175, 0.08);
+  --shadow-md: 0 8px 24px rgba(93, 89, 175, 0.1);
+  --shadow-lg: 0 16px 40px rgba(93, 89, 175, 0.12);
+  --shadow-card: 0 4px 20px rgba(93, 89, 175, 0.08);
+  --shadow-primary: 0 4px 14px rgba(147, 51, 234, 0.22);
 }
 
 * {
@@ -108,7 +122,7 @@ button {
 .payment-confirm-btn,
 .confirm-btn {
   background: var(--gradient-primary) !important;
-  color: white !important;
+  color: var(--btn-on-gradient-text) !important;
   border: none !important;
   box-shadow: var(--shadow-primary);
 }
