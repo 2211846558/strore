@@ -14,12 +14,12 @@ function extractList(res) {
  * يمكن تجاوزها من .env إذا اختلفت عندك في قاعدة البيانات
  */
 export const DEFAULT_ROLE_IDS = {
-  super_admin: Number(import.meta.env.VITE_ROLE_SUPER_ADMIN_ID) || 1,
-  stores_admin: Number(import.meta.env.VITE_ROLE_STORES_ADMIN_ID) || 2,
-  accountant: Number(import.meta.env.VITE_ROLE_ACCOUNTANT_ID) || 3,
-  operations_admin: Number(import.meta.env.VITE_ROLE_OPERATIONS_ADMIN_ID) || 4,
-  store_manager: Number(import.meta.env.VITE_ROLE_STORE_MANAGER_ID) || 5,
-  store_staff: Number(import.meta.env.VITE_ROLE_STORE_STAFF_ID) || 6,
+  super_admin: Number(import.meta.env.VITE_ROLE_SUPER_ADMIN_ID) || 1855,
+  stores_admin: Number(import.meta.env.VITE_ROLE_STORES_ADMIN_ID) || 1856,
+  accountant: Number(import.meta.env.VITE_ROLE_ACCOUNTANT_ID) || 1857,
+  operations_admin: Number(import.meta.env.VITE_ROLE_OPERATIONS_ADMIN_ID) || 1858,
+  store_manager: Number(import.meta.env.VITE_ROLE_STORE_MANAGER_ID) || 1859,
+  store_staff: Number(import.meta.env.VITE_ROLE_STORE_STAFF_ID) || 1860,
 };
 
 /** أدوار الموظفين — slug في الـ API → تسمية عربية في الواجهة */
