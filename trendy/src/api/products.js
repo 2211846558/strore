@@ -627,7 +627,7 @@ export function mapProductVariant(variant, catalogAttributes = [], options = {})
   };
 }
 
-function buildProductFormData({ storeId, name, sku, description, price, categoryId, stock, imageFiles, removedImageIds }) {
+function buildProductFormData({ storeId, name, sku, description, price, categoryId, stock, imageFiles, deletedImages }) {
   const fd = new FormData();
   const resolvedStoreId = resolveProductStoreId(storeId);
   if (!resolvedStoreId) {
@@ -643,10 +643,8 @@ function buildProductFormData({ storeId, name, sku, description, price, category
   if (imageFiles?.length) {
     imageFiles.forEach((file, index) => fd.append(`images[${index}]`, file));
   }
-  if (removedImageIds?.length) {
-    removedImageIds.forEach((id) => {
-      fd.append('deleted_image_ids[]', String(id));
-    });
+  if (deletedImages?.length) {
+    deletedImages.forEach((id, index) => fd.append(`deleted_images[${index}]`, id));
   }
   return fd;
 }

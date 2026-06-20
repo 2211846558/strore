@@ -23,8 +23,8 @@ const ProductModal = ({
     stock: '',
   });
   const [existingImages, setExistingImages] = useState([]);
-  const [removedImageIds, setRemovedImageIds] = useState([]);
   const [newImages, setNewImages] = useState([]);
+  const [deletedImageIds, setDeletedImageIds] = useState([]);
   const [savedProduct, setSavedProduct] = useState(null);
   const [error, setError] = useState('');
   const ignoreOverlayClickRef = useRef(false);
@@ -42,7 +42,7 @@ const ProductModal = ({
 
     setSavedProduct(null);
     setError('');
-    setRemovedImageIds([]);
+    setDeletedImageIds([]);
     setNewImages((prev) => {
       prev.forEach((img) => {
         if (img.preview?.startsWith('blob:')) URL.revokeObjectURL(img.preview);
@@ -97,7 +97,7 @@ const ProductModal = ({
     if (isEdit && existingImages.length > 0 && newImages.length === 0) {
       const idsToRemove = existingImages.map((img) => img.id).filter(Boolean);
       if (idsToRemove.length) {
-        setRemovedImageIds((prev) => [...new Set([...prev, ...idsToRemove])]);
+        setDeletedImageIds((prev) => [...new Set([...prev, ...idsToRemove])]);
       }
       setExistingImages([]);
     }
@@ -115,11 +115,10 @@ const ProductModal = ({
     });
   };
 
-  const removeExistingImage = (image) => {
-    setExistingImages((prev) => prev.filter((img) => img !== image));
-    if (image.id) {
-      setRemovedImageIds((prev) => [...new Set([...prev, image.id])]);
-    }
+  const handleRemoveExistingImage = (id) => {
+    if (!id) return;
+    setDeletedImageIds((prev) => [...new Set([...prev, id])]);
+    setExistingImages((prev) => prev.filter((img) => img.id !== id));
   };
 
   const handleOverlayMouseDown = (e) => {
@@ -165,7 +164,7 @@ const ProductModal = ({
         categoryId: form.categoryId,
         stock: form.stock,
         imageFiles: newImages.map((img) => img.file),
-        removedImageIds,
+        deletedImageIds,
       });
       if (!isEdit && result?.id) {
         setSavedProduct(result);
@@ -216,18 +215,16 @@ const ProductModal = ({
                 {existingImages.map((img, index) => (
                   <div key={img.id ?? `existing-${index}`} className="gallery-item existing">
                     <img src={img.url} alt={`صورة ${index + 1}`} />
+                    {isEdit && <span className="gallery-item-tag">حالية</span>}
                     {isEdit && (
-                      <>
-                        <span className="gallery-item-tag">حالية</span>
-                        <button
-                          type="button"
-                          className="gallery-remove-btn"
-                          onClick={() => removeExistingImage(img)}
-                          aria-label="حذف الصورة الحالية"
-                        >
-                          <X size={14} />
-                        </button>
-                      </>
+                      <button
+                        type="button"
+                        className="gallery-remove-btn"
+                        onClick={() => handleRemoveExistingImage(img.id)}
+                        aria-label="حذف الصورة الحالية"
+                      >
+                        <X size={14} />
+                      </button>
                     )}
                   </div>
                 ))}

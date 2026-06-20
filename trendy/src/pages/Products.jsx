@@ -76,13 +76,13 @@ const Products = () => {
       categoryId: formData.categoryId,
       stock: formData.stock,
       imageFiles: formData.imageFiles,
-      removedImageIds: formData.removedImageIds,
+      deletedImages: formData.deletedImageIds,
     };
 
     if (editingProduct) {
       const updated = await updateMutation.mutateAsync({ id: editingProduct.id, ...payload });
-      const imageChanged = formData.imageFiles?.length || formData.removedImageIds?.length;
-      showToast(imageChanged ? 'تم تحديث المنتج والصور' : 'تم تحديث المنتج');
+      const imageChanged = formData.imageFiles?.length || formData.deletedImageIds?.length;
+      showToast(imageChanged ? 'تم تحديث المنتج وتعديل الصور' : 'تم تحديث المنتج');
       return updated;
     }
 
