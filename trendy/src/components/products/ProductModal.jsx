@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, Upload, ImageIcon, Layers } from 'lucide-react';
 import { getApiErrorMessage } from '../../api/stores';
 import './ProductModal.css';
@@ -23,15 +23,26 @@ const ProductModal = ({
     stock: '',
   });
   const [existingImages, setExistingImages] = useState([]);
+  const [removedImageIds, setRemovedImageIds] = useState([]);
   const [newImages, setNewImages] = useState([]);
   const [savedProduct, setSavedProduct] = useState(null);
   const [error, setError] = useState('');
+  const ignoreOverlayClickRef = useRef(false);
+  const wasOpenRef = useRef(false);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      wasOpenRef.current = false;
+      return;
+    }
+
+    if (wasOpenRef.current) return;
+    wasOpenRef.current = true;
 
     setSavedProduct(null);
     setError('');
+    setRemovedImageIds([]);
     setNewImages((prev) => {
       prev.forEach((img) => {
         if (img.preview?.startsWith('blob:')) URL.revokeObjectURL(img.preview);
@@ -82,6 +93,15 @@ const ProductModal = ({
       file,
       preview: URL.createObjectURL(file),
     }));
+
+    if (isEdit && existingImages.length > 0 && newImages.length === 0) {
+      const idsToRemove = existingImages.map((img) => img.id).filter(Boolean);
+      if (idsToRemove.length) {
+        setRemovedImageIds((prev) => [...new Set([...prev, ...idsToRemove])]);
+      }
+      setExistingImages([]);
+    }
+
     setNewImages((prev) => [...prev, ...added]);
     setError('');
     e.target.value = '';
@@ -95,6 +115,30 @@ const ProductModal = ({
     });
   };
 
+  const removeExistingImage = (image) => {
+    setExistingImages((prev) => prev.filter((img) => img !== image));
+    if (image.id) {
+      setRemovedImageIds((prev) => [...new Set([...prev, image.id])]);
+    }
+  };
+
+  const handleOverlayMouseDown = (e) => {
+    if (e.target !== e.currentTarget) return;
+    if (ignoreOverlayClickRef.current) return;
+    onClose();
+  };
+
+  const openFilePicker = () => {
+    ignoreOverlayClickRef.current = true;
+    const releaseOverlayGuard = () => {
+      window.setTimeout(() => {
+        ignoreOverlayClickRef.current = false;
+      }, 300);
+    };
+    window.addEventListener('focus', releaseOverlayGuard, { once: true });
+    fileInputRef.current?.click();
+  };
+
   const totalImages = existingImages.length + newImages.length;
 
   const handleSubmit = async () => {
@@ -104,6 +148,10 @@ const ProductModal = ({
     }
     if (!isEdit && totalImages === 0) {
       setError('يجب رفع صورة واحدة على الأقل للمنتج.');
+      return;
+    }
+    if (isEdit && totalImages === 0) {
+      setError('يجب أن يبقى للمنتج صورة واحدة على الأقل.');
       return;
     }
 
@@ -117,6 +165,7 @@ const ProductModal = ({
         categoryId: form.categoryId,
         stock: form.stock,
         imageFiles: newImages.map((img) => img.file),
+        removedImageIds,
       });
       if (!isEdit && result?.id) {
         setSavedProduct(result);
@@ -136,7 +185,7 @@ const ProductModal = ({
   const showSuccessStep = !!savedProduct;
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay" onMouseDown={handleOverlayMouseDown}>
       <div className="modal-content product-modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2 className="modal-title">
@@ -167,7 +216,19 @@ const ProductModal = ({
                 {existingImages.map((img, index) => (
                   <div key={img.id ?? `existing-${index}`} className="gallery-item existing">
                     <img src={img.url} alt={`صورة ${index + 1}`} />
-                    {isEdit && <span className="gallery-item-tag">حالية</span>}
+                    {isEdit && (
+                      <>
+                        <span className="gallery-item-tag">حالية</span>
+                        <button
+                          type="button"
+                          className="gallery-remove-btn"
+                          onClick={() => removeExistingImage(img)}
+                          aria-label="حذف الصورة الحالية"
+                        >
+                          <X size={14} />
+                        </button>
+                      </>
+                    )}
                   </div>
                 ))}
                 {newImages.map((img, index) => (
@@ -191,17 +252,22 @@ const ProductModal = ({
               </div>
             )}
 
-            <label className="upload-btn">
+            <button type="button" className="upload-btn" onClick={openFilePicker}>
               <Upload size={16} />
-              {totalImages > 0 ? 'إضافة صور' : 'رفع صور'}
-              <input
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                multiple
-                onChange={handleImageChange}
-                hidden
-              />
-            </label>
+              {isEdit && existingImages.length > 0 && newImages.length === 0
+                ? 'تغيير الصورة'
+                : totalImages > 0
+                  ? 'إضافة صور'
+                  : 'رفع صور'}
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              multiple={!(isEdit && existingImages.length > 0 && newImages.length === 0)}
+              onChange={handleImageChange}
+              hidden
+            />
           </div>
 
           <div className="form-group">

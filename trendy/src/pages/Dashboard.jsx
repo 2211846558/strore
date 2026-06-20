@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import StatCard from '../components/dashboard/StatCard';
 import StoreCard from '../components/dashboard/StoreCard';
 import EditStoreModal from '../components/dashboard/EditStoreModal';
@@ -69,6 +69,10 @@ const Dashboard = () => {
   const [storeData, setStoreData] = useState(() => mapStoreToForm(store, null, user));
   const [toast, setToast] = useState(null);
   const [saving, setSaving] = useState(false);
+  const storeRef = useRef(store);
+  const userRef = useRef(user);
+  storeRef.current = store;
+  userRef.current = user;
 
   const {
     data: dashData,
@@ -80,8 +84,10 @@ const Dashboard = () => {
 
   const loadStoreProfile = useCallback(async (cancelled) => {
     if (!storeId) return;
+    const sessionStore = storeRef.current;
+    const currentUser = userRef.current;
     try {
-      const storeDetails = await fetchStoreProfile(storeId, store, user);
+      const storeDetails = await fetchStoreProfile(storeId, sessionStore, currentUser);
 
       let ratingAverage = null;
       try {
@@ -92,13 +98,13 @@ const Dashboard = () => {
       }
 
       if (cancelled?.current) return;
-      setStoreData(mapStoreToForm(storeDetails, ratingAverage, user));
+      setStoreData(mapStoreToForm(storeDetails, ratingAverage, currentUser));
       updateStoreInSession(storeDetails);
     } catch {
       if (cancelled?.current) return;
-      if (store) setStoreData(mapStoreToForm(store, null, user));
+      if (sessionStore) setStoreData(mapStoreToForm(sessionStore, null, currentUser));
     }
-  }, [storeId, store, user, updateStoreInSession]);
+  }, [storeId, updateStoreInSession]);
 
   useEffect(() => {
     const cancelled = { current: false };

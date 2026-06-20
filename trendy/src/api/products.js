@@ -627,7 +627,7 @@ export function mapProductVariant(variant, catalogAttributes = [], options = {})
   };
 }
 
-function buildProductFormData({ storeId, name, sku, description, price, categoryId, stock, imageFiles }) {
+function buildProductFormData({ storeId, name, sku, description, price, categoryId, stock, imageFiles, removedImageIds }) {
   const fd = new FormData();
   const resolvedStoreId = resolveProductStoreId(storeId);
   if (!resolvedStoreId) {
@@ -642,6 +642,11 @@ function buildProductFormData({ storeId, name, sku, description, price, category
   if (stock !== '' && stock != null) fd.append('total_quantity', String(stock));
   if (imageFiles?.length) {
     imageFiles.forEach((file, index) => fd.append(`images[${index}]`, file));
+  }
+  if (removedImageIds?.length) {
+    removedImageIds.forEach((id) => {
+      fd.append('deleted_image_ids[]', String(id));
+    });
   }
   return fd;
 }

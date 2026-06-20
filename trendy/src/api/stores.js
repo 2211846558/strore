@@ -276,6 +276,18 @@ export function mergeStoreProfile(apiStore, sessionStore, user = null) {
     ...sessionStore,
     ...apiStore,
     status: hasApiStatus ? apiStatus : sessionStore?.status,
+    plan_id: apiStore?.plan_id ?? sessionStore?.plan_id,
+    subscription_starts_at:
+      apiStore?.subscription_starts_at ??
+      apiStore?.plan_starts_at ??
+      sessionStore?.subscription_starts_at ??
+      sessionStore?.plan_starts_at,
+    subscription_ends_at:
+      apiStore?.subscription_ends_at ??
+      apiStore?.plan_expires_at ??
+      sessionStore?.subscription_ends_at ??
+      sessionStore?.plan_expires_at,
+    plan: apiStore?.plan ?? sessionStore?.plan,
   };
   const status = resolveStoreStatus(merged, hasApiStatus ? null : user, id);
 

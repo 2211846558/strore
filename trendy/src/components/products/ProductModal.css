@@ -283,9 +283,11 @@
   padding: 8px 16px;
   border-radius: 8px;
   border: 1px solid var(--border-color);
+  background: transparent;
   cursor: pointer;
   font-size: 13px;
   font-weight: 600;
+  font-family: inherit;
   color: var(--text-primary);
   transition: background-color 0.2s ease;
 }

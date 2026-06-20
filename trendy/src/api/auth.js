@@ -40,6 +40,38 @@ export const getActiveStore = (user) => {
   return null;
 };
 
+/** يُرجع بيانات المتجر المطابقة لـ storeId (ملكية/توظيف) وليس المتجر الافتراضي فقط */
+export function resolveStoreForUser(user, storeId = null) {
+  if (!user) return null;
+
+  const targetId = storeId != null ? Number(storeId) : null;
+  if (targetId && !Number.isNaN(targetId) && targetId > 0) {
+    const owned = user.owned_stores || user.ownedStores || [];
+    const employed = user.employed_stores || user.employedStores || [];
+    const fromList = [...owned, ...employed].find((entry) => Number(entry?.id) === targetId);
+    if (fromList) {
+      if (user.store && Number(user.store.id) === targetId) {
+        return { ...fromList, ...user.store };
+      }
+      return fromList;
+    }
+    if (user.store && Number(user.store.id) === targetId) {
+      return user.store;
+    }
+    if (Number(user.store_id) === targetId) {
+      return (
+        user.store ?? {
+          id: targetId,
+          status: user.store_status ?? 'inactive',
+          plan_id: user.plan_id ?? null,
+        }
+      );
+    }
+  }
+
+  return getActiveStore(user);
+}
+
 export function getUserRoleNames(user) {
   if (!user) return [];
   const roles = user.roles;
@@ -171,10 +203,9 @@ export function isSubscriptionAccessBlockedError(error) {
   const msg = String(error?.message ?? error?.data?.message ?? '');
   return (
     error?.status === 403 &&
-    (/store_inactive_subscription|store_plan_inactive|plan.*expired|subscription.*expired|inactive subscription|يجب الاشتراك|انتهى.*اشتراك|الاشتراك.*منته/i.test(
+    /store_inactive_subscription|store_plan_inactive|plan.*expired|subscription.*expired|inactive subscription|يجب الاشتراك|انتهى.*اشتراك|الاشتراك.*منته/i.test(
       msg,
-    ) ||
-      /store_plan_active/i.test(msg))
+    )
   );
 }
 

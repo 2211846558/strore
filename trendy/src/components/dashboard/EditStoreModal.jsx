@@ -9,12 +9,15 @@ const EditStoreModal = ({ isOpen, onClose, store, onSave, saving = false }) => {
   const [zones, setZones] = useState([]);
   const [zonesLoading, setZonesLoading] = useState(false);
   const fileInputRef = useRef(null);
+  const wasOpenRef = useRef(false);
+  const ignoreOverlayClickRef = useRef(false);
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && !wasOpenRef.current) {
       setFormData({ ...store });
       setLogoFile(null);
     }
+    wasOpenRef.current = isOpen;
   }, [isOpen, store]);
 
   useEffect(() => {
@@ -54,6 +57,24 @@ const EditStoreModal = ({ isOpen, onClose, store, onSave, saving = false }) => {
       setFormData((prev) => ({ ...prev, image: reader.result }));
     };
     reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  const handleOverlayMouseDown = (e) => {
+    if (e.target !== e.currentTarget) return;
+    if (ignoreOverlayClickRef.current) return;
+    onClose();
+  };
+
+  const openFilePicker = () => {
+    ignoreOverlayClickRef.current = true;
+    const releaseOverlayGuard = () => {
+      window.setTimeout(() => {
+        ignoreOverlayClickRef.current = false;
+      }, 300);
+    };
+    window.addEventListener('focus', releaseOverlayGuard, { once: true });
+    fileInputRef.current?.click();
   };
 
   const handleSubmit = async (e) => {
@@ -65,7 +86,7 @@ const EditStoreModal = ({ isOpen, onClose, store, onSave, saving = false }) => {
 
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay" onMouseDown={handleOverlayMouseDown}>
       <div className="modal-content edit-store-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <div className="modal-title-group">
@@ -100,7 +121,7 @@ const EditStoreModal = ({ isOpen, onClose, store, onSave, saving = false }) => {
             <button
               type="button"
               className="upload-image-btn"
-              onClick={() => fileInputRef.current?.click()}
+              onClick={openFilePicker}
             >
               <Upload size={18} />
               {formData.image ? 'تغيير صورة المتجر' : 'رفع صورة المتجر'}
@@ -159,7 +180,10 @@ const EditStoreModal = ({ isOpen, onClose, store, onSave, saving = false }) => {
               </select>
             </div>
             <div className="form-group">
-              <label htmlFor="googleMapUrl">رابط خريطة Google</label>
+              <label htmlFor="googleMapUrl">
+                رابط خريطة Google
+                {formData.type === 'local' && <span className="required-mark"> *</span>}
+              </label>
               <input
                 type="text"
                 id="googleMapUrl"
@@ -168,7 +192,7 @@ const EditStoreModal = ({ isOpen, onClose, store, onSave, saving = false }) => {
                 onChange={handleChange}
                 className="form-input"
                 placeholder="https://maps.google.com/..."
-                required
+                required={formData.type === 'local'}
               />
             </div>
           </div>

@@ -7,6 +7,7 @@ import ProductVariantModal from '../components/products/ProductVariantModal';
 import ArchiveConfirmModal from '../components/products/ArchiveConfirmModal';
 import ProductDetailModal from '../components/products/ProductDetailModal';
 import { getApiErrorMessage } from '../api/stores';
+import { fetchManagedProductDetails } from '../api/products';
 import {
   useProducts,
   useCategories,
@@ -75,15 +76,13 @@ const Products = () => {
       categoryId: formData.categoryId,
       stock: formData.stock,
       imageFiles: formData.imageFiles,
+      removedImageIds: formData.removedImageIds,
     };
 
     if (editingProduct) {
       const updated = await updateMutation.mutateAsync({ id: editingProduct.id, ...payload });
-      showToast(
-        formData.imageFiles?.length
-          ? 'تم تحديث المنتج وإضافة الصور'
-          : 'تم تحديث المنتج',
-      );
+      const imageChanged = formData.imageFiles?.length || formData.removedImageIds?.length;
+      showToast(imageChanged ? 'تم تحديث المنتج والصور' : 'تم تحديث المنتج');
       return updated;
     }
 
@@ -128,9 +127,14 @@ const Products = () => {
     setDetailProduct(product);
   };
 
-  const openEditFromDetails = (details) => {
+  const openEditFromDetails = async (details) => {
     setDetailProduct(null);
-    setEditingProduct(details);
+    try {
+      const full = await fetchManagedProductDetails(details.id);
+      setEditingProduct(full);
+    } catch {
+      setEditingProduct(details);
+    }
     setIsModalOpen(true);
   };
 
