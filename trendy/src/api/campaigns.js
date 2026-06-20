@@ -2,7 +2,6 @@ import { apiRequest } from './client';
 import { API_ENDPOINTS } from './config';
 import { fetchStoreProducts as fetchStoreProductsList } from './products';
 import { resolveCampaignBannerUrl } from './media';
-import { staleWhileRevalidate, TTL } from './cache';
 
 /** تكلفة الاشتراك في الحملة حسب الباكند (CampaignSubscriptionService) */
 export const CAMPAIGN_SUBSCRIPTION_COST = 50;
@@ -155,6 +154,36 @@ function findLocalCampaignEntry(storeId, megaCampaignId) {
   );
 }
 
+function normalizeSelectedProducts(source) {
+  if (!source) return [];
+  const list = Array.isArray(source) ? source : [];
+  return list
+    .map((product) => {
+      if (product == null) return null;
+      if (typeof product === 'number' || typeof product === 'string') {
+        const id = Number(product);
+        return Number.isFinite(id) ? { id, name: `منتج #${id}` } : null;
+      }
+      const id = product.id ?? product.product_id;
+      if (id == null) return null;
+      return {
+        id,
+        name: product.name ?? product.product_name ?? product.title ?? `منتج #${id}`,
+      };
+    })
+    .filter(Boolean);
+}
+
+function extractStoreSubscriptionProducts(storeSub) {
+  if (!storeSub) return [];
+  return normalizeSelectedProducts(
+    storeSub.products ??
+      storeSub.selected_products ??
+      storeSub.selectedProducts ??
+      storeSub.product_ids,
+  );
+}
+
 function mapApiSubscriptionToMyCampaign(campaign, storeId, localEntry = null) {
   const storeSub = (campaign.stores ?? []).find(
     (store) => Number(store.id) === Number(storeId),
@@ -165,6 +194,9 @@ function mapApiSubscriptionToMyCampaign(campaign, storeId, localEntry = null) {
   const isActive =
     campaign.status === 'active' &&
     (!endDate || endDate.getTime() >= Date.now());
+
+  const apiProducts = extractStoreSubscriptionProducts(storeSub);
+  const localProducts = normalizeSelectedProducts(localEntry?.selectedProducts);
 
   return {
     id: localEntry?.id ?? storeSub?.subscription_id ?? `sub-${campaign.megaCampaignId ?? campaign.id}`,
@@ -183,7 +215,7 @@ function mapApiSubscriptionToMyCampaign(campaign, storeId, localEntry = null) {
             end: formatDate(endDate),
           }
         : { start: '—', end: '—' }),
-    selectedProducts: localEntry?.selectedProducts ?? [],
+    selectedProducts: apiProducts.length > 0 ? apiProducts : localProducts,
     discountPercentage:
       storeSub?.discount_percentage ?? localEntry?.discountPercentage ?? null,
     bannerImage: resolveCampaignBanner(campaign),
@@ -210,21 +242,17 @@ function mapStoredSubscription(entry) {
 /**
  * GET /api/campaigns — الحملات الإعلانية النشطة
  */
-export async function fetchAvailableCampaigns(forceRefresh = false) {
-  return staleWhileRevalidate('campaigns', async () => {
-    const res = await apiRequest(API_ENDPOINTS.campaigns, { auth: false });
-    return extractList(res).map(mapCampaignFromApi);
-  }, TTL.SEMI, forceRefresh);
+export async function fetchAvailableCampaigns() {
+  const res = await apiRequest(API_ENDPOINTS.campaigns, { auth: false });
+  return extractList(res).map(mapCampaignFromApi);
 }
 
 /**
  * GET /api/campaigns/{id} — تفاصيل حملة مع المتاجر المشتركة
  */
-export async function fetchCampaignById(campaignId, forceRefresh = false) {
-  return staleWhileRevalidate(`campaign_${campaignId}`, async () => {
-    const res = await apiRequest(API_ENDPOINTS.campaign(campaignId), { auth: false });
-    return mapCampaignFromApi(unwrapEntity(res));
-  }, TTL.SEMI, forceRefresh);
+export async function fetchCampaignById(campaignId) {
+  const res = await apiRequest(API_ENDPOINTS.campaign(campaignId), { auth: false });
+  return mapCampaignFromApi(unwrapEntity(res));
 }
 
 /**
@@ -237,7 +265,7 @@ export async function fetchStoreProducts({ storeId, perPage = 50 } = {}) {
 
 /**
  * POST /api/stores/{store}/campaigns/subscribe
- * body: { mega_campaign_id, product_ids }
+ * body: { mega_campaign_id, product_ids, discount_percentage }
  */
 export async function subscribeToCampaign({
   storeId,
@@ -249,6 +277,7 @@ export async function subscribeToCampaign({
     body: {
       mega_campaign_id: Number(megaCampaignId),
       product_ids: productIds.map((id) => Number(id)),
+      discount_percentage: 1,
     },
   });
 }
@@ -382,7 +411,44 @@ export async function fetchMyCampaigns(storeId, availableCampaigns = null) {
       )
       .map(mapStoredSubscription);
 
-    return [...apiSubscribed, ...localOnly];
+    let merged = [...apiSubscribed, ...localOnly];
+
+    const needsProductNames = merged.some((campaign) =>
+      (campaign.selectedProducts ?? []).some(
+        (product) => !product.name || String(product.name).startsWith('منتج #'),
+      ),
+    );
+
+    if (needsProductNames) {
+      try {
+        const storeProducts = await fetchStoreProducts({ storeId });
+        const namesById = Object.fromEntries(
+          storeProducts.map((product) => [Number(product.id), product.name]),
+        );
+        merged = merged.map((campaign) => ({
+          ...campaign,
+          selectedProducts: (campaign.selectedProducts ?? []).map((product) => ({
+            ...product,
+            name: namesById[Number(product.id)] ?? product.name,
+          })),
+        }));
+      } catch {
+        // أسماء المنتجات اختيارية — نُبقي المعرفات إن فشل التحميل
+      }
+    }
+
+    merged.forEach((campaign) => {
+      if (!campaign.selectedProducts?.length) return;
+      const localEntry = findLocalCampaignEntry(storeId, campaign.megaCampaignId);
+      if (localEntry?.selectedProducts?.length) return;
+      saveMyCampaign(storeId, {
+        ...localEntry,
+        ...campaign,
+        status: campaign.status === 'منتهية' ? 'منتهية' : 'نشطة',
+      });
+    });
+
+    return merged;
   } catch {
     return loadMyCampaigns(storeId);
   }
@@ -393,7 +459,11 @@ export async function enrichMyCampaigns(storeId, availableCampaigns = null) {
   return fetchMyCampaigns(storeId, availableCampaigns);
 }
 
-export function buildSubscriptionEntry(campaign, selectedProducts, apiResponse = null) {
+export function buildSubscriptionEntry(
+  campaign,
+  selectedProducts,
+  apiResponse = null,
+) {
   if (apiResponse?.subscription || apiResponse?.campaign_subscription || apiResponse?.data?.subscription) {
     return mapSubscriptionFromApiResponse(apiResponse, campaign, selectedProducts);
   }

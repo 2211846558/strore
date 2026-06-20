@@ -49,12 +49,14 @@ const ProductSelectionModal = ({
 
   if (!isOpen || !campaign) return null;
 
+  const maxAllowed = Number(campaign.productsCount) || 10;
+
   const handleProductToggle = (product) => {
     const isSelected = selectedProducts.find((p) => p.id === product.id);
 
     if (isSelected) {
       setSelectedProducts(selectedProducts.filter((p) => p.id !== product.id));
-    } else {
+    } else if (selectedProducts.length < maxAllowed) {
       setSelectedProducts([...selectedProducts, product]);
     }
   };
@@ -89,10 +91,15 @@ const ProductSelectionModal = ({
             <span className="selection-value">{campaign.title}</span>
           </div>
 
+          <div className="selection-detail-row">
+            <span className="selection-label">عدد المنتجات المسموح:</span>
+            <span className="selection-value">{maxAllowed} منتجات</span>
+          </div>
+
           <div className="selection-counter-row">
             <span className="selection-label">المنتجات المختارة:</span>
-            <span className="selection-counter">
-              {selectedProducts.length}
+            <span className={`selection-counter ${selectedProducts.length === maxAllowed ? 'max-reached' : ''}`}>
+              {maxAllowed} / {selectedProducts.length}
             </span>
           </div>
         </div>

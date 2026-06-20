@@ -1,7 +1,6 @@
 import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth, useStore, useAuthActions } from './context/AuthContext';
-import { WalletProvider } from './context/WalletContext';
 import { StripeProvider } from './providers/StripeProvider';
 import DashboardLayout from './components/layout/DashboardLayout';
 import PlansOnboardingLayout from './components/layout/PlansOnboardingLayout';
@@ -21,18 +20,12 @@ import Orders from './pages/Orders';
 import Notifications from './pages/Notifications';
 import Chat from './pages/Chat';
 import Attributes from './pages/Attributes';
-import { setCacheKeyPrefix } from './api/cache';
 import './App.css';
 
 function AppRoutes() {
   const { isAuthenticated } = useAuth();
-  const { hasActivePlan, storeId } = useStore();
+  const { hasActivePlan, planChecking } = useStore();
   const { logout } = useAuthActions();
-
-  useEffect(() => {
-    if (storeId) setCacheKeyPrefix(`s${storeId}`);
-    else setCacheKeyPrefix('');
-  }, [storeId]);
 
   const handleLogout = async () => {
     await logout();
@@ -40,17 +33,24 @@ function AppRoutes() {
 
   const authHome = hasActivePlan ? '/' : '/plans';
 
+  if (isAuthenticated && planChecking) {
+    return (
+      <div className="app-plan-check" role="status" aria-live="polite">
+        <span className="loader" />
+        <p>جاري التحقق من حالة الاشتراك...</p>
+      </div>
+    );
+  }
+
   if (isAuthenticated && !hasActivePlan) {
     return (
       <Routes>
         <Route
           path="/plans"
           element={
-            <WalletProvider>
-              <PlansOnboardingLayout onLogout={handleLogout}>
+            <PlansOnboardingLayout onLogout={handleLogout}>
                 <Plans onboarding />
               </PlansOnboardingLayout>
-            </WalletProvider>
           }
         />
         <Route path="*" element={<Navigate to="/plans" replace />} />
@@ -95,9 +95,7 @@ function AppRoutes() {
         path="/"
         element={
           isAuthenticated ? (
-            <WalletProvider>
-              <DashboardLayout onLogout={handleLogout} />
-            </WalletProvider>
+            <DashboardLayout onLogout={handleLogout} />
           ) : (
             <Navigate to="/login" replace />
           )

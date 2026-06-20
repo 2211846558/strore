@@ -30,18 +30,6 @@
   color: var(--primary);
 }
 
-.selection-discount-input {
-  width: 72px;
-  padding: 6px 10px;
-  border-radius: 8px;
-  border: 1px solid var(--border-color);
-  background: var(--bg-input);
-  color: var(--text-primary);
-  font-size: 14px;
-  font-weight: 700;
-  text-align: center;
-}
-
 .selection-counter-row {
   display: flex;
   justify-content: space-between;

@@ -7,7 +7,7 @@ import {
   useElements,
   useStripe,
 } from '@stripe/react-stripe-js';
-import { useWallet } from '../../context/WalletContext';
+import { useWalletBalance, useChargeWallet } from '../../api/hooks/useWallet';
 import { useStore } from '../../context/AuthContext';
 import { subscribeToPlan, renewStorePlan, changeStorePlan, previewSubscribeToPlan } from '../../api/plans';
 import { getApiErrorMessage } from '../../api/stores';
@@ -40,8 +40,9 @@ const getStripeFieldStyle = () => ({
 });
 
 const usePlanWalletState = (plan) => {
-  const { balance, refreshWallet } = useWallet();
+  const { data: walletData, refetch: refreshWallet } = useWalletBalance();
   const { storeId } = useStore();
+  const balance = walletData?.balance ?? 0;
   const planPrice = Number(plan?.price ?? 0);
   const hasEnoughBalance = balance >= planPrice;
   const missingAmount = Math.max(0, planPrice - balance);
@@ -135,7 +136,7 @@ const PlanSubscribeWalletForm = ({ plan, action = 'subscribe', onClose, onConfir
   const stripe = useStripe();
   const elements = useElements();
   const { balance, refreshWallet, storeId, hasEnoughBalance, missingAmount } = usePlanWalletState(plan);
-  const { rechargeViaStripe } = useWallet();
+  const chargeMutation = useChargeWallet();
   const [amount, setAmount] = useState('');
   const [rechargeError, setRechargeError] = useState('');
   const [rechargeLoading, setRechargeLoading] = useState(false);
@@ -193,11 +194,8 @@ const PlanSubscribeWalletForm = ({ plan, action = 'subscribe', onClose, onConfir
     setRechargeLoading(true);
     try {
       const paymentMethod = await createStripeCardPaymentMethod(stripe, cardNumberElement);
-      const charged = await rechargeViaStripe({
-        paymentMethodId: paymentMethod.id,
-        amount,
-        cardLast4: paymentMethod.card?.last4,
-      });
+      const charged = await chargeMutation.mutateAsync({ storeId, amount: Number(amount), paymentMethodId: paymentMethod.id });
+      await refreshWallet();
       cardNumberElement.clear();
       elements.getElement(CardExpiryElement)?.clear();
       elements.getElement(CardCvcElement)?.clear();
@@ -340,7 +338,7 @@ const PlanSubscribeWalletModal = ({
   onConfirm,
   onToast,
 }) => {
-  const { refreshWallet } = useWallet();
+  const { refetch: refreshWallet } = useWalletBalance();
   const walletState = usePlanWalletState(plan);
   const stripeReady = isStripeConfigured();
 

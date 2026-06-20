@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import { X, Wallet } from 'lucide-react';
-import { useWallet } from '../../context/WalletContext';
+import { useWalletBalance } from '../../api/hooks/useWallet';
 import { useStore } from '../../context/AuthContext';
 import { subscribeToPlan } from '../../api/plans';
 import { getApiErrorMessage } from '../../api/stores';
 import './PlanConfirmModal.css';
 
 const PlanConfirmModal = ({ isOpen, onClose, plan, onConfirm }) => {
-  const { balance, refreshWallet } = useWallet();
+  const { data: walletData, refetch: refreshWallet } = useWalletBalance();
+  const balance = walletData?.balance ?? 0;
   const { storeId } = useStore();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);

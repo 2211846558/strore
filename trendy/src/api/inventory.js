@@ -1,6 +1,6 @@
 import { apiRequest } from './client';
 import { API_ENDPOINTS } from './config';
-import { staleWhileRevalidate, TTL } from './cache';
+
 import {
   fetchStoreProducts,
   fetchAttributes,
@@ -272,6 +272,8 @@ function filterShipmentsByStatus(shipments, status) {
 /** تحويل فلتر الواجهة إلى query param لـ GET /inventory/shipments */
 function mapShipmentStatusFilterToApi(status) {
   if (!status || status === 'all') return null;
+  // pending/received حالات FIFO ديناميكية (dynamic_status) وليست قيمة status في الجدول
+  if (status === 'pending' || status === 'received') return null;
   if (status === 'cancelled') return 'archived';
   return status;
 }
@@ -359,34 +361,30 @@ export async function fetchShipments({
   search,
   perPage = 50,
   page = 1,
-} = {}, forceRefresh = false) {
+} = {}) {
   const searchKey = search?.trim() || '';
-  return staleWhileRevalidate(
-    `shipments_p${page}_${status || 'all'}_s${searchKey}`,
-    async () => {
-    const resolvedStoreId = resolveInventoryStoreId(storeId);
-    const query = new URLSearchParams({
-      per_page: String(perPage),
-      page: String(page),
-    });
-    if (resolvedStoreId) query.set('store_id', String(resolvedStoreId));
-    if (searchKey) query.set('search', searchKey);
+  const resolvedStoreId = resolveInventoryStoreId(storeId);
+  const query = new URLSearchParams({
+    per_page: String(perPage),
+    page: String(page),
+  });
+  if (resolvedStoreId) query.set('store_id', String(resolvedStoreId));
+  if (searchKey) query.set('search', searchKey);
 
-    const apiStatus = mapShipmentStatusFilterToApi(status);
-    if (apiStatus) query.set('status', apiStatus);
+  const apiStatus = mapShipmentStatusFilterToApi(status);
+  if (apiStatus) query.set('status', apiStatus);
 
-    const res = await apiRequest(`${API_ENDPOINTS.inventoryShipments}?${query}`);
-    const shipmentsRaw = extractList(res);
-    const enrichment = await loadVariantEnrichmentContext({ storeId: resolvedStoreId });
-    const allShipments = shipmentsRaw.map((row) => mapShipment(row, enrichment));
-    const shipments = filterShipmentsByStatus(allShipments, status);
+  const res = await apiRequest(`${API_ENDPOINTS.inventoryShipments}?${query}`);
+  const shipmentsRaw = extractList(res);
+  const enrichment = await loadVariantEnrichmentContext({ storeId: resolvedStoreId });
+  const allShipments = shipmentsRaw.map((row) => mapShipment(row, enrichment));
+  const shipments = filterShipmentsByStatus(allShipments, status);
 
-    return {
-      shipments,
-      stats: normalizeShipmentStats(res?.stats, allShipments),
-      meta: res?.meta ?? null,
-    };
-  }, TTL.SEMI, forceRefresh);
+  return {
+    shipments,
+    stats: normalizeShipmentStats(res?.stats, allShipments),
+    meta: res?.meta ?? null,
+  };
 }
 
 /**

@@ -1,6 +1,6 @@
 import { apiRequest } from './client';
 import { API_ENDPOINTS } from './config';
-import { staleWhileRevalidate, TTL, clearCache } from './cache';
+
 
 function extractList(res) {
   const payload = res?.data ?? res;
@@ -193,49 +193,43 @@ export async function fetchOrders({
   perPage = 50,
   page = 1,
   excludePos = true,
-} = {}, forceRefresh = false) {
-  return staleWhileRevalidate(`orders_p${page}`, async () => {
-    const query = new URLSearchParams({
-      per_page: String(perPage),
-      page: String(page),
-    });
-    if (storeId) query.set('store_id', String(storeId));
-    if (search?.trim()) query.set('search', search.trim());
-    const apiStatus = mapStatusToApi(status);
-    if (apiStatus) query.set('status', apiStatus);
+} = {}) {
+  const query = new URLSearchParams({
+    per_page: String(perPage),
+    page: String(page),
+  });
+  if (storeId) query.set('store_id', String(storeId));
+  if (search?.trim()) query.set('search', search.trim());
+  const apiStatus = mapStatusToApi(status);
+  if (apiStatus) query.set('status', apiStatus);
 
-    const res = await apiRequest(`${API_ENDPOINTS.orders}?${query}`);
-    let rows = extractList(res).map(mapOrder);
-    if (excludePos) {
-      rows = rows.filter((order) => !isPosOrder(order.raw));
-    }
+  const res = await apiRequest(`${API_ENDPOINTS.orders}?${query}`);
+  let rows = extractList(res).map(mapOrder);
+  if (excludePos) {
+    rows = rows.filter((order) => !isPosOrder(order.raw));
+  }
 
-    return {
-      orders: rows,
-      meta: res?.meta ?? null,
-    };
-  }, TTL.DYNAMIC, forceRefresh);
+  return {
+    orders: rows,
+    meta: res?.meta ?? null,
+  };
 }
 
 export async function fetchAllOrders(filters = {}) {
-  const forceRefresh = filters.forceRefresh === true;
-  const cacheKey = `all_orders_${filters.status || 'all'}`;
-  return staleWhileRevalidate(cacheKey, async () => {
-    const perPage = filters.perPage ?? 100;
-    const maxPages = filters.maxPages ?? 5;
-    const all = [];
-    let page = 1;
-    let lastPage = 1;
+  const perPage = filters.perPage ?? 100;
+  const maxPages = filters.maxPages ?? 5;
+  const all = [];
+  let page = 1;
+  let lastPage = 1;
 
-    do {
-      const result = await fetchOrders({ ...filters, perPage, page }, true);
-      all.push(...result.orders);
-      lastPage = Number(result.meta?.last_page ?? result.meta?.total_pages ?? 1);
-      page += 1;
-    } while (page <= lastPage && (maxPages === null || page <= maxPages));
+  do {
+    const result = await fetchOrders({ ...filters, perPage, page }, true);
+    all.push(...result.orders);
+    lastPage = Number(result.meta?.last_page ?? result.meta?.total_pages ?? 1);
+    page += 1;
+  } while (page <= lastPage && (maxPages === null || page <= maxPages));
 
-    return all;
-  }, TTL.DYNAMIC, forceRefresh);
+  return all;
 }
 
 /**
@@ -251,8 +245,6 @@ export async function fetchOrder(id) {
  * PATCH /orders/{id}/status — تحديث حالة الطلب
  */
 export async function updateOrderStatus(id, status, comment) {
-  clearCache('orders_');
-  clearCache('all_orders_');
   const body = { status: mapStatusToApi(status) };
   if (comment?.trim()) body.comment = comment.trim();
 
@@ -268,8 +260,6 @@ export async function updateOrderStatus(id, status, comment) {
  * POST /orders/{id}/cancel — إلغاء الطلب
  */
 export async function cancelOrder(id, reason = 'إلغاء من لوحة المتجر') {
-  clearCache('orders_');
-  clearCache('all_orders_');
   const res = await apiRequest(API_ENDPOINTS.orderCancel(id), {
     method: 'POST',
     body: { reason: reason.trim() || 'إلغاء من لوحة المتجر' },
@@ -343,8 +333,6 @@ export function canDispatchOrder(order) {
  * POST /orders/{id}/confirm-delivery — تأكيد التسليم
  */
 export async function confirmOrderDelivery(id) {
-  clearCache('orders_');
-  clearCache('all_orders_');
   const res = await apiRequest(API_ENDPOINTS.orderConfirmDelivery(id), { method: 'POST' });
   return mapOrder(res?.data ?? res);
 }

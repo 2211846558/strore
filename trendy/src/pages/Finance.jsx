@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   Search,
   Eye,
@@ -16,22 +16,23 @@ import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import WalletModal from '../components/finance/WalletModal';
 import TransactionDetailModal from '../components/finance/TransactionDetailModal';
-import { fetchCustodyLogs, fetchCustodySummary } from '../api/custody';
-import { useWallet } from '../context/WalletContext';
+import { useWalletBalance } from '../api/hooks/useWallet';
 import { useStore } from '../context/AuthContext';
 import {
-  fetchAllTransactions,
   fetchTransactionDetails,
-  fetchRevenueOverview,
-  fetchProfitOverview,
   resolveStoreNetRevenue,
   resolveStoreNetProfit,
-  fetchMonthlyRevenueChart,
   exportFinanceReport,
   filterTransactionsByType,
   FINANCE_TYPE_OPTIONS,
-  FINANCE_STATUS_OPTIONS,
 } from '../api/finance';
+import {
+  useTransactions,
+  useRevenueOverview,
+  useProfitOverview,
+  useMonthlyRevenueChart,
+} from '../api/hooks/useFinance';
+import { useCustodySummary, useCustodyLogs } from '../api/hooks/useCustody';
 import { getApiErrorMessage } from '../api/stores';
 import './Finance.css';
 
@@ -43,21 +44,13 @@ const formatMoney = (value) =>
 
 const Finance = () => {
   const { storeId } = useStore();
-  const { balance: walletBalance } = useWallet();
-  const [transactions, setTransactions] = useState([]);
-  const [chartData, setChartData] = useState([]);
-  const [profitOverview, setProfitOverview] = useState(null);
-  const [revenueOverview, setRevenueOverview] = useState(null);
-  const [custodySummary, setCustodySummary] = useState(null);
+  const { data: walletData } = useWalletBalance();
+  const walletBalance = walletData?.balance ?? 0;
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
-  const [loading, setLoading] = useState(true);
   const [loadingDetail, setLoadingDetail] = useState(false);
-  const [error, setError] = useState('');
   const [isWalletOpen, setIsWalletOpen] = useState(false);
-  const [custodyLogs, setCustodyLogs] = useState([]);
   const [selectedTransaction, setSelectedTransaction] = useState(null);
   const [toast, setToast] = useState(null);
 
@@ -73,60 +66,33 @@ const Finance = () => {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  const loadFinanceData = useCallback(async (cancelled) => {
-    setLoading(true);
-    setError('');
-    try {
-      const [txResult, revenue, profit, custody, logs] = await Promise.all([
-        fetchAllTransactions({
-          search: debouncedSearch,
-          status: statusFilter !== 'all' ? statusFilter : undefined,
-          perPage: 100,
-          maxPages: 3,
-        }).catch(() => ({ transactions: [] })),
-        fetchRevenueOverview().catch(() => null),
-        fetchProfitOverview().catch(() => null),
-        fetchCustodySummary({ storeId }).catch(() => null),
-        fetchCustodyLogs({ storeId, perPage: 20 }).catch(() => ({ data: [] })),
-      ]);
+  const txFilters = useMemo(
+    () => ({
+      search: debouncedSearch,
+      perPage: 100,
+      maxPages: 3,
+    }),
+    [debouncedSearch],
+  );
 
-      if (cancelled?.current) return;
-      setTransactions(txResult.transactions);
-      setRevenueOverview(revenue);
-      setProfitOverview(profit);
-      setCustodySummary(custody);
-      setCustodyLogs(logs?.data ?? []);
-    } catch (err) {
-      if (cancelled?.current) return;
-      setError(getApiErrorMessage(err, 'تعذّر تحميل البيانات المالية'));
-      setTransactions([]);
-    } finally {
-      if (!cancelled?.current) setLoading(false);
-    }
-  }, [debouncedSearch, statusFilter, storeId]);
+  const { data: txResult, isLoading: txLoading, error: txError } = useTransactions(txFilters);
+  const { data: revenue, isLoading: revLoading } = useRevenueOverview();
+  const { data: profit, isLoading: profitLoading } = useProfitOverview();
+  const { data: custodySummary, isLoading: custodySumLoading } = useCustodySummary({ storeId });
+  const { data: custodyLogsRes, isLoading: custodyLogLoading } = useCustodyLogs({ storeId, perPage: 20 });
+  const { data: chartData, isLoading: chartLoading } = useMonthlyRevenueChart(5);
 
-  useEffect(() => {
-    const cancelled = { current: false };
-    loadFinanceData(cancelled);
-    return () => { cancelled.current = true; };
-  }, [loadFinanceData]);
+  const loading = txLoading || revLoading || profitLoading || custodySumLoading || custodyLogLoading;
 
-  useEffect(() => {
-    const cancelled = { current: false };
-    fetchMonthlyRevenueChart(5).then((data) => {
-      if (!cancelled.current) setChartData(data);
-    }).catch(() => {
-      if (!cancelled.current) setChartData([]);
-    });
-    return () => { cancelled.current = true; };
-  }, [storeId]);
+  const transactions = txResult?.transactions ?? [];
+  const custodyLogs = custodyLogsRes?.data ?? [];
 
   const filteredTransactions = filterTransactionsByType(transactions, typeFilter);
 
   const totalTransactions = transactions.length;
   const successfulTransactions = transactions.filter((t) => t.status === 'ناجح').length;
-  const netRevenue = resolveStoreNetRevenue(revenueOverview);
-  const netProfit = resolveStoreNetProfit(profitOverview);
+  const netRevenue = resolveStoreNetRevenue(revenue);
+  const netProfit = resolveStoreNetProfit(profit);
   const currentBalance = walletBalance;
 
   const handleViewTransaction = async (transaction) => {
@@ -146,7 +112,6 @@ const Finance = () => {
     try {
       const apiRes = await exportFinanceReport({
         search: debouncedSearch,
-        status: statusFilter !== 'all' ? statusFilter : undefined,
       });
       if (apiRes?.message) {
         showToast(apiRes.message);
@@ -237,11 +202,11 @@ const Finance = () => {
           <p className="chart-subtitle">تطور الإيرادات خلال الأشهر الماضية</p>
         </div>
         <div className="chart-container">
-          {loading ? (
+          {chartLoading ? (
             <p className="finance-loading-chart">جاري تحميل الرسم البياني...</p>
           ) : (
             <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+              <LineChart data={chartData ?? []} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#242240" />
                 <XAxis dataKey="month" tick={{ fontSize: 13, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 13, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
@@ -283,15 +248,6 @@ const Finance = () => {
 
         <div className="finance-controls">
           <div className="filter-dropdown">
-            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-              {FINANCE_STATUS_OPTIONS.map((s) => (
-                <option key={s.value} value={s.value}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="filter-dropdown">
             <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
               {FINANCE_TYPE_OPTIONS.map((t) => (
                 <option key={t.value} value={t.value}>
@@ -312,7 +268,7 @@ const Finance = () => {
           </div>
         </div>
 
-        {error && <p className="finance-error">{error}</p>}
+        {txError && <p className="finance-error">{txError?.message || 'تعذّر تحميل البيانات المالية'}</p>}
 
         <div className="transaction-table-wrapper">
           <table className="transaction-table">

@@ -1,6 +1,8 @@
 import { apiRequest } from './client';
 import { API_ENDPOINTS, STORE_AUTH_ENDPOINTS } from './config';
 
+const LOCAL_SUBSCRIPTION_KEY_PREFIX = 'trendy_plan_sub_';
+
 const TOKEN_KEY = 'trendy_auth_token';
 const USER_KEY = 'trendy_auth_user';
 const STORE_ID_KEY = 'trendy_store_id';
@@ -135,23 +137,140 @@ function mergeUserSession(freshUser) {
   };
 }
 
-export function storeHasActivePlan(store) {
+function parseApiDate(value) {
+  if (!value) return null;
+  const normalized = String(value).includes('T') ? value : String(value).replace(' ', 'T');
+  const date = new Date(normalized);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function readLocalSubscriptionDates(storeId) {
+  if (!storeId) return { startsAt: null, endsAt: null };
+  try {
+    const raw = localStorage.getItem(`${LOCAL_SUBSCRIPTION_KEY_PREFIX}${storeId}`);
+    if (!raw) return { startsAt: null, endsAt: null };
+    const item = JSON.parse(raw);
+    const startsAt = parseApiDate(item.starts_at);
+    const endsAt = parseApiDate(item.ends_at);
+    if (endsAt && endsAt.getTime() <= Date.now()) {
+      clearLocalSubscriptionDates(storeId);
+      return { startsAt: null, endsAt: null };
+    }
+    return { startsAt, endsAt };
+  } catch {
+    return { startsAt: null, endsAt: null };
+  }
+}
+
+export function clearLocalSubscriptionDates(storeId) {
+  if (!storeId) return;
+  localStorage.removeItem(`${LOCAL_SUBSCRIPTION_KEY_PREFIX}${storeId}`);
+}
+
+export function isSubscriptionAccessBlockedError(error) {
+  const msg = String(error?.message ?? error?.data?.message ?? '');
+  return (
+    error?.status === 403 &&
+    (/store_inactive_subscription|store_plan_inactive|plan.*expired|subscription.*expired|inactive subscription|يجب الاشتراك|انتهى.*اشتراك|الاشتراك.*منته/i.test(
+      msg,
+    ) ||
+      /store_plan_active/i.test(msg))
+  );
+}
+
+/**
+ * يتحقق من نشاط خطة المتجر عبر GET /my-store/products (محمي بـ store_plan_active).
+ * عند انتهاء الاشتراك يُرجع الباكند 403 — لا حاجة لتعديل الباكند.
+ */
+export async function verifyStorePlanActive(storeId) {
+  if (!storeId) return { active: false, reason: 'no_store' };
+
+  const query = new URLSearchParams({ per_page: '1', store_id: String(storeId) });
+
+  try {
+    await apiRequest(`${API_ENDPOINTS.myStoreProducts}?${query}`);
+    return { active: true };
+  } catch (err) {
+    if (isSubscriptionAccessBlockedError(err)) {
+      return { active: false, reason: 'subscription_expired' };
+    }
+    if (err?.status === 403) {
+      return { active: false, reason: 'forbidden' };
+    }
+    return { active: null, error: err };
+  }
+}
+
+export function extractStoreSubscriptionDates(store, storeId = null) {
+  const resolvedStoreId = storeId ?? store?.id ?? null;
+
+  let startsAt = parseApiDate(
+    store?.subscription_starts_at ??
+      store?.plan_starts_at ??
+      store?.subscription?.starts_at ??
+      store?.subscription?.start_date,
+  );
+  let endsAt = parseApiDate(
+    store?.subscription_ends_at ??
+      store?.plan_expires_at ??
+      store?.subscription?.ends_at ??
+      store?.subscription?.end_date ??
+      store?.expires_at,
+  );
+
+  const pivot = store?.plan?.pivot ?? store?.subscription?.pivot ?? null;
+  if (pivot) {
+    startsAt = startsAt ?? parseApiDate(pivot.starts_at ?? pivot.start_date);
+    endsAt = endsAt ?? parseApiDate(pivot.ends_at ?? pivot.end_date);
+  }
+
+  const status = String(store?.status ?? '').toLowerCase();
+  if (status === 'inactive' || status === 'expired') {
+    clearLocalSubscriptionDates(resolvedStoreId);
+  } else {
+    const local = readLocalSubscriptionDates(resolvedStoreId);
+    startsAt = startsAt ?? local.startsAt;
+    endsAt = endsAt ?? local.endsAt;
+  }
+
+  return { startsAt, endsAt };
+}
+
+export function storeSubscriptionExpired(store, storeId = null) {
   if (!store) return false;
-  if (store.status === 'active') return true;
 
   const planId = store.plan_id ?? store.plan?.id ?? store.subscription?.plan_id;
+  const { startsAt, endsAt } = extractStoreSubscriptionDates(store, storeId);
+  const now = Date.now();
+
+  if (endsAt) return endsAt.getTime() <= now;
+  if (startsAt && startsAt.getTime() > now) return false;
+
+  const status = String(store.status ?? '').toLowerCase();
+  return Boolean(planId) && (status === 'inactive' || status === 'expired');
+}
+
+export function storeHasActivePlan(store, storeId = null) {
+  if (!store) return false;
+
+  const status = String(store.status ?? '').toLowerCase();
+  if (status === 'deactivated' || status === 'inactive' || status === 'expired') return false;
+
+  const planId = store.plan_id ?? store.plan?.id ?? store.subscription?.plan_id;
+  const { startsAt, endsAt } = extractStoreSubscriptionDates(store, storeId);
+  const now = Date.now();
+
+  if (endsAt) {
+    if (endsAt.getTime() <= now) return false;
+    if (startsAt && startsAt.getTime() > now) return false;
+    return true;
+  }
+
+  if (startsAt && startsAt.getTime() > now) return false;
   if (!planId) return false;
+  if (status === 'inactive' || status === 'expired') return false;
 
-  const endRaw =
-    store.subscription_ends_at ??
-    store.plan_expires_at ??
-    store.subscription?.ends_at ??
-    store.subscription?.end_date ??
-    null;
-
-  if (endRaw) return new Date(endRaw).getTime() > Date.now();
-
-  return store.status !== 'inactive';
+  return status === 'active';
 }
 
 export const persistAuthSession = ({ token, user }) => {

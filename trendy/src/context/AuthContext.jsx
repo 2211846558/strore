@@ -5,13 +5,17 @@ import {
   getStoredStoreId,
   getActiveStore,
   resolveManagedStoreId,
-  storeHasActivePlan,
+  storeSubscriptionExpired,
+  clearLocalSubscriptionDates,
+  verifyStorePlanActive,
   storeLogin as apiStoreLogin,
   storeLogout as apiStoreLogout,
   fetchCurrentUser,
   persistAuthSession,
   AUTH_UNAUTHORIZED_EVENT,
 } from '../api/auth';
+import { resolveStorePlanAccess } from '../api/plans';
+import { useCurrentUser } from '../api/hooks/useAuth';
 
 const AuthStateContext = createContext(null);
 const StoreContext = createContext(null);
@@ -22,8 +26,12 @@ export const AuthProvider = ({ children }) => {
   const [storeId, setStoreId] = useState(() => resolveManagedStoreId(getStoredUser()) ?? getStoredStoreId());
   const [isAuthenticated, setIsAuthenticated] = useState(() => Boolean(getAuthToken()));
   const [isLoading, setIsLoading] = useState(false);
+  const [planChecking, setPlanChecking] = useState(() => Boolean(getAuthToken()));
+  const [planAccessActive, setPlanAccessActive] = useState(null);
   const userRef = useRef(user);
   userRef.current = user;
+
+  const { data: freshUser, isSuccess, isError } = useCurrentUser();
 
   useEffect(() => {
     const storedUser = getStoredUser();
@@ -32,34 +40,112 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   useEffect(() => {
-    const token = getAuthToken();
-    if (!token) return;
-
-    fetchCurrentUser()
-      .then((freshUser) => {
-        if (!freshUser) return;
-        persistAuthSession({ token, user: freshUser });
-        setUser(freshUser);
-        const id = resolveManagedStoreId(freshUser);
-        if (id) setStoreId(id);
-      })
-      .catch(() => {
-        setUser(null);
-        setStoreId(null);
-        setIsAuthenticated(false);
-      });
-  }, []);
+    if (isSuccess && freshUser) {
+      persistAuthSession({ token: getAuthToken(), user: freshUser });
+      setUser(freshUser);
+      const id = resolveManagedStoreId(freshUser);
+      if (id) setStoreId(id);
+    } else if (isError) {
+      setUser(null);
+      setStoreId(null);
+      setIsAuthenticated(false);
+    }
+  }, [isSuccess, isError, freshUser]);
 
   useEffect(() => {
     const handleUnauthorized = () => {
       setUser(null);
       setStoreId(null);
       setIsAuthenticated(false);
+      setPlanAccessActive(null);
+      setPlanChecking(false);
     };
 
     window.addEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized);
     return () => window.removeEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized);
   }, []);
+
+  const applyPlanAccessResult = useCallback((result, targetStoreId) => {
+    if (result?.active === true) {
+      setPlanAccessActive(true);
+      return;
+    }
+
+    if (result?.active === false && targetStoreId) {
+      setPlanAccessActive(false);
+      clearLocalSubscriptionDates(targetStoreId);
+
+      const currentUser = userRef.current;
+      if (!currentUser) return;
+
+      const patch = {
+        id: targetStoreId,
+        status: result.reason === 'subscription_expired' ? 'expired' : 'inactive',
+      };
+      const owned = currentUser.owned_stores || currentUser.ownedStores || [];
+      const updatedOwned = owned.map((s) => (s.id === targetStoreId ? { ...s, ...patch } : s));
+      const shouldUpdatePrimary =
+        !currentUser.store ||
+        currentUser.store.id === targetStoreId ||
+        currentUser.store_id === targetStoreId;
+      const nextStore = shouldUpdatePrimary ? { ...(currentUser.store || {}), ...patch } : currentUser.store;
+      const nextUser = {
+        ...currentUser,
+        store_id: targetStoreId,
+        store: nextStore,
+        owned_stores: updatedOwned,
+        ownedStores: updatedOwned,
+      };
+
+      persistAuthSession({ token: getAuthToken(), user: nextUser });
+      setUser(nextUser);
+    }
+  }, []);
+
+  const checkPlanAccess = useCallback(async (targetStoreId) => {
+    if (!targetStoreId) {
+      setPlanAccessActive(false);
+      setPlanChecking(false);
+      return;
+    }
+
+    setPlanChecking(true);
+    try {
+      const currentStore = getActiveStore(userRef.current);
+      const subscriptionResult = await resolveStorePlanAccess(currentStore, targetStoreId);
+
+      if (!subscriptionResult.active) {
+        applyPlanAccessResult(
+          { active: false, reason: subscriptionResult.reason ?? 'no_subscription' },
+          targetStoreId,
+        );
+        return;
+      }
+
+      const apiResult = await verifyStorePlanActive(targetStoreId);
+      if (apiResult.active === false) {
+        applyPlanAccessResult(apiResult, targetStoreId);
+        return;
+      }
+
+      setPlanAccessActive(true);
+    } catch {
+      setPlanAccessActive(false);
+    } finally {
+      setPlanChecking(false);
+    }
+  }, [applyPlanAccessResult]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !storeId) {
+      setPlanAccessActive(isAuthenticated ? false : null);
+      setPlanChecking(false);
+      return undefined;
+    }
+
+    checkPlanAccess(storeId);
+    return undefined;
+  }, [isAuthenticated, storeId, checkPlanAccess]);
 
   const login = useCallback(async ({ email, password, storeCode }) => {
     setIsLoading(true);
@@ -70,6 +156,7 @@ export const AuthProvider = ({ children }) => {
       setUser(authUser);
       setStoreId(resolveManagedStoreId(authUser) ?? store?.id ?? null);
       setIsAuthenticated(true);
+      setPlanChecking(true);
       return data;
     } finally {
       setIsLoading(false);
@@ -81,6 +168,8 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
     setStoreId(null);
     setIsAuthenticated(false);
+    setPlanAccessActive(null);
+    setPlanChecking(false);
   }, []);
 
   const updateStoreInSession = useCallback((storeData) => {
@@ -112,6 +201,15 @@ export const AuthProvider = ({ children }) => {
 
     persistAuthSession({ token: getAuthToken(), user: nextUser });
     setUser(nextUser);
+
+    const endsAtRaw = storeData.subscription_ends_at ?? storeData.plan_expires_at;
+    const endsAt = endsAtRaw ? new Date(String(endsAtRaw).replace(' ', 'T')) : null;
+    const hasValidEnd = endsAt && !Number.isNaN(endsAt.getTime()) && endsAt.getTime() > Date.now();
+    if (String(storeData.status ?? '').toLowerCase() === 'active' && hasValidEnd) {
+      setPlanAccessActive(true);
+    } else {
+      setPlanAccessActive(false);
+    }
   }, []);
 
   const refreshSession = useCallback(async () => {
@@ -131,7 +229,11 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const store = useMemo(() => getActiveStore(user), [user]);
-  const hasActivePlan = useMemo(() => storeHasActivePlan(store), [store]);
+  const hasActivePlan = planAccessActive === true && !planChecking;
+  const subscriptionExpired = useMemo(
+    () => !hasActivePlan && storeSubscriptionExpired(store, storeId),
+    [hasActivePlan, store, storeId],
+  );
 
   const authStateValue = useMemo(
     () => ({ user, isAuthenticated, isLoading }),
@@ -139,13 +241,13 @@ export const AuthProvider = ({ children }) => {
   );
 
   const storeValue = useMemo(
-    () => ({ store, storeId, hasActivePlan }),
-    [store, storeId, hasActivePlan]
+    () => ({ store, storeId, hasActivePlan, subscriptionExpired, planChecking }),
+    [store, storeId, hasActivePlan, subscriptionExpired, planChecking]
   );
 
   const actionsValue = useMemo(
-    () => ({ login, logout, updateStoreInSession, refreshSession }),
-    [login, logout, updateStoreInSession, refreshSession]
+    () => ({ login, logout, updateStoreInSession, refreshSession, refreshPlanAccess: checkPlanAccess }),
+    [login, logout, updateStoreInSession, refreshSession, checkPlanAccess]
   );
 
   return (

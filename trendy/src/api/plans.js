@@ -1,7 +1,7 @@
 import { apiRequest } from './client';
 import { API_ENDPOINTS } from './config';
 import { fetchTransactions, fetchAllTransactions } from './finance';
-import { staleWhileRevalidate, TTL, clearCache } from './cache';
+
 
 function extractList(res) {
   const payload = res?.data ?? res;
@@ -622,7 +622,7 @@ export async function resolveAllStoreSubscriptions(store, storeId, plans = [], a
   if (storeId) {
     try {
       const res = await apiRequest(API_ENDPOINTS.storePlanSubscriptions(storeId));
-      const subs = res?.subscriptions ?? res?.data?.subscriptions ?? [];
+      const subs = extractList(res?.subscriptions ? { data: res.subscriptions } : res);
       apiSubscriptions = subs.map((s) => mapSubscriptionFromApi(s, plans)).filter(Boolean);
       apiSuccess = true;
     } catch (err) {
@@ -647,11 +647,27 @@ export async function resolveAllStoreSubscriptions(store, storeId, plans = [], a
   const stacked = stackSubscriptionPeriods(merged);
 
   if (apiSuccess) {
+    const sessionActive = stacked.filter((sub) => !sub.isExpired);
+    const missingFromApi = sessionActive.filter(
+      (sub) =>
+        !apiSubscriptions.some(
+          (apiSub) =>
+            Number(apiSub.planId) === Number(sub.planId) &&
+            Math.abs((apiSub.startsAtMs ?? 0) - (sub.startsAtMs ?? 0)) < 5 * 60 * 1000,
+        ),
+    );
     const expiredFromStacked = stacked.filter((sub) => sub.status === 'منتهي' || sub.isExpired);
     const finalExpired = expiredFromStacked.filter(
-      (exp) => !apiSubscriptions.some((apiSub) => apiSub.planId === exp.planId && Math.abs(apiSub.startsAtMs - exp.startsAtMs) < 1000 * 60)
+      (exp) =>
+        !apiSubscriptions.some(
+          (apiSub) =>
+            apiSub.planId === exp.planId &&
+            Math.abs(apiSub.startsAtMs - exp.startsAtMs) < 1000 * 60,
+        ),
     );
-    return [...apiSubscriptions, ...finalExpired].sort((a, b) => (b.startsAtMs ?? 0) - (a.startsAtMs ?? 0));
+    return [...apiSubscriptions, ...missingFromApi, ...finalExpired].sort(
+      (a, b) => (b.startsAtMs ?? 0) - (a.startsAtMs ?? 0),
+    );
   } else {
     return stacked.sort((a, b) => (b.startsAtMs ?? 0) - (a.startsAtMs ?? 0));
   }
@@ -778,20 +794,60 @@ export function extractStoreFromSubscriptionResponse(response, plan) {
 }
 
 /**
+ * يحدّد هل للمتجر اشتراك نشط فعلياً (GET /plans + GET /finance/transactions + سجل الاشتراك).
+ * يُستخدم لمنع الدخول للداشبورد قبل POST /stores/subscribe.
+ */
+export async function resolveStorePlanAccess(store, storeId) {
+  let plans = [];
+  try {
+    const rawPlans = await fetchPlans();
+    plans = rawPlans.map(mapPlanFromApi);
+  } catch {
+    plans = [];
+  }
+
+  let details = null;
+  try {
+    details = await resolveStoreSubscriptionDetails(store, storeId, plans);
+  } catch {
+    details = null;
+  }
+
+  let subscriptions = [];
+  try {
+    subscriptions = await resolveAllStoreSubscriptions(store, storeId, plans, details);
+  } catch {
+    const current = mapStoreSubscription(store, plans, details);
+    subscriptions = current ? [current] : [];
+  }
+
+  const activeSubscription = subscriptions.find(
+    (sub) => !sub.isExpired && sub.status === 'نشط',
+  );
+
+  if (activeSubscription) {
+    return { active: true, subscription: activeSubscription };
+  }
+
+  const hadSubscription = subscriptions.some((sub) => sub.isExpired || sub.status === 'منتهي');
+  return {
+    active: false,
+    reason: hadSubscription ? 'subscription_expired' : 'no_subscription',
+  };
+}
+
+/**
  * GET /api/plans — الخطط النشطة المتاحة للتجار
  */
-export async function fetchPlans(forceRefresh = false) {
-  return staleWhileRevalidate('plans', async () => {
-    const res = await apiRequest(API_ENDPOINTS.plans);
-    return extractList(res);
-  }, TTL.STATIC, forceRefresh);
+export async function fetchPlans() {
+  const res = await apiRequest(API_ENDPOINTS.plans);
+  return extractList(res);
 }
 
 /**
  * POST /api/stores/subscribe — body: { plan_id, store_id }
  */
 export async function subscribeToPlan({ planId, storeId }) {
-  clearCache('plans');
   return apiRequest(API_ENDPOINTS.storeSubscribe, {
     method: 'POST',
     body: {
@@ -805,7 +861,6 @@ export async function subscribeToPlan({ planId, storeId }) {
  * POST /api/stores/{store}/renew
  */
 export async function renewStorePlan(storeId) {
-  clearCache('plans');
   return apiRequest(API_ENDPOINTS.storePlanRenew(storeId), { method: 'POST' });
 }
 
@@ -813,7 +868,6 @@ export async function renewStorePlan(storeId) {
  * POST /api/stores/{store}/change-plan/{plan}
  */
 export async function changeStorePlan(storeId, planId) {
-  clearCache('plans');
   return apiRequest(API_ENDPOINTS.storePlanChange(storeId, planId), { method: 'POST' });
 }
 

@@ -1,25 +1,24 @@
 import { apiRequest } from './client';
 import { API_ENDPOINTS } from './config';
-import { staleWhileRevalidate, TTL, clearCache } from './cache';
+
 
 /**
  * Fetch notifications list
  */
-export async function fetchNotifications(params = {}, forceRefresh = false) {
+export async function fetchNotifications(params = {}) {
   const query = new URLSearchParams();
   if (params.page) query.append('page', params.page);
   if (params.perPage) query.append('per_page', params.perPage);
   
   const queryString = query.toString();
   const path = `${API_ENDPOINTS.notifications}${queryString ? `?${queryString}` : ''}`;
-  return staleWhileRevalidate('notifications', () => apiRequest(path), TTL.DYNAMIC, forceRefresh);
+  return apiRequest(path);
 }
 
 /**
  * Mark a single notification as read
  */
 export async function markNotificationAsRead(id) {
-  clearCache('notifications');
   return apiRequest(API_ENDPOINTS.notificationRead(id), {
     method: 'PATCH',
   });
@@ -29,7 +28,6 @@ export async function markNotificationAsRead(id) {
  * Mark all notifications as read
  */
 export async function markAllNotificationsAsRead() {
-  clearCache('notifications');
   return apiRequest(API_ENDPOINTS.notificationsReadAll, {
     method: 'POST',
   });
