@@ -7,6 +7,7 @@ import { Edit, Package, ShoppingCart, DollarSign, TrendingUp, Users } from 'luci
 import ChatBadge from '../components/chat/ChatBadge';
 import SupportBadge from '../components/chat/SupportBadge';
 import { useAuth, useStore, useAuthActions } from '../context/AuthContext';
+import { userCanEditStoreProfile } from '../api/auth';
 import {
   updateStore,
   buildStoreUpdateFormData,
@@ -158,15 +159,18 @@ const Dashboard = () => {
 
   const growthValue =
     stats?.salesGrowth != null ? `${stats.salesGrowth}%` : statsLoading ? '...' : '—';
+  const canEditStore = userCanEditStoreProfile(user);
 
   return (
     <div className="dashboard-page">
       <header className="page-header">
         <div className="header-actions">
-          <button className="edit-store-btn" onClick={() => setIsEditModalOpen(true)}>
-            <Edit size={16} />
-            تعديل بيانات المتجر
-          </button>
+          {canEditStore && (
+            <button className="edit-store-btn" onClick={() => setIsEditModalOpen(true)}>
+              <Edit size={16} />
+              تعديل بيانات المتجر
+            </button>
+          )}
           <ChatBadge />
           <SupportBadge />
         </div>
@@ -227,13 +231,15 @@ const Dashboard = () => {
         />
       </div>
 
-      <EditStoreModal
-        isOpen={isEditModalOpen}
-        onClose={() => setIsEditModalOpen(false)}
-        store={storeData}
-        onSave={handleSaveStoreData}
-        saving={saving}
-      />
+      {canEditStore && (
+        <EditStoreModal
+          isOpen={isEditModalOpen}
+          onClose={() => setIsEditModalOpen(false)}
+          store={storeData}
+          onSave={handleSaveStoreData}
+          saving={saving}
+        />
+      )}
 
       {toast && (
         <div className="toast-notification">

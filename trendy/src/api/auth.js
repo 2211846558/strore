@@ -98,6 +98,13 @@ export function userCanChargeStoreWallet(user) {
   return !roles.includes('store_staff');
 }
 
+/** تعديل بيانات المتجر — غير متاح لموظف المتجر (store_staff) */
+export function userCanEditStoreProfile(user) {
+  if (!user) return false;
+  if (userHasRole(user, 'store_manager')) return true;
+  return !userHasRole(user, 'store_staff');
+}
+
 function collectAccessibleStoreIds(user) {
   const owned = user?.owned_stores || user?.ownedStores || [];
   const employed = user?.employed_stores || user?.employedStores || [];
