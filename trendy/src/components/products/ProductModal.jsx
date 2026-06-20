@@ -24,6 +24,7 @@ const ProductModal = ({
   });
   const [existingImages, setExistingImages] = useState([]);
   const [newImages, setNewImages] = useState([]);
+  const [deletedImageIds, setDeletedImageIds] = useState([]);
   const [savedProduct, setSavedProduct] = useState(null);
   const [error, setError] = useState('');
 
@@ -32,6 +33,7 @@ const ProductModal = ({
 
     setSavedProduct(null);
     setError('');
+    setDeletedImageIds([]);
     setNewImages((prev) => {
       prev.forEach((img) => {
         if (img.preview?.startsWith('blob:')) URL.revokeObjectURL(img.preview);
@@ -95,6 +97,13 @@ const ProductModal = ({
     });
   };
 
+  const handleRemoveExistingImage = (id) => {
+    if (id) {
+      setDeletedImageIds((prev) => [...prev, id]);
+      setExistingImages((prev) => prev.filter((img) => img.id !== id));
+    }
+  };
+
   const totalImages = existingImages.length + newImages.length;
 
   const handleSubmit = async () => {
@@ -117,6 +126,7 @@ const ProductModal = ({
         categoryId: form.categoryId,
         stock: form.stock,
         imageFiles: newImages.map((img) => img.file),
+        deletedImageIds,
       });
       if (!isEdit && result?.id) {
         setSavedProduct(result);
@@ -168,6 +178,16 @@ const ProductModal = ({
                   <div key={img.id ?? `existing-${index}`} className="gallery-item existing">
                     <img src={img.url} alt={`صورة ${index + 1}`} />
                     {isEdit && <span className="gallery-item-tag">حالية</span>}
+                    {isEdit && (
+                      <button
+                        type="button"
+                        className="gallery-remove-btn"
+                        onClick={() => handleRemoveExistingImage(img.id)}
+                        aria-label="حذف الصورة الحالية"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
                   </div>
                 ))}
                 {newImages.map((img, index) => (

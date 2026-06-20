@@ -98,6 +98,7 @@ const Products = () => {
         categoryId: formData.categoryId,
         stock: formData.stock,
         imageFiles: formData.imageFiles,
+        deletedImages: formData.deletedImageIds,
       };
 
       if (editingProduct) {
@@ -106,8 +107,8 @@ const Products = () => {
           prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p)),
         );
         showToast(
-          formData.imageFiles?.length
-            ? 'تم تحديث المنتج وإضافة الصور'
+          (formData.imageFiles?.length || formData.deletedImageIds?.length)
+            ? 'تم تحديث المنتج وتعديل الصور'
             : 'تم تحديث المنتج',
         );
         await loadProducts();
