@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Trash2, Edit2, CheckCircle2, Eye } from 'lucide-react';
+import { Plus, Trash2, CheckCircle2, Eye } from 'lucide-react';
 import OfferModal from '../components/offers/OfferModal';
 import OfferDetailModal from '../components/offers/OfferDetailModal';
 import {
@@ -125,6 +125,13 @@ const Offers = () => {
     }
   };
 
+  const handleEditFromDetail = (offer) => {
+    setIsDetailOpen(false);
+    setDetailOffer(null);
+    setEditingOffer(offer);
+    setIsModalOpen(true);
+  };
+
   const getStatusClass = (status) => {
     if (status === 'نشط') return 'status-active';
     if (status === 'معطل' || status === 'منتهي') return 'status-inactive';
@@ -223,15 +230,6 @@ const Offers = () => {
                   <Eye size={16} />
                   عرض التفاصيل
                 </button>
-                <button
-                  type="button"
-                  className="offer-btn edit-btn"
-                  onClick={() => openEdit(offer)}
-                  disabled={isSaving || loadingOfferDetails}
-                >
-                  <Edit2 size={16} />
-                  تعديل
-                </button>
               </div>
             </div>
           ))
@@ -249,6 +247,8 @@ const Offers = () => {
         offer={detailOffer}
         catalogProducts={catalogProductsWithPrice}
         loading={loadingOfferDetails && !detailOffer}
+        onEdit={handleEditFromDetail}
+        editDisabled={isSaving}
       />
 
       <OfferModal

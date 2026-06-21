@@ -64,11 +64,17 @@
 .staff-details-modal .modal-footer {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
   padding: 20px 24px 24px;
   margin-top: 8px;
 }
 
-.staff-details-modal .save-button {
+.staff-details-modal .save-button,
+.staff-details-edit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   padding: 12px 24px;
   border-radius: 10px;
   border: none;
@@ -78,4 +84,21 @@
   font-weight: 700;
   cursor: pointer;
   font-family: inherit;
+}
+
+.staff-details-modal .cancel-button {
+  background-color: transparent;
+  color: var(--text-primary);
+  padding: 12px 24px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.staff-details-modal .cancel-button:hover {
+  background-color: var(--bg-main);
 }

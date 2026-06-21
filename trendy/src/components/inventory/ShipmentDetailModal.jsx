@@ -3,7 +3,7 @@ import ConfirmDialog from '../common/ConfirmDialog';
 import { ARCHIVE_SHIPMENT_CONFIRM } from './shipmentStatusConfirm';
 import {
   X, Truck, Calendar, Package,
-  CheckCircle2, Clock, XCircle, Tag, Hash, Layers
+  CheckCircle2, Clock, XCircle, Tag, Hash, Layers, Edit2
 } from 'lucide-react';
 import './ShipmentDetailModal.css';
 
@@ -25,7 +25,7 @@ function groupByProduct(items = []) {
   return Object.values(map);
 }
 
-const ShipmentDetailModal = ({ isOpen, onClose, shipment, onArchive, isSaving = false }) => {
+const ShipmentDetailModal = ({ isOpen, onClose, shipment, onArchive, onEdit, isSaving = false }) => {
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
 
   useEffect(() => {
@@ -205,6 +205,17 @@ const ShipmentDetailModal = ({ isOpen, onClose, shipment, onArchive, isSaving = 
               disabled={isSaving}
             >
               {isSaving ? 'جاري التحديث...' : 'أرشفة الشحنة'}
+            </button>
+          )}
+          {typeof onEdit === 'function' && (
+            <button
+              className="save-button sdm-edit-button"
+              onClick={() => onEdit(shipment)}
+              type="button"
+              disabled={isSaving}
+            >
+              <Edit2 size={16} />
+              تعديل الشحنة
             </button>
           )}
           <button className="cancel-button" onClick={onClose} type="button" disabled={isSaving}>

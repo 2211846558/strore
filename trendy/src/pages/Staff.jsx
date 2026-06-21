@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Plus, Edit2, Power, CheckCircle2, Eye, Trash2 } from 'lucide-react';
+import { Search, Plus, Power, CheckCircle2, Eye, Trash2 } from 'lucide-react';
 import StaffModal from '../components/staff/StaffModal';
 import StaffDetailsModal from '../components/staff/StaffDetailsModal';
 import RoleFilterDropdown from '../components/staff/RoleFilterDropdown';
@@ -138,6 +138,11 @@ const Staff = () => {
     }
   };
 
+  const handleEditFromDetail = (member) => {
+    setDetailsModal({ open: false, member: null, loading: false });
+    openEdit(member);
+  };
+
   return (
     <div className="staff-page">
       <header className="page-header staff-header">
@@ -228,15 +233,6 @@ const Staff = () => {
                         </button>
                         <button
                           type="button"
-                          className="action-btn edit-btn"
-                          onClick={() => openEdit(member)}
-                          title="تعديل"
-                          aria-label="تعديل"
-                        >
-                          <Edit2 size={16} />
-                        </button>
-                        <button
-                          type="button"
                           className={`action-btn toggle-btn ${member.active ? 'active' : 'inactive'}`}
                           onClick={() => handleToggleActive(member)}
                           disabled={memberBusy || member.roleSlug === 'store_manager'}
@@ -289,6 +285,7 @@ const Staff = () => {
         onClose={() => setDetailsModal({ open: false, member: null, loading: false })}
         member={detailsModal.member}
         loading={detailsModal.loading}
+        onEdit={handleEditFromDetail}
       />
 
       {toast && (
