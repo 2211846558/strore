@@ -99,8 +99,9 @@ Route::prefix('v1/auth')->group(function () {
     // تقديم طلب انضمام لفتح متجر جديد على المنصة
     // ─────────────────────────────────────────────────────────────────────────
     // - لا يُشترط وجود حساب مسبق: يُخزَّن الطلب فقط في store_join_requests (بيانات مقدم الطلب للقبول لاحقاً)
+    // - يُسمح بتكرار إيميل مدير المتجر لمالك متجر آخر — يُعاد استخدام الحساب عند القبول
     // - لا اشتراك بخطة عند التقديم — الاشتراك يتم بعد قبول الإدارة عبر POST /api/stores/subscribe
-    // - بعد القبول: إنشاء المستخدم والمتجر بحالة inactive حتى أول اشتراك بخطة فيصبح المتجر active
+    // - بعد القبول: إنشاء المتجر (أو ربطه بمدير موجود) بحالة inactive حتى أول اشتراك بخطة
     // POST /api/stores/join
     // -------------------------------------------------------------------------
     Route::post('/stores/join', [\App\Http\Controllers\Api\V1\StoreJoinController::class, 'store']);
@@ -184,7 +185,7 @@ Route::prefix('v1/auth')->group(function () {
             // عرض تفاصيل طلب انضمام محدد (بيانات الطلب + مقدم الطلب + الخطة)
             Route::get('/stores/requests/{storeJoinRequest}', [\App\Http\Controllers\Api\V1\Admin\AdminStoreRequestController::class, 'show']);
 
-            // قبول طلب الانضمام: إنشاء المستخدم والمتجر (inactive) ثم يشترك المالك في خطة عبر واجهة المتجر
+            // قبول طلب الانضمام: ربط المتجر بمدير موجود (نفس الإيميل) أو إنشاء مستخدم جديد، ثم inactive حتى الاشتراك
             Route::post('/stores/requests/{storeJoinRequest}/accept', [\App\Http\Controllers\Api\V1\Admin\AdminStoreRequestController::class, 'accept']);
 
             // رفض طلب الانضمام مع ذكر السبب (يبقى السجل في store_join_requests بحالة rejected)

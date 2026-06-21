@@ -123,6 +123,9 @@ const translateValidationMessage = (message, field) => {
   if (/email/i.test(message)) return `${label} غير صالح`;
   if (/min/i.test(message) && field === 'password') return 'كلمة المرور يجب أن تكون 8 أحرف على الأقل';
   if (/max/i.test(message) && field === 'notes') return 'الملاحظات يجب ألا تتجاوز 2000 حرف';
+  if (/unique/i.test(message) && field === 'store_email') {
+    return 'إيميل المتجر مستخدم مسبقاً أو يوجد طلب انضمام قيد المراجعة بهذا الإيميل.';
+  }
   if (/unique/i.test(message)) return `${label} مستخدم مسبقاً`;
   if (/after_or_equal|after or equal.*now/i.test(message)) {
     return `${label} يجب أن يكون اليوم أو تاريخاً لاحقاً`;
