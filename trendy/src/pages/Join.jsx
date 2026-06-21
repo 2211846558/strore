@@ -16,7 +16,8 @@ import {
   Building2,
   UserCircle,
 } from 'lucide-react';
-import { submitStoreJoinRequest, fetchZones, getApiErrorMessage } from '../api/join';
+import { submitStoreJoinRequest, fetchZones, getJoinApiErrorMessage } from '../api/join';
+import { clearAuthSession } from '../api/auth';
 import JoinEmailVerification, { JoinVerificationSuccess } from '../components/join/JoinEmailVerification';
 import './Login.css';
 
@@ -51,6 +52,7 @@ const Join = () => {
   const fileInputRef = useRef(null);
 
   useEffect(() => {
+    clearAuthSession();
     fetchZones()
       .then((list) => setZones(Array.isArray(list) ? list : []))
       .catch(() => setZones([]));
@@ -101,6 +103,12 @@ const Join = () => {
     if (formData.entityType === 'company' && !formData.commercialReg.trim()) {
       return 'رقم السجل التجاري مطلوب للشركات';
     }
+    if (isLocalType(formData.storeType) && !formData.zoneId) {
+      return 'يرجى اختيار المنطقة للمتجر المحلي';
+    }
+    if (isLocalType(formData.storeType) && !formData.googleMapUrl.trim()) {
+      return 'رابط خريطة Google مطلوب للمتجر المحلي';
+    }
     if (formData.notes.length > 2000) {
       return 'الملاحظات يجب ألا تتجاوز 2000 حرف';
     }
@@ -123,7 +131,7 @@ const Join = () => {
       setVerifyMessage(res?.message || '');
       setJoinStep('verify');
     } catch (err) {
-      setError(getApiErrorMessage(err));
+      setError(getJoinApiErrorMessage(err));
     } finally {
       setIsLoading(false);
     }
@@ -399,14 +407,14 @@ const Join = () => {
                 className="form-select"
               >
                 <option value="">اختر نوع المتجر</option>
-                <option value="محلي">محلي</option>
-                <option value="الكتروني">إلكتروني</option>
+                <option value="local">محلي</option>
+                <option value="electronic">إلكتروني</option>
               </select>
               <Store className="input-icon" size={20} />
             </div>
           </div>
 
-          {formData.storeType && (
+          {formData.storeType && isLocalType(formData.storeType) && (
             <>
               <div className="input-group">
                 <label htmlFor="zoneId">المنطقة</label>

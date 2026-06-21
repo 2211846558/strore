@@ -1,5 +1,6 @@
 import { API_ENDPOINTS } from './config';
 import { apiRequest } from './client';
+import { clearAuthSession } from './auth';
 
 
 const FIELD_LABELS = {
@@ -39,6 +40,13 @@ const FIELD_LABELS = {
 
 const isLocalStoreType = (type) => type === 'محلي' || type === 'local';
 
+function normalizeJoinStoreType(type) {
+  const value = String(type ?? '').trim();
+  if (value === 'محلي' || value === 'local') return 'local';
+  if (value === 'الكتروني' || value === 'إلكتروني' || value === 'electronic') return 'electronic';
+  return value;
+}
+
 /**
  * تحويل بيانات النموذج إلى FormData مطابق لـ StoreJoinRequest في Laravel
  */
@@ -53,7 +61,7 @@ export function buildStoreJoinFormData(form, logoFile) {
   fd.append('password', form.password);
   fd.append('phone', form.storePhone.trim());
   fd.append('entity_type', form.entityType);
-  fd.append('type', form.storeType);
+  fd.append('type', normalizeJoinStoreType(form.storeType));
 
   if (form.entityType === 'company' && form.commercialReg?.trim()) {
     fd.append('commercial_register_number', form.commercialReg.trim());
@@ -84,8 +92,11 @@ export function buildStoreJoinFormData(form, logoFile) {
 /**
  * POST /api/stores/join
  * إرسال طلب انضمام — يُرسل رمز التحقق (OTP) إلى إيميل المتجر
+ * مسار عام: لا يُرسل توكن ولا كوكيز جلسة قديمة
  */
 export async function submitStoreJoinRequest(form, logoFile) {
+  clearAuthSession();
+
   const body = buildStoreJoinFormData(form, logoFile);
   return apiRequest(API_ENDPOINTS.storesJoin, {
     method: 'POST',
@@ -364,6 +375,9 @@ export function getApiErrorMessage(error, fallback = 'تعذّر إرسال ال
   if (error?.message) {
     const msg = error.message.replace(/^\./, '').trim();
     if (error?.isUnauthorized || /unauthenticated/i.test(msg) || /bearer token/i.test(msg)) {
+      if (error?.isPublicRequest) {
+        return 'تعذّر إرسال طلب الانضمام. حدّث الصفحة وأعد المحاولة.';
+      }
       return 'انتهت جلستك. يرجى تسجيل الدخول مرة أخرى.';
     }
     if (error?.status === 403 || /insufficient permissions|forbidden|does not have the right roles/i.test(msg)) {
