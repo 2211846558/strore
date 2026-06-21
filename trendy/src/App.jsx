@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth, useStore, useAuthActions } from './context/AuthContext';
+import { WalletProvider } from './context/WalletContext';
 import { userCanManageEmployees, userCanAccessFinance } from './api/auth';
 import { StripeProvider } from './providers/StripeProvider';
 import DashboardLayout from './components/layout/DashboardLayout';
@@ -140,13 +141,15 @@ function AppRoutes() {
 function App() {
   return (
     <AuthProvider>
-      <StripeProvider>
-        <BrowserRouter>
-          <div className="app-container">
-            <AppRoutes />
-          </div>
-        </BrowserRouter>
-      </StripeProvider>
+      <WalletProvider>
+        <StripeProvider>
+          <BrowserRouter>
+            <div className="app-container">
+              <AppRoutes />
+            </div>
+          </BrowserRouter>
+        </StripeProvider>
+      </WalletProvider>
     </AuthProvider>
   );
 }
