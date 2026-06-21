@@ -15,16 +15,18 @@ import {
   refundPosItem,
   exchangePosItem,
   fetchPosInvoices,
+  fetchSalesProductVariants,
   getProductStockInfo,
   isProductAvailable,
   getVariantStock,
   resolveVariant,
   getExchangePriceDiff,
 } from '../api/pos';
+import SalesProductThumb from '../components/sales/SalesProductThumb';
 import { fetchOrders } from '../api/orders';
 import { getApiErrorMessage } from '../api/stores';
 import {
-  usePosInit,
+  useSalesProducts,
   usePosCart,
   useAddToCart,
   useRemoveFromCart,
@@ -58,6 +60,7 @@ const Sales = () => {
   const [exchangeTarget, setExchangeTarget] = useState(null);
   const [pendingExchange, setPendingExchange] = useState(null);
   const [toast, setToast] = useState(null);
+  const [loadingVariantProduct, setLoadingVariantProduct] = useState(false);
 
   const [activeAction, setActiveAction] = useState(null);
   const [orderSearchQuery, setOrderSearchQuery] = useState('');
@@ -120,13 +123,17 @@ const Sales = () => {
     };
   }, [dropdownOpen]);
 
-  const { data: posData, isLoading: loadingProducts } = usePosInit();
+  const {
+    products,
+    storeProducts,
+    isLoading: loadingProducts,
+    isError: productsLoadError,
+    error: productsFetchError,
+  } = useSalesProducts(storeId);
   const { data: cartData, isLoading: loadingCart } = usePosCart();
   const addMutation = useAddToCart();
   const removeMutation = useRemoveFromCart();
   const checkoutMutation = useCheckoutCart();
-
-  const products = posData?.catalog ?? [];
   const cart = cartData?.items ?? [];
   const cartTotal = cartData?.total ?? 0;
 
@@ -156,19 +163,42 @@ const Sales = () => {
   }, [invoices, invoiceSearch]);
 
   const refreshAll = async () => {
-    queryClient.invalidateQueries({ queryKey: ['posInit'] });
+    queryClient.invalidateQueries({ queryKey: ['salesPosCatalog'] });
+    queryClient.invalidateQueries({ queryKey: ['products'] });
     queryClient.invalidateQueries({ queryKey: ['posCart'] });
     if (activeTab === 'invoices') await loadInvoices();
   };
 
-  const isSaving = addMutation.isPending || removeMutation.isPending || checkoutMutation.isPending || isManualSaving;
+  const isSaving = addMutation.isPending || removeMutation.isPending || checkoutMutation.isPending || isManualSaving || loadingVariantProduct;
 
-  const openProduct = (product) => {
-    if (!isProductAvailable(product)) {
+  const openProduct = async (product) => {
+    if (product?.variants?.length && !isProductAvailable(product)) {
       showToast('هذا المنتج غير متوفر حالياً');
       return;
     }
-    setSelectedProduct(product);
+
+    let resolved = product;
+    if (!product?.variants?.length) {
+      setLoadingVariantProduct(true);
+      try {
+        const posEntry = await fetchSalesProductVariants(product.id, { storeId });
+        resolved = {
+          ...posEntry,
+          image: product.image,
+          imageCandidates: product.imageCandidates,
+          images: product.images,
+          name: product.name,
+          sku: product.sku,
+        };
+      } catch (err) {
+        showToast(getApiErrorMessage(err, 'تعذّر تحميل تنوعات هذا المنتج'));
+        return;
+      } finally {
+        setLoadingVariantProduct(false);
+      }
+    }
+
+    setSelectedProduct(resolved);
     setVariantOpen(true);
   };
 
@@ -618,6 +648,14 @@ const Sales = () => {
               <>
                 {cart.map((item) => (
                   <div key={item.key} className="sales-cart-item">
+                    <SalesProductThumb
+                      item={item}
+                      storeProducts={storeProducts}
+                      wrapperClassName="sales-cart-item-image-wrap"
+                      className="sales-cart-item-image"
+                      alt={item.name}
+                    />
+                    <div className="sales-cart-item-content">
                     <div className="sales-cart-item-header">
                       <div>
                         <p className="sales-cart-item-name">{item.name}</p>
@@ -640,6 +678,7 @@ const Sales = () => {
                       >
                         <Trash2 size={16} />
                       </button>
+                    </div>
                     </div>
                   </div>
                 ))}
@@ -666,14 +705,27 @@ const Sales = () => {
             <h3>منتجات المتجر</h3>
             {loadingProducts ? (
               <p className="sales-loading">جاري تحميل المنتجات...</p>
+            ) : productsLoadError ? (
+              <p className="sales-error">
+                {getApiErrorMessage(productsFetchError, 'تعذّر تحميل المنتجات')}
+              </p>
+            ) : products.length === 0 ? (
+              <p className="sales-loading">لا توجد منتجات في المتجر — أضف منتجات من صفحة المنتجات</p>
             ) : (
               <div className="sales-products-grid">
                 {products.map((product) => {
-                  const stockInfo = getProductStockInfo(product);
+                  const stockInfo = product.variants?.length
+                    ? getProductStockInfo(product)
+                    : {
+                        total: product.listStock != null ? Number(product.listStock) : 0,
+                        unknown: product.listStock == null,
+                      };
                   const totalStock = stockInfo.unknown && stockInfo.total === 0
                     ? null
                     : stockInfo.total;
-                  const outOfStock = !isProductAvailable(product);
+                  const outOfStock = product.variants?.length
+                    ? !isProductAvailable(product)
+                    : product.listStock != null && Number(product.listStock) <= 0;
                   return (
                     <div
                       key={product.id}
@@ -683,11 +735,12 @@ const Sales = () => {
                       onClick={() => !outOfStock && openProduct(product)}
                       onKeyDown={(e) => e.key === 'Enter' && !outOfStock && openProduct(product)}
                     >
-                      <img
+                      <SalesProductThumb
+                        item={product}
+                        storeProducts={storeProducts}
+                        wrapperClassName="sales-product-image-wrap"
                         className="sales-product-image"
-                        src={product.image}
                         alt={product.name}
-                        loading="lazy"
                       />
                       <div className="sales-product-body">
                         <p className="sales-product-name">{product.name}</p>
@@ -805,6 +858,7 @@ const Sales = () => {
         }}
         product={activeProduct}
         storeId={storeId}
+        storeProducts={storeProducts}
         onAdd={handleAddToCart}
         isSaving={isSaving}
         exchangeFrom={
@@ -836,6 +890,7 @@ const Sales = () => {
         onClose={() => setExchangeTarget(null)}
         item={exchangeTarget?.line}
         products={products}
+        storeProducts={storeProducts}
         onConfirm={handleExchangeSelect}
       />
 

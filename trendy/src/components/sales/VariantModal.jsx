@@ -6,9 +6,10 @@ import {
   fetchVariantStockPrice,
 } from '../../api/pos';
 import ExchangePriceDiff from './ExchangePriceDiff';
+import SalesProductThumb from './SalesProductThumb';
 import './SalesModals.css';
 
-const VariantModal = ({ isOpen, onClose, product, onAdd, isSaving, exchangeFrom, storeId }) => {
+const VariantModal = ({ isOpen, onClose, product, onAdd, isSaving, exchangeFrom, storeId, storeProducts = [] }) => {
   const [color, setColor] = useState('');
   const [size, setSize] = useState('');
   const [selectedVariantId, setSelectedVariantId] = useState('');
@@ -127,7 +128,12 @@ const VariantModal = ({ isOpen, onClose, product, onAdd, isSaving, exchangeFrom,
           </button>
         </div>
         <div className="sales-modal-product-preview">
-          <img src={activeProduct?.image ?? product.image} alt={activeProduct?.name ?? product.name} />
+          <SalesProductThumb
+            item={activeProduct ?? product}
+            storeProducts={storeProducts}
+            wrapperClassName="sales-modal-product-preview-image"
+            alt={activeProduct?.name ?? product?.name}
+          />
           <p className="sales-modal-product-name">{activeProduct?.name ?? product.name}</p>
           <p className="sales-modal-product-price">{price} د.ل</p>
         </div>

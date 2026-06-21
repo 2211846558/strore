@@ -9,11 +9,12 @@ const PRODUCTS_KEY = 'products'
 const CATEGORIES_KEY = 'categories'
 const ATTRIBUTES_KEY = 'attributes'
 
-export function useProducts(filters = {}) {
+export function useProducts(filters = {}, queryOptions = {}) {
   return useQuery({
     queryKey: [PRODUCTS_KEY, filters],
     queryFn: () => fetchStoreProducts(filters),
     staleTime: 5 * 60 * 1000,
+    ...queryOptions,
   })
 }
 

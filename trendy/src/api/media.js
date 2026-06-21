@@ -29,6 +29,17 @@ export function resolveMediaUrl(url) {
     const parsed = new URL(trimmed);
     const apiOrigin = new URL(origin || window.location.origin);
 
+    if (import.meta.env.DEV) {
+      const storagePath = parsed.pathname.match(/\/storage\/.*$/)?.[0];
+      if (
+        storagePath &&
+        (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') &&
+        parsed.port === '8000'
+      ) {
+        return storagePath;
+      }
+    }
+
     if (
       (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') &&
       !parsed.port &&
@@ -69,11 +80,22 @@ export function getProductImageCandidates(url, productId) {
       const correctPath = `/storage/products/${productId}/${filename}`;
       const absolute = `${origin}${correctPath}`;
       const proxied = correctPath;
-      return [...new Set([absolute, proxied, resolved, url].filter(Boolean))];
+      const ordered = import.meta.env.DEV
+        ? [proxied, absolute, resolved, url]
+        : [absolute, proxied, resolved, url];
+      return [...new Set(ordered.filter(Boolean))];
     }
   }
 
-  if (resolved) return [resolved];
+  if (resolved) {
+    if (import.meta.env.DEV) {
+      const storagePath = resolved.match(/\/storage\/.*$/)?.[0];
+      if (storagePath) {
+        return [...new Set([storagePath, resolved, url].filter(Boolean))];
+      }
+    }
+    return [resolved];
+  }
   return [url];
 }
 

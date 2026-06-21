@@ -92,14 +92,24 @@ export const AuthProvider = ({ children }) => {
 
     if (withLoader) setPlanChecking(true);
     try {
-      const apiResult = await verifyStorePlanActive(targetStoreId);
-      if (apiResult.active === true) {
-        setPlanAccessActive(true);
+      const currentStore = resolveStoreForUser(userRef.current, targetStoreId);
+
+      const [apiResult, subscriptionResult] = await Promise.all([
+        verifyStorePlanActive(targetStoreId),
+        resolveStorePlanAccess(currentStore, targetStoreId),
+      ]);
+
+      // تواريخ الاشتراك من API/S سجل الخطط — مصدر الحقيقة لمنع الدخول للداشبورد
+      if (!subscriptionResult.active) {
+        applyPlanAccessResult(
+          {
+            active: false,
+            reason: subscriptionResult.reason ?? 'subscription_expired',
+          },
+          targetStoreId,
+        );
         return;
       }
-
-      const currentStore = resolveStoreForUser(userRef.current, targetStoreId);
-      const subscriptionResult = await resolveStorePlanAccess(currentStore, targetStoreId);
 
       if (apiResult.active === false) {
         applyPlanAccessResult(
@@ -112,15 +122,7 @@ export const AuthProvider = ({ children }) => {
         return;
       }
 
-      if (subscriptionResult.active) {
-        setPlanAccessActive(true);
-        return;
-      }
-
-      applyPlanAccessResult(
-        { active: false, reason: subscriptionResult.reason ?? 'no_subscription' },
-        targetStoreId,
-      );
+      setPlanAccessActive(true);
     } catch {
       setPlanAccessActive(false);
     } finally {

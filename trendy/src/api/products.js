@@ -27,13 +27,15 @@ function mapImageEntry(img, productId) {
   };
 }
 
-function productImageFields(item) {
+export function productImageFields(item) {
   const rawList =
     Array.isArray(item.images) && item.images.length
       ? item.images
       : item.thumbnail
         ? [{ url: item.thumbnail }]
-        : [];
+        : item.image
+          ? [{ url: item.image }]
+          : [];
 
   const images = rawList.map((img) => mapImageEntry(img, item.id));
   const primary = images[0];
@@ -644,7 +646,9 @@ function buildProductFormData({ storeId, name, sku, description, price, category
     imageFiles.forEach((file, index) => fd.append(`images[${index}]`, file));
   }
   if (deletedImages?.length) {
-    deletedImages.forEach((id, index) => fd.append(`deleted_images[${index}]`, id));
+    deletedImages.forEach((id) => {
+      fd.append('deleted_images[]', String(id));
+    });
   }
   return fd;
 }

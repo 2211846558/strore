@@ -12,9 +12,10 @@ import {
   parseIntegerInput,
   preventWheelChange,
 } from '../../utils/numericInput';
+import SalesProductThumb from './SalesProductThumb';
 import './SalesModals.css';
 
-const ExchangeModal = ({ isOpen, onClose, item, products = [], onConfirm }) => {
+const ExchangeModal = ({ isOpen, onClose, item, products = [], storeProducts = [], onConfirm }) => {
   const [exchangeQty, setExchangeQty] = useState('1');
   const [selectedNewItems, setSelectedNewItems] = useState([]);
   const [prevItem, setPrevItem] = useState(null);
@@ -387,6 +388,16 @@ const ExchangeModal = ({ isOpen, onClose, item, products = [], onConfirm }) => {
 
           {currentProduct && (
             <>
+              <div className="sales-modal-product-preview exchange-product-preview">
+                <SalesProductThumb
+                  item={currentProduct}
+                  storeProducts={storeProducts}
+                  wrapperClassName="sales-modal-product-preview-image"
+                  alt={currentProduct.name}
+                />
+                <p className="sales-modal-product-name">{currentProduct.name}</p>
+                <p className="sales-modal-product-price">{currentProduct.price} د.ل</p>
+              </div>
               {useDirectSelection ? (
                 <div className="sales-form-group">
                   <label htmlFor="variant-direct-select">التنوع</label>

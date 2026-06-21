@@ -1,13 +1,63 @@
+import { useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { fetchPosInit, fetchPosCart, addToPosCart, removeFromPosCart, checkoutPosCart } from '../pos'
+import { fetchPosInit, fetchPosCatalog, fetchPosCart, addToPosCart, removeFromPosCart, checkoutPosCart } from '../pos'
+import { buildPosDisplayProducts } from '../posImages'
+import { useProducts } from './useProducts'
 
 const POS_CART_KEY = 'posCart'
 
-export function usePosInit() {
+/** نفس فلاتر صفحة المنتجات — GET /my-store/products (api.md) */
+export const SALES_PRODUCT_FILTERS = {
+  name: '',
+  categoryId: 'all',
+  status: 'all',
+}
+
+/**
+ * منتجات المبيعات المباشرة + صورها
+ * GET /my-store/products + GET /inventory
+ */
+export function useSalesProducts(storeId) {
+  const filters = useMemo(
+    () => ({ storeId, ...SALES_PRODUCT_FILTERS }),
+    [storeId],
+  )
+
+  const storeQuery = useProducts(filters)
+  const catalogQuery = useQuery({
+    queryKey: ['salesPosCatalog', storeId ?? null],
+    queryFn: () => fetchPosCatalog({ storeId }),
+    staleTime: 30 * 1000,
+    retry: 1,
+  })
+
+  const storeProducts = storeQuery.data ?? []
+  const posCatalog = catalogQuery.data ?? []
+
+  const products = useMemo(() => {
+    const fromStore = buildPosDisplayProducts([], storeProducts)
+    if (fromStore.length) {
+      return buildPosDisplayProducts(posCatalog, storeProducts)
+    }
+    return posCatalog
+  }, [posCatalog, storeProducts])
+
+  return {
+    products,
+    storeProducts,
+    isLoading: storeQuery.isLoading,
+    isEnriching: catalogQuery.isLoading,
+    isError: storeQuery.isError && catalogQuery.isError,
+    error: storeQuery.error ?? catalogQuery.error,
+  }
+}
+
+export function usePosInit(storeId) {
   return useQuery({
-    queryKey: ['posInit'],
-    queryFn: fetchPosInit,
+    queryKey: ['posInit', storeId ?? null],
+    queryFn: () => fetchPosInit({ storeId }),
     staleTime: 15 * 1000,
+    retry: 1,
   })
 }
 

@@ -76,6 +76,18 @@ const Plans = ({ onboarding = false }) => {
     };
   }, [store, storeId, availablePlans]);
 
+  useEffect(() => {
+    if (loadingSubscriptions || !storeId) return;
+
+    const hasLiveSubscription = mySubscriptions.some(
+      (sub) => !sub.isExpired && sub.status === 'نشط',
+    );
+
+    if (!hasLiveSubscription) {
+      refreshPlanAccess(storeId);
+    }
+  }, [loadingSubscriptions, mySubscriptions, storeId, refreshPlanAccess]);
+
   const currentSubscription = useMemo(
     () =>
       mySubscriptions.find((sub) => !sub.isExpired) ??

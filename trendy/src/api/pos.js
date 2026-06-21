@@ -8,8 +8,211 @@ import {
   buildVariantFallbackLabel,
   extractProductVariants,
   fetchAttributes,
+  fetchStoreProducts,
+  productImageFields,
 } from './products';
 import { fetchInventory, fetchInventoryVariant } from './inventory';
+import { getStoreWalletBalance } from './wallet';
+import { buildPosDisplayProducts } from './posImages';
+
+function extractPosImageRaw(item) {
+  if (!item || typeof item !== 'object') return null;
+  if (item.image) return item.image;
+  if (item.thumbnail) return item.thumbnail;
+  if (Array.isArray(item.images) && item.images.length) {
+    const first = item.images[0];
+    return typeof first === 'string' ? first : first?.url ?? null;
+  }
+  return null;
+}
+
+function mapPosCatalogProduct(item) {
+  if (!item || typeof item !== 'object') return item;
+  const imageFields = productImageFields({
+    id: item.id,
+    image: extractPosImageRaw(item),
+    thumbnail: extractPosImageRaw(item),
+    images: item.images,
+  });
+  return {
+    ...item,
+    ...imageFields,
+  };
+}
+
+function mapPosCatalog(catalog) {
+  return (Array.isArray(catalog) ? catalog : []).map(mapPosCatalogProduct);
+}
+
+function isPlaceholderImage(url) {
+  return typeof url === 'string' && url.startsWith('data:image/svg+xml');
+}
+
+function pickImageFields(product) {
+  if (!product?.image || isPlaceholderImage(product.image)) return null;
+  return {
+    image: product.image,
+    imageCandidates: product.imageCandidates,
+    images: product.images,
+  };
+}
+
+function collectItemSkus(item) {
+  const skus = new Set();
+  if (item?.sku) skus.add(String(item.sku));
+  (item?.variants ?? []).forEach((variant) => {
+    if (variant?.sku) skus.add(String(variant.sku));
+  });
+  return skus;
+}
+
+export function findStoreProductMatch(item, storeProducts = []) {
+  if (!item || !storeProducts.length) return null;
+
+  const name = String(item.name ?? item.product_name ?? '').trim();
+  if (name) {
+    const exactName = storeProducts.find((product) => product.name === name);
+    if (exactName) return exactName;
+  }
+
+  const skus = collectItemSkus(item);
+  if (skus.size) {
+    for (const product of storeProducts) {
+      if (product.sku && skus.has(String(product.sku))) return product;
+    }
+  }
+
+  const itemId = Number(item.id);
+  if (itemId) {
+    const byId = storeProducts.find((product) => Number(product.id) === itemId);
+    if (byId) return byId;
+  }
+
+  if (name) {
+    return (
+      storeProducts.find(
+        (product) =>
+          product.name &&
+          (name.includes(product.name) || product.name.includes(name)),
+      ) ?? null
+    );
+  }
+
+  return null;
+}
+
+async function enrichPosCatalogImages(catalog, storeId) {
+  if (!Array.isArray(catalog) || !catalog.length) return catalog;
+
+  try {
+    const storeProducts = await fetchStoreProducts({
+      storeId,
+      perPage: 50,
+      status: 'all',
+    });
+
+    return buildPosDisplayProducts(catalog, storeProducts);
+  } catch {
+    return catalog;
+  }
+}
+
+export function mergePosCatalogWithStoreImages(catalog = [], storeProducts = []) {
+  if (!catalog.length || !storeProducts.length) return catalog;
+
+  return catalog.map((item) => {
+    const fromStore = findStoreProductMatch(item, storeProducts);
+    const images = fromStore ? pickImageFields(fromStore) : null;
+    if (!images) return item;
+
+    return {
+      ...item,
+      ...images,
+    };
+  });
+}
+
+export function findPosProductForCartItem(item, catalog = [], storeProducts = []) {
+  const fromStore = findStoreProductMatch(item, storeProducts);
+  const storeImages = fromStore ? pickImageFields(fromStore) : null;
+
+  if (!item || !catalog.length) {
+    return storeImages ? { ...fromStore, ...storeImages } : fromStore;
+  }
+
+  const byName = catalog.find((product) => product.name === item.name);
+  if (byName) {
+    return storeImages ? { ...byName, ...storeImages } : byName;
+  }
+
+  if (item.sku) {
+    const byProductSku = catalog.find((product) => product.sku === item.sku);
+    if (byProductSku) {
+      return storeImages ? { ...byProductSku, ...storeImages } : byProductSku;
+    }
+
+    const byVariantSku = catalog.find((product) =>
+      product.variants?.some((variant) => variant.sku === item.sku),
+    );
+    if (byVariantSku) {
+      return storeImages ? { ...byVariantSku, ...storeImages } : byVariantSku;
+    }
+  }
+
+  const cartName = String(item.name ?? '').trim();
+  if (!cartName) {
+    return storeImages ? { ...fromStore, ...storeImages } : fromStore;
+  }
+
+  const fromCatalog =
+    catalog.find(
+      (product) =>
+        product.name &&
+        (cartName.includes(product.name) || product.name.includes(cartName)),
+    ) ?? null;
+
+  if (fromCatalog) {
+    return storeImages ? { ...fromCatalog, ...storeImages } : fromCatalog;
+  }
+
+  return storeImages ? { ...fromStore, ...storeImages } : fromStore;
+}
+
+export function getPosItemImageSources(item, storeProducts = []) {
+  const sources = [];
+  const push = (url) => {
+    if (url && !isPlaceholderImage(url) && !sources.includes(url)) {
+      sources.push(url);
+    }
+  };
+
+  const matched = findStoreProductMatch(item, storeProducts);
+  if (matched) {
+    push(matched.image);
+    (matched.imageCandidates ?? []).forEach(push);
+    (matched.images ?? []).forEach((img) => {
+      push(img?.url);
+      (img?.candidates ?? []).forEach(push);
+    });
+  }
+
+  push(item?.image);
+  (item?.imageCandidates ?? []).forEach(push);
+  (item?.images ?? []).forEach((img) => {
+    push(typeof img === 'string' ? img : img?.url);
+    (img?.candidates ?? []).forEach(push);
+  });
+
+  return sources;
+}
+
+export function resolvePosItemImage(item, storeProducts = []) {
+  return getPosItemImageSources(item, storeProducts)[0] ?? null;
+}
+
+export function resolvePosProductImage(image, productId) {
+  return productImageFields({ id: productId, thumbnail: image }).image;
+}
 
 function extractList(res) {
   const payload = res?.data ?? res;
@@ -167,10 +370,20 @@ function mapPosVariant(variant, raw, product, inventoryStock, inventoryMeta, cat
   };
 }
 
-function buildPosProductEntry(raw, product, inventoryStock, inventoryRows = [], catalogAttributes = []) {
+function buildPosProductEntry(
+  raw,
+  product,
+  inventoryStock,
+  inventoryRows = [],
+  catalogAttributes = [],
+  prebuiltVariants = null,
+) {
   const inventoryMeta = buildInventoryMetaMap(inventoryRows);
-  const variants = extractProductVariants(raw).map((variant) =>
-    mapPosVariant(variant, raw, product, inventoryStock, inventoryMeta, catalogAttributes),
+  const variants = (
+    prebuiltVariants ??
+    extractProductVariants(raw).map((variant) =>
+      mapPosVariant(variant, raw, product, inventoryStock, inventoryMeta, catalogAttributes),
+    )
   );
 
   if (!variants.length) return null;
@@ -196,7 +409,7 @@ function buildPosProductEntry(raw, product, inventoryStock, inventoryRows = [], 
       if (prices.length) return Math.min(...prices);
       return Number(variants[0]?.price ?? 0);
     })(),
-    image: product.image,
+    image: resolvePosProductImage(product.image ?? raw.thumbnail, product.id ?? raw.id),
     colors,
     sizes,
     variants,
@@ -227,7 +440,12 @@ export async function fetchSalesProductVariants(productId, { storeId } = {}) {
   const raw = unwrapApiEntity(res);
   const inventoryItems = inventoryResult.items ?? [];
   const inventoryStock = buildInventoryStockMap(inventoryItems);
-  const productStub = { id: productId, name: raw.name, price: raw.base_price, image: null };
+  const productStub = {
+    id: productId,
+    name: raw.name,
+    price: raw.base_price,
+    image: raw.images?.[0]?.url ?? raw.thumbnail ?? null,
+  };
   const entry = buildPosProductEntry(
     raw,
     productStub,
@@ -258,13 +476,116 @@ export async function fetchVariantStockPrice(variantId, { fallbackStock } = {}) 
   }
 }
 
+function groupInventoryByProductName(inventoryItems = []) {
+  const map = new Map();
+  inventoryItems.forEach((row) => {
+    const name = String(row.productName ?? '').trim();
+    if (!name || name === '—') return;
+    if (!map.has(name)) map.set(name, []);
+    map.get(name).push(row);
+  });
+  return map;
+}
+
+function buildPosEntryFromInventoryRows(product, invRows, inventoryStock, catalogAttributes) {
+  const variants = invRows
+    .map((row) => {
+      const variantId = Number(row.variantId);
+      if (!variantId) return null;
+
+      const parsed = parseAttributesString(row.attributes, catalogAttributes);
+      const { stock, stockUnknown } = resolvePosVariantStock(variantId, {}, inventoryStock);
+      const price = readInventorySellingPrice(row) ?? (Number(product.price) || 0);
+
+      return {
+        id: variantId,
+        sku: row.sku && row.sku !== '—' ? row.sku : '',
+        label: parsed.label || row.attributes || `تنوع #${variantId}`,
+        color: parsed.color,
+        size: parsed.size,
+        stock,
+        stockUnknown,
+        price,
+      };
+    })
+    .filter(Boolean);
+
+  if (!variants.length) return null;
+
+  const raw = { name: product.name, base_price: product.price };
+  const entry = buildPosProductEntry(
+    raw,
+    product,
+    inventoryStock,
+    invRows,
+    catalogAttributes,
+    variants,
+  );
+
+  if (!entry) return null;
+
+  return {
+    ...entry,
+    image: product.image,
+    imageCandidates: product.imageCandidates,
+    images: product.images,
+    sku: product.sku ?? '',
+  };
+}
+
+function buildPosCatalogFromStore(storeProducts = [], inventoryItems = [], catalogAttributes = []) {
+  const inventoryStock = buildInventoryStockMap(inventoryItems);
+  const inventoryByName = groupInventoryByProductName(inventoryItems);
+  const activeProducts = (storeProducts ?? []).filter((product) => product.status !== 'مؤرشف');
+
+  return activeProducts.map((product) => {
+    const invRows = inventoryByName.get(product.name) ?? [];
+    const fromInventory = invRows.length
+      ? buildPosEntryFromInventoryRows(product, invRows, inventoryStock, catalogAttributes)
+      : null;
+
+    if (fromInventory) return fromInventory;
+
+    const listStock =
+      product.stock != null && product.stock !== '' ? Number(product.stock) : null;
+
+    return {
+      id: product.id,
+      name: product.name,
+      price: Number(product.price) || 0,
+      image: product.image,
+      imageCandidates: product.imageCandidates,
+      images: product.images,
+      sku: product.sku ?? '',
+      colors: [],
+      sizes: [],
+      variants: [],
+      stockMap: {},
+      variantByKey: {},
+      useDirectSelection: true,
+      variantOptions: [],
+      listStock,
+    };
+  });
+}
+
 /**
- * جلب منتجات المتجر مع تنوعاتها للمبيعات المباشرة
- * — يستخدم endpoint محسّن من السيرفر بدل N+1 طلب
+ * كatalog المبيعات المباشرة — GET /my-store/products + GET /inventory (api.md)
  */
-export async function fetchPosCatalog(_options = {}) {
-  const res = await apiRequest(API_ENDPOINTS.posCatalog);
-  return extractList(res);
+export async function fetchPosCatalog({ storeId } = {}) {
+  const [storeProducts, inventoryResult, catalogAttributes] = await Promise.all([
+    fetchStoreProducts({ storeId, perPage: 50, status: 'all' }),
+    fetchInventory({ storeId, perPage: 100 }).catch(() => ({ items: [] })),
+    fetchAttributes().catch(() => []),
+  ]);
+
+  const catalog = buildPosCatalogFromStore(
+    storeProducts,
+    inventoryResult.items ?? [],
+    catalogAttributes,
+  );
+
+  return buildPosDisplayProducts(catalog, storeProducts);
 }
 
 export function getProductStockInfo(product) {
@@ -358,23 +679,34 @@ export function mapOrderToInvoice(order) {
 }
 
 /**
- * GET /pos/init — catalog + cart + wallet in one request
+ * تهيئة المبيعات المباشرة عبر مسارات api.md (بدون /pos/init)
+ * GET /my-store/products — المنتجات والصور
+ * GET /inventory — تنوعات/مخزون
+ * GET /pos/cart — السلة
+ * GET /wallet/balance — المحفظة
  */
-export async function fetchPosInit() {
-  const res = await apiRequest(API_ENDPOINTS.posInit);
-  const data = res?.data ?? res ?? {};
-  const cartRaw = data.cart ?? {};
+export async function fetchPosInit({ storeId } = {}) {
+  const [storeProducts, inventoryResult, catalogAttributes, cartRaw, walletRaw] =
+    await Promise.all([
+      fetchStoreProducts({ storeId, perPage: 50, status: 'all' }).catch(() => []),
+      fetchInventory({ storeId, perPage: 100 }).catch(() => ({ items: [] })),
+      fetchAttributes().catch(() => []),
+      fetchPosCart().catch(() => ({ items: [], subtotal: 0, total: 0 })),
+      getStoreWalletBalance({ storeId }).catch(() => ({ balance: 0, status: 'active' })),
+    ]);
+
+  const catalog = buildPosCatalogFromStore(
+    storeProducts,
+    inventoryResult.items ?? [],
+    catalogAttributes,
+  );
 
   return {
-    catalog: data.catalog ?? [],
-    cart: {
-      items: (cartRaw.items ?? []).map(mapCartItem),
-      subtotal: Number(cartRaw.summary?.subtotal ?? 0),
-      total: Number(cartRaw.summary?.total ?? 0),
-    },
+    catalog: buildPosDisplayProducts(catalog, storeProducts),
+    cart: cartRaw,
     wallet: {
-      balance: Number(data.wallet?.balance ?? 0),
-      status: data.wallet?.status ?? 'active',
+      balance: Number(walletRaw.balance ?? 0),
+      status: walletRaw.status ?? 'active',
     },
   };
 }
