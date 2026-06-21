@@ -101,8 +101,6 @@ const Join = () => {
     if (formData.entityType === 'company' && !formData.commercialReg.trim()) {
       return 'رقم السجل التجاري مطلوب للشركات';
     }
-<<<<<<< HEAD
-=======
     if (!formData.storeType) {
       return 'يرجى اختيار نوع المتجر';
     }
@@ -112,7 +110,6 @@ const Join = () => {
     if (isLocalType(formData.storeType) && !formData.googleMapUrl.trim()) {
       return 'رابط خريطة Google مطلوب للمتجر المحلي';
     }
->>>>>>> fc1b287ebcd02fd7687499fcd16b6b5e92013e88
     if (formData.notes.length > 2000) {
       return 'الملاحظات يجب ألا تتجاوز 2000 حرف';
     }
@@ -418,30 +415,6 @@ const Join = () => {
             </div>
           </div>
 
-<<<<<<< HEAD
-          {isLocalType(formData.storeType) && (
-            <>
-              <div className="input-group">
-                <label htmlFor="zoneId">المنطقة</label>
-                <div className="input-wrapper select-wrapper">
-                  <select
-                    id="zoneId"
-                    name="zoneId"
-                    value={formData.zoneId}
-                    onChange={handleChange}
-                    required
-                    className="form-select"
-                  >
-                    <option value="">اختر المنطقة</option>
-                    {zones.map((zone) => (
-                      <option key={zone.id} value={zone.id}>
-                        {zone.name ?? zone.title ?? `منطقة ${zone.id}`}
-                      </option>
-                    ))}
-                  </select>
-                  <MapPin className="input-icon" size={20} />
-                </div>
-=======
           {formData.storeType && (
             <div className="input-group">
               <label htmlFor="zoneId">منطقة المتجر</label>
@@ -462,7 +435,6 @@ const Join = () => {
                   ))}
                 </select>
                 <MapPin className="input-icon" size={20} />
->>>>>>> fc1b287ebcd02fd7687499fcd16b6b5e92013e88
               </div>
             </div>
           )}

@@ -20,6 +20,7 @@ export const AuthProvider = ({ children }) => {
   const [storeId, setStoreId] = useState(() => resolveManagedStoreId(getStoredUser()) ?? getStoredStoreId());
   const [isAuthenticated, setIsAuthenticated] = useState(() => Boolean(getAuthToken()));
   const [isLoading, setIsLoading] = useState(false);
+  const [planChecking, setPlanChecking] = useState(() => Boolean(getAuthToken()));
 
   useEffect(() => {
     const storedUser = getStoredUser();
@@ -29,7 +30,10 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     const token = getAuthToken();
-    if (!token) return;
+    if (!token) {
+      setPlanChecking(false);
+      return;
+    }
 
     fetchCurrentUser()
       .then((freshUser) => {
@@ -43,6 +47,9 @@ export const AuthProvider = ({ children }) => {
         setUser(null);
         setStoreId(null);
         setIsAuthenticated(false);
+      })
+      .finally(() => {
+        setPlanChecking(false);
       });
   }, []);
 
@@ -134,6 +141,7 @@ export const AuthProvider = ({ children }) => {
       store,
       storeId,
       hasActivePlan,
+      planChecking,
       isAuthenticated,
       isLoading,
       login,
@@ -141,7 +149,7 @@ export const AuthProvider = ({ children }) => {
       updateStoreInSession,
       refreshSession,
     }),
-    [user, store, storeId, hasActivePlan, isAuthenticated, isLoading, login, logout, updateStoreInSession, refreshSession]
+    [user, store, storeId, hasActivePlan, planChecking, isAuthenticated, isLoading, login, logout, updateStoreInSession, refreshSession]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -151,4 +159,14 @@ export const useAuth = () => {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error('useAuth must be used within AuthProvider');
   return ctx;
+};
+
+export const useStore = () => {
+  const { store, storeId, hasActivePlan, planChecking } = useAuth();
+  return { store, storeId, hasActivePlan, planChecking };
+};
+
+export const useAuthActions = () => {
+  const { login, logout, updateStoreInSession, refreshSession } = useAuth();
+  return { login, logout, updateStoreInSession, refreshSession };
 };

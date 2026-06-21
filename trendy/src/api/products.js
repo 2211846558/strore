@@ -257,6 +257,15 @@ export async function fetchProductDetails(id) {
   return mapProductFromDetails(item);
 }
 
+/**
+ * GET /api/my-store/products/{id} — تفاصيل المنتج في لوحة المتجر
+ */
+export async function fetchManagedProductDetails(id) {
+  const res = await apiRequest(API_ENDPOINTS.myStoreProduct(id));
+  const item = res?.data ?? res;
+  return mapProductFromDetails(item);
+}
+
 function buildProductFormData({ storeId, name, sku, description, price, categoryId, stock, imageFiles }) {
   const fd = new FormData();
   if (storeId) fd.append('store_id', String(storeId));

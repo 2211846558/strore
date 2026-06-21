@@ -38,17 +38,37 @@ export const getActiveStore = (user) => {
   return null;
 };
 
+const STORE_STAFF_ROLE_NAMES = ['store_staff', 'store_staff_store'];
+
+function normalizeRoleName(role) {
+  if (typeof role === 'string') return role;
+  return role?.name ?? role?.slug ?? null;
+}
+
 export function getUserRoleNames(user) {
   if (!user) return [];
-  const roles = user.roles;
-  if (!Array.isArray(roles)) return [];
-  return roles
-    .map((role) => (typeof role === 'string' ? role : role?.name))
-    .filter(Boolean);
+
+  const names = [];
+
+  if (Array.isArray(user.roles)) {
+    user.roles.forEach((role) => {
+      const name = normalizeRoleName(role);
+      if (name) names.push(name);
+    });
+  }
+
+  const singularRole = normalizeRoleName(user.role);
+  if (singularRole) names.push(singularRole);
+
+  return [...new Set(names)];
 }
 
 export function userHasRole(user, roleName) {
   return getUserRoleNames(user).includes(roleName);
+}
+
+export function userIsStoreStaff(user) {
+  return getUserRoleNames(user).some((role) => STORE_STAFF_ROLE_NAMES.includes(role));
 }
 
 export function userCanChargeStoreWallet(user) {
@@ -62,6 +82,40 @@ export function userCanChargeStoreWallet(user) {
   if (roles.length === 0) return true;
 
   return !roles.includes('store_staff');
+}
+
+export function userCanAccessFinance(user) {
+  if (!user) return false;
+
+  if (userIsStoreStaff(user) && !userHasRole(user, 'store_manager')) {
+    return false;
+  }
+
+  if (
+    userHasRole(user, 'store_manager') ||
+    userHasRole(user, 'super_admin') ||
+    userHasRole(user, 'accountant')
+  ) {
+    return true;
+  }
+
+  const owned = user.owned_stores || user.ownedStores || [];
+  return owned.length > 0;
+}
+
+export function userCanManageEmployees(user) {
+  if (!user) return false;
+
+  if (userIsStoreStaff(user) && !userHasRole(user, 'store_manager')) {
+    return false;
+  }
+
+  if (userHasRole(user, 'store_manager') || userHasRole(user, 'super_admin')) {
+    return true;
+  }
+
+  const owned = user.owned_stores || user.ownedStores || [];
+  return owned.length > 0;
 }
 
 /**

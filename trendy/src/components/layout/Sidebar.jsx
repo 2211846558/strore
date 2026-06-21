@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import TrendyBrandLogo from '../brand/TrendyBrandLogo';
 import { useAuth } from '../../context/AuthContext';
-import { userHasRole } from '../../api/auth';
+import { userHasRole, userCanAccessFinance } from '../../api/auth';
 import './Sidebar.css';
 
 const navMenuItems = [
@@ -46,7 +46,9 @@ const Sidebar = ({ onLogout }) => {
   }, [isDarkMode]);
 
   const activeMenuItems = [
-    ...navMenuItems,
+    ...navMenuItems.filter(
+      (item) => item.path !== '/finance' || userCanAccessFinance(user),
+    ),
     ...(user && userHasRole(user, 'super_admin')
       ? [{ title: 'إدارة الخصائص', icon: Sliders, path: '/attributes' }]
       : []),

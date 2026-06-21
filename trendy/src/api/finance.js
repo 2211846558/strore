@@ -35,6 +35,13 @@ export const FINANCE_TYPE_OPTIONS = [
   { value: 'استرداد', label: 'استرداد' },
 ];
 
+export const FINANCE_STATUS_OPTIONS = [
+  { value: 'all', label: 'جميع الحالات' },
+  { value: 'completed', label: 'ناجح' },
+  { value: 'pending', label: 'قيد الانتظار' },
+  { value: 'failed', label: 'فاشل' },
+];
+
 const TRANSACTION_TYPE_AR = {
   order_payment: 'مبيعات',
   order_sale: 'مبيعات',

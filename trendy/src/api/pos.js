@@ -2,7 +2,7 @@ import { apiRequest } from './client';
 import { API_ENDPOINTS } from './config';
 import { fetchOrder as fetchOrderById } from './orders';
 import { fetchStoreProducts } from './products';
-import { fetchInventory } from './inventory';
+import { fetchInventory, fetchInventoryVariant } from './inventory';
 
 function extractList(res) {
   const payload = res?.data ?? res;
@@ -159,6 +159,20 @@ export function getVariantStock(product, color, size) {
   if (!variant) return 0;
   if (variant.stockUnknown) return 1;
   return Number(variant.stock) || 0;
+}
+
+/**
+ * GET /api/inventory/variants/{variantId} — مخزون وسعر التنوع للمبيعات المباشرة
+ */
+export async function fetchVariantStockPrice(variantId, { fallbackStock } = {}) {
+  try {
+    const row = await fetchInventoryVariant(variantId);
+    const stock = row.totalStock ?? fallbackStock ?? null;
+    const price = row.displayPrice || row.cachedPrice || 0;
+    return { stock, price };
+  } catch {
+    return { stock: fallbackStock ?? null, price: 0 };
+  }
 }
 
 export function resolveVariant(product, color, size) {

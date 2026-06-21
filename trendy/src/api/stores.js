@@ -206,8 +206,7 @@ export async function fetchStoreRatings(storeId) {
   };
 }
 
-<<<<<<< HEAD
-=======
+
 function isTechnicalErrorMessage(message) {
   if (!message || typeof message !== 'string') return false;
   return /SQLSTATE|(?:^|\s)SQL:|Connection:\s*mysql|Host:\s*127\.0\.0\.1|Database:|PDOException|QueryException|Illuminate\\Database|vendor[/\\]laravel|App\\(?:Http|Models)|actively refused|ECONNREFUSED|could not (?:find driver|connect)|Access denied for user|Unknown column|Table .* doesn't exist|must be of type|Call to undefined|Undefined array key|stack trace/i.test(
@@ -279,7 +278,6 @@ export function getLoginErrorMessage(error) {
   return getApiErrorMessage(error, LOGIN_CREDENTIALS_ERROR);
 }
 
->>>>>>> fc1b287ebcd02fd7687499fcd16b6b5e92013e88
 export function getApiErrorMessage(error, fallback = 'تعذّر إرسال الطلب، حاول مرة أخرى') {
   if (error?.isNetworkError) {
     return 'تعذّر الاتصال بالخادم. شغّل الباكند (php artisan serve) وتأكد أن VITE_API_BASE_URL=http://localhost:8000/api في ملف .env';

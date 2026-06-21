@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth, useStore, useAuthActions } from './context/AuthContext';
-import { userCanManageEmployees } from './api/auth';
+import { userCanManageEmployees, userCanAccessFinance } from './api/auth';
 import { StripeProvider } from './providers/StripeProvider';
 import DashboardLayout from './components/layout/DashboardLayout';
 import PlansOnboardingLayout from './components/layout/PlansOnboardingLayout';
@@ -29,6 +29,14 @@ function StaffRoute() {
     return <Navigate to="/" replace />;
   }
   return <Staff />;
+}
+
+function FinanceRoute() {
+  const { user } = useAuth();
+  if (!userCanAccessFinance(user)) {
+    return <Navigate to="/" replace />;
+  }
+  return <Finance />;
 }
 
 function AppRoutes() {
@@ -114,7 +122,7 @@ function AppRoutes() {
         <Route path="marketing" element={<Marketing />} />
         <Route path="products" element={<Products />} />
         <Route path="inventory" element={<Inventory />} />
-        <Route path="finance" element={<Finance />} />
+        <Route path="finance" element={<FinanceRoute />} />
         <Route path="offers" element={<Offers />} />
         <Route path="sales" element={<Sales />} />
         <Route path="staff" element={<StaffRoute />} />
