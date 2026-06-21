@@ -39,6 +39,7 @@ const Join = () => {
     notes: '',
     description: '',
     storeType: '',
+    storeAddress: '',
     zoneId: '',
     googleMapUrl: '',
   });
@@ -103,8 +104,14 @@ const Join = () => {
     if (formData.entityType === 'company' && !formData.commercialReg.trim()) {
       return 'رقم السجل التجاري مطلوب للشركات';
     }
-    if (isLocalType(formData.storeType) && !formData.zoneId) {
-      return 'يرجى اختيار المنطقة للمتجر المحلي';
+    if (!formData.storeType) {
+      return 'يرجى اختيار نوع المتجر';
+    }
+    if (!formData.storeAddress.trim()) {
+      return 'عنوان المتجر مطلوب';
+    }
+    if (!formData.zoneId) {
+      return 'يرجى اختيار منطقة المتجر';
     }
     if (isLocalType(formData.storeType) && !formData.googleMapUrl.trim()) {
       return 'رابط خريطة Google مطلوب للمتجر المحلي';
@@ -414,48 +421,68 @@ const Join = () => {
             </div>
           </div>
 
-          {formData.storeType && isLocalType(formData.storeType) && (
-            <>
-              <div className="input-group">
-                <label htmlFor="zoneId">المنطقة</label>
-                <div className="input-wrapper select-wrapper">
-                  <select
-                    id="zoneId"
-                    name="zoneId"
-                    value={formData.zoneId}
-                    onChange={handleChange}
-                    required
-                    className="form-select"
-                  >
-                    <option value="">اختر المنطقة</option>
-                    {zones.map((zone) => (
-                      <option key={zone.id} value={zone.id}>
-                        {zone.name ?? zone.title ?? `منطقة ${zone.id}`}
-                      </option>
-                    ))}
-                  </select>
-                  <MapPin className="input-icon" size={20} />
-                </div>
+          {formData.storeType && (
+            <div className="input-group">
+              <label htmlFor="storeAddress">عنوان المتجر</label>
+              <div className="input-wrapper textarea-wrapper">
+                <textarea
+                  id="storeAddress"
+                  name="storeAddress"
+                  placeholder="مثال: طرابلس، شارع الجمهورية، بجوار ..."
+                  value={formData.storeAddress}
+                  onChange={handleChange}
+                  required
+                  rows={2}
+                  maxLength={500}
+                  className="form-textarea"
+                />
+                <MapPin className="input-icon textarea-icon" size={20} />
               </div>
+            </div>
+          )}
 
-              <div className="input-group">
-                <label htmlFor="googleMapUrl">رابط خريطة Google</label>
-                <div className="input-wrapper">
-                  <input
-                    id="googleMapUrl"
-                    type="url"
-                    name="googleMapUrl"
-                    placeholder="https://maps.google.com/..."
-                    value={formData.googleMapUrl}
-                    onChange={handleChange}
-                    required
-                    dir="ltr"
-                    className={inputClass}
-                  />
-                  <Globe className="input-icon" size={20} />
-                </div>
+          {formData.storeType && (
+            <div className="input-group">
+              <label htmlFor="zoneId">منطقة المتجر</label>
+              <div className="input-wrapper select-wrapper">
+                <select
+                  id="zoneId"
+                  name="zoneId"
+                  value={formData.zoneId}
+                  onChange={handleChange}
+                  required
+                  className="form-select"
+                >
+                  <option value="">اختر المنطقة</option>
+                  {zones.map((zone) => (
+                    <option key={zone.id} value={zone.id}>
+                      {zone.name ?? zone.title ?? `منطقة ${zone.id}`}
+                    </option>
+                  ))}
+                </select>
+                <MapPin className="input-icon" size={20} />
               </div>
-            </>
+            </div>
+          )}
+
+          {formData.storeType && isLocalType(formData.storeType) && (
+            <div className="input-group">
+              <label htmlFor="googleMapUrl">رابط خريطة Google</label>
+              <div className="input-wrapper">
+                <input
+                  id="googleMapUrl"
+                  type="url"
+                  name="googleMapUrl"
+                  placeholder="https://maps.google.com/..."
+                  value={formData.googleMapUrl}
+                  onChange={handleChange}
+                  required
+                  dir="ltr"
+                  className={inputClass}
+                />
+                <Globe className="input-icon" size={20} />
+              </div>
+            </div>
           )}
 
           <div className="input-group">
