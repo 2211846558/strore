@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, Plus, CheckCircle2, Archive, RefreshCw, Edit2 } from 'lucide-react';
+import { Search, Plus, CheckCircle2, TrendingUp } from 'lucide-react';
 
 import ProductModal from '../components/products/ProductModal';
 import ProductVariantModal from '../components/products/ProductVariantModal';
 import ArchiveConfirmModal from '../components/products/ArchiveConfirmModal';
 import ProductDetailModal from '../components/products/ProductDetailModal';
+import MostOrderedProductsModal from '../components/products/MostOrderedProductsModal';
 import {
   fetchCategories,
   fetchStoreProducts,
@@ -42,6 +43,7 @@ const Products = () => {
   const [isArchiving, setIsArchiving] = useState(false);
   const [variantProduct, setVariantProduct] = useState(null);
   const [detailProduct, setDetailProduct] = useState(null);
+  const [showMostOrdered, setShowMostOrdered] = useState(false);
   const [error, setError] = useState('');
 
   const showToast = (message) => {
@@ -181,6 +183,16 @@ const Products = () => {
         <button className="add-product-btn" onClick={openAdd} type="button">
           <Plus size={18} />
           إضافة منتج
+        </button>
+
+        <button
+          className="most-ordered-btn"
+          onClick={() => setShowMostOrdered(true)}
+          type="button"
+          title="عرض المنتجات الأكثر طلباً"
+        >
+          <TrendingUp size={18} />
+          الأكثر طلباً
         </button>
 
         <div className="filter-dropdown">
@@ -362,6 +374,13 @@ const Products = () => {
         onClose={() => setDetailProduct(null)}
         product={detailProduct}
         storeId={storeId}
+      />
+
+      <MostOrderedProductsModal
+        isOpen={showMostOrdered}
+        onClose={() => setShowMostOrdered(false)}
+        storeId={storeId}
+        limit={10}
       />
 
       {toast && (

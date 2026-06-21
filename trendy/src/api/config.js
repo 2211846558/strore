@@ -30,6 +30,7 @@ export const API_ENDPOINTS = {
   catalogCategories: '/catalog/categories',
   catalogAttributes: '/catalog/attributes',
   myStoreProducts: '/my-store/products',
+  myStoreProductsMostOrdered: '/my-store/products/most-ordered',
   myStoreProduct: (id) => `/my-store/products/${id}`,
   myStoreProductVariants: (productId) => `/my-store/products/${productId}/variants`,
   myStoreProductArchive: (id) => `/my-store/products/${id}/archive`,

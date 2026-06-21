@@ -194,6 +194,38 @@ async function enrichProductsWithImages(products) {
   );
 }
 
+function extractOrdersCount(item) {
+  const raw =
+    item.orders_count ??
+    item.order_count ??
+    item.total_orders ??
+    item.ordered_count ??
+    item.total_ordered ??
+    item.quantity_ordered ??
+    item.total_quantity_ordered;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : 0;
+}
+
+export function mapMostOrderedProduct(item) {
+  return {
+    ...mapProductFromList(item),
+    ordersCount: extractOrdersCount(item),
+  };
+}
+
+/**
+ * GET /api/my-store/products/most-ordered — الأكثر طلباً (مدير المتجر وموظفيه)
+ * params: { storeId, limit }
+ */
+export async function fetchMostOrderedProducts({ storeId, limit = 10 } = {}) {
+  const query = new URLSearchParams({ limit: String(limit) });
+  if (storeId) query.set('store_id', String(storeId));
+
+  const res = await apiRequest(`${API_ENDPOINTS.myStoreProductsMostOrdered}?${query}`);
+  return extractList(res).map(mapMostOrderedProduct);
+}
+
 /**
  * GET /api/my-store/products — بحث وفلترة من الخادم
  * filters: { name, category_id, status, storeId, perPage }

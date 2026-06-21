@@ -43,6 +43,26 @@
   background-color: black;
 }
 
+.most-ordered-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: 10px;
+  background: rgba(139, 92, 246, 0.08);
+  color: var(--primary);
+  font-size: 14px;
+  font-weight: 700;
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.most-ordered-btn:hover {
+  background: rgba(139, 92, 246, 0.15);
+  border-color: var(--primary);
+}
+
 .filter-dropdown select {
   padding: 10px 36px 10px 16px;
   border-radius: 10px;
