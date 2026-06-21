@@ -424,7 +424,6 @@ export async function fetchStoreRatings(storeId) {
   };
 }
 
-<<<<<<< HEAD
 function isTechnicalErrorMessage(message) {
   if (!message || typeof message !== 'string') return false;
   return /SQLSTATE|(?:^|\s)SQL:|Connection:\s*mysql|Host:\s*127\.0\.0\.1|Database:|PDOException|QueryException|Illuminate\\Database|vendor[/\\]laravel|App\\(?:Http|Models)|actively refused|ECONNREFUSED|could not (?:find driver|connect)|Access denied for user|Unknown column|Table .* doesn't exist|must be of type|Call to undefined|Undefined array key|stack trace/i.test(
@@ -444,7 +443,8 @@ function getFriendlyDatabaseError(message, fallback) {
     return fallback || 'تعذّر تنفيذ الطلب حالياً بسبب مشكلة في قاعدة البيانات. حاول مرة أخرى لاحقاً.';
   }
   return null;
-=======
+}
+
 const LOGIN_CREDENTIALS_ERROR =
   'تحقق من رقم كود المتجر او البريد الالكتروني او كلمة المرور واعد المحاولة مجددا';
 
@@ -493,7 +493,6 @@ export function getLoginErrorMessage(error) {
     return LOGIN_CREDENTIALS_ERROR;
   }
   return getApiErrorMessage(error, LOGIN_CREDENTIALS_ERROR);
->>>>>>> 2074f1194b39a27c719d48042e4b5c813e9908b8
 }
 
 export function getApiErrorMessage(error, fallback = 'تعذّر إرسال الطلب، حاول مرة أخرى') {

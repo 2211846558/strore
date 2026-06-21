@@ -39,7 +39,6 @@ const Join = () => {
     notes: '',
     description: '',
     storeType: '',
-    storeAddress: '',
     zoneId: '',
     googleMapUrl: '',
   });
@@ -106,9 +105,6 @@ const Join = () => {
     }
     if (!formData.storeType) {
       return 'يرجى اختيار نوع المتجر';
-    }
-    if (!formData.storeAddress.trim()) {
-      return 'عنوان المتجر مطلوب';
     }
     if (!formData.zoneId) {
       return 'يرجى اختيار منطقة المتجر';
@@ -420,26 +416,6 @@ const Join = () => {
               <Store className="input-icon" size={20} />
             </div>
           </div>
-
-          {formData.storeType && (
-            <div className="input-group">
-              <label htmlFor="storeAddress">عنوان المتجر</label>
-              <div className="input-wrapper textarea-wrapper">
-                <textarea
-                  id="storeAddress"
-                  name="storeAddress"
-                  placeholder="مثال: طرابلس، شارع الجمهورية، بجوار ..."
-                  value={formData.storeAddress}
-                  onChange={handleChange}
-                  required
-                  rows={2}
-                  maxLength={500}
-                  className="form-textarea"
-                />
-                <MapPin className="input-icon textarea-icon" size={20} />
-              </div>
-            </div>
-          )}
 
           {formData.storeType && (
             <div className="input-group">
