@@ -13,6 +13,10 @@
   margin-bottom: 24px;
 }
 
+.finance-stats--staff {
+  grid-template-columns: repeat(4, 1fr);
+}
+
 .stat-card {
   background-color: var(--bg-card);
   border-radius: 16px;

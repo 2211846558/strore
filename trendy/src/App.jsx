@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth, useStore, useAuthActions } from './context/AuthContext';
+import { userCanManageEmployees } from './api/auth';
 import { StripeProvider } from './providers/StripeProvider';
 import DashboardLayout from './components/layout/DashboardLayout';
 import PlansOnboardingLayout from './components/layout/PlansOnboardingLayout';
@@ -21,6 +22,14 @@ import Notifications from './pages/Notifications';
 import Chat from './pages/Chat';
 import Attributes from './pages/Attributes';
 import './App.css';
+
+function StaffRoute() {
+  const { user } = useAuth();
+  if (!userCanManageEmployees(user)) {
+    return <Navigate to="/" replace />;
+  }
+  return <Staff />;
+}
 
 function AppRoutes() {
   const { isAuthenticated } = useAuth();
@@ -108,7 +117,7 @@ function AppRoutes() {
         <Route path="finance" element={<Finance />} />
         <Route path="offers" element={<Offers />} />
         <Route path="sales" element={<Sales />} />
-        <Route path="staff" element={<Staff />} />
+        <Route path="staff" element={<StaffRoute />} />
         <Route path="orders" element={<Orders />} />
         <Route path="notifications" element={<Notifications />} />
         <Route path="chat" element={<Chat />} />

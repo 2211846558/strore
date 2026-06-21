@@ -17,7 +17,8 @@ import jsPDF from 'jspdf';
 import WalletModal from '../components/finance/WalletModal';
 import TransactionDetailModal from '../components/finance/TransactionDetailModal';
 import { useWalletBalance } from '../api/hooks/useWallet';
-import { useStore } from '../context/AuthContext';
+import { useAuth, useStore } from '../context/AuthContext';
+import { userCanViewStoreWalletBalance } from '../api/auth';
 import {
   fetchTransactionDetails,
   resolveStoreNetRevenue,
@@ -43,8 +44,10 @@ const formatMoney = (value) =>
   });
 
 const Finance = () => {
+  const { user } = useAuth();
   const { storeId } = useStore();
-  const { data: walletData } = useWalletBalance();
+  const canViewBalance = userCanViewStoreWalletBalance(user);
+  const { data: walletData } = useWalletBalance({ enabled: canViewBalance });
   const walletBalance = walletData?.balance ?? 0;
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -145,15 +148,17 @@ const Finance = () => {
         </div>
       </header>
 
-      <div className="stats-grid finance-stats">
-        <div className="stat-card">
-          <div className="stat-header">
-            <span className="stat-label">الرصيد الحالي</span>
-            <DollarSign size={20} className="stat-icon blue" />
+      <div className={`stats-grid finance-stats${canViewBalance ? '' : ' finance-stats--staff'}`}>
+        {canViewBalance && (
+          <div className="stat-card">
+            <div className="stat-header">
+              <span className="stat-label">الرصيد الحالي</span>
+              <DollarSign size={20} className="stat-icon blue" />
+            </div>
+            <span className="stat-value blue">{formatMoney(currentBalance)} د.ل</span>
+            <span className="stat-sub">رصيد المتجر</span>
           </div>
-          <span className="stat-value blue">{formatMoney(currentBalance)} د.ل</span>
-          <span className="stat-sub">رصيد المتجر</span>
-        </div>
+        )}
         <div className="stat-card">
           <div className="stat-header">
             <span className="stat-label">صافي الإيرادات</span>

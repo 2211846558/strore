@@ -105,6 +105,19 @@ export function userCanEditStoreProfile(user) {
   return !userHasRole(user, 'store_staff');
 }
 
+/** إدارة الموظفين — متاح لمدير المتجر فقط */
+export function userCanManageEmployees(user) {
+  if (!user) return false;
+  return userHasRole(user, 'store_manager') || userHasRole(user, 'super_admin');
+}
+
+/** عرض رصيد المحفظة — غير متاح لموظف المتجر (store_staff) */
+export function userCanViewStoreWalletBalance(user) {
+  if (!user) return false;
+  if (userHasRole(user, 'store_manager') || userHasRole(user, 'super_admin')) return true;
+  return !userHasRole(user, 'store_staff');
+}
+
 function collectAccessibleStoreIds(user) {
   const owned = user?.owned_stores || user?.ownedStores || [];
   const employed = user?.employed_stores || user?.employedStores || [];

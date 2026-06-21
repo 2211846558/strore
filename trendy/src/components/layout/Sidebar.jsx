@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import TrendyBrandLogo from '../brand/TrendyBrandLogo';
 import { useAuth } from '../../context/AuthContext';
-import { userHasRole } from '../../api/auth';
+import { userHasRole, userCanManageEmployees } from '../../api/auth';
 import { fetchNotifications } from '../../api/notifications';
 import './Sidebar.css';
 
@@ -76,7 +76,9 @@ const Sidebar = ({ onLogout }) => {
   }, [user]);
 
   const activeMenuItems = [
-    ...navMenuItems,
+    ...navMenuItems.filter(
+      (item) => item.path !== '/staff' || userCanManageEmployees(user)
+    ),
     ...(user && userHasRole(user, 'super_admin')
       ? [{ title: 'إدارة الخصائص', icon: Sliders, path: '/attributes' }]
       : []),

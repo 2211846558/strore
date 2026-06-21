@@ -3,11 +3,12 @@ import { getWalletBalance, getStoreWalletBalance, chargeStoreWallet, withdrawSto
 
 const WALLET_KEY = 'wallet'
 
-export function useWalletBalance() {
+export function useWalletBalance(options = {}) {
   return useQuery({
     queryKey: [WALLET_KEY],
     queryFn: () => getStoreWalletBalance(),
     staleTime: 30 * 1000,
+    ...options,
   })
 }
 
