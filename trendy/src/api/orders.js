@@ -56,51 +56,119 @@ export function mapStatusToApi(status) {
   return status;
 }
 
+function extractOrderItems(row) {
+  const itemsRaw =
+    row.items ??
+    row.order_items ??
+    row.products ??
+    row.line_items ??
+    [];
+  return Array.isArray(itemsRaw) ? itemsRaw : [];
+}
+
 function mapOrderItem(item) {
+  const variant = item.variant ?? item.product_variant ?? {};
   return {
-    name: item.product_name ?? item.name ?? item.product?.name ?? '—',
+    name: item.product_name ?? item.name ?? item.product?.name ?? item.title ?? '—',
     quantity: Number(item.quantity ?? 1),
-    price: Number(item.unit_price ?? item.price ?? 0),
-    variantLabel: item.sku ?? item.variant_label ?? null,
+    price: Number(item.unit_price ?? item.price ?? item.total ?? 0),
+    variantLabel: item.sku ?? item.variant_label ?? variant.label ?? null,
+    sku: item.sku ?? variant.sku ?? '',
   };
+}
+
+function formatAddress(addr) {
+  if (!addr) return '—';
+  if (typeof addr === 'string') return addr;
+  const parts = [
+    addr.address_line_1,
+    addr.address_line_2,
+    addr.address_line,
+    addr.street,
+    addr.area,
+    addr.city,
+    addr.zone_name ?? addr.zone?.name,
+    addr.details,
+    addr.label,
+  ].filter(Boolean);
+  return parts.join('، ') || addr.full_address || '—';
+}
+
+function computeProductsCount(row, products) {
+  const quantity = Number(row.items_quantity ?? 0);
+  if (quantity > 0) return quantity;
+
+  const lineCount = Number(row.items_count ?? 0);
+  if (lineCount > 0) return lineCount;
+
+  const fromItems = products.reduce((sum, product) => sum + (product.quantity || 0), 0);
+  return fromItems || products.length;
 }
 
 function isPosOrder(row) {
   const number = String(row.order_number ?? row.code ?? '');
   const type = String(row.order_type ?? row.type ?? '').toLowerCase();
-  return number.includes('POS') || type === 'pos' || type === 'past';
+  const channel = String(row.sales_channel ?? '').toLowerCase();
+  return number.includes('POS') || type === 'pos' || type === 'past' || channel === 'pos';
+}
+
+function resolveStaffName(row) {
+  return row.staff_name ?? row.cashier_name ?? row.seller?.name ?? row.seller_name ?? null;
+}
+
+function resolveBuyerName(row) {
+  return row.customer_name ?? row.customer?.name ?? row.user?.name ?? row.buyer_name ?? '—';
+}
+
+function extractOrderRow(res) {
+  return res?.data?.data ?? res?.data ?? res;
 }
 
 export function mapOrder(row) {
-  const itemsRaw = row.items ?? row.order_items ?? row.products ?? [];
-  const products = (Array.isArray(itemsRaw) ? itemsRaw : []).map(mapOrderItem);
+  const products = extractOrderItems(row).map(mapOrderItem);
   const statusRaw = String(row.status ?? 'pending').toLowerCase();
   const status = mapStatusToArabic(statusRaw);
+  const isPos = isPosOrder(row);
+  const staffName = resolveStaffName(row);
+  const buyerName = resolveBuyerName(row);
+  const hasStaff = Boolean(staffName);
 
   return {
     id: row.order_number ?? row.code ?? `ORD-${row.id}`,
     orderId: row.id,
     date: formatDate(row.created_at ?? row.date ?? row.ordered_at),
-    customerName:
-      row.customer_name ?? row.customer?.name ?? row.user?.name ?? row.buyer_name ?? '—',
+    staffName: staffName ?? '—',
+    buyerName,
+    customerName: hasStaff ? staffName : buyerName,
+    hasStaff,
     phone:
       row.customer_phone ??
+      row.shipping_address?.phone ??
       row.phone ??
       row.customer?.phone ??
       row.user?.phone ??
       '—',
-    address:
-      row.shipping_address ??
-      row.delivery_address ??
-      row.address ??
-      row.shipping_address_text ??
-      '—',
+    address: formatAddress(
+      row.shipping_address ?? row.delivery_address ?? row.address ?? row.shipping_address_text,
+    ),
     products,
+    productsCount: computeProductsCount(row, products),
     total: Number(row.total ?? row.total_amount ?? row.grand_total ?? 0),
     status,
     statusRaw,
     paymentMethod: row.payment_method ?? row.payment_method_name ?? null,
     notes: row.notes ?? row.cancellation_reason ?? null,
+    driverName: row.driver_name ?? row.driver?.user?.name ?? row.driver?.name ?? null,
+    hasDriver: Boolean(row.driver_name ?? row.driver?.user?.name ?? row.driver?.name ?? row.driver_id),
+    zoneId: row.zone_id ?? row.shipping_address?.zone_id ?? row.store?.zone_id ?? null,
+    zoneName:
+      row.zone_name ??
+      row.shipping_address?.zone_name ??
+      row.shipping_address?.zone?.name ??
+      row.store?.zone_name ??
+      row.store?.zone?.name ??
+      null,
+    isPos,
     raw: row,
   };
 }
@@ -164,8 +232,13 @@ export async function fetchAllOrders(filters = {}) {
  * GET /orders/{id} — تفاصيل طلب
  */
 export async function fetchOrder(id) {
-  const res = await apiRequest(API_ENDPOINTS.order(id));
-  return mapOrder(res?.data ?? res);
+  const numericId = Number(id);
+  if (!Number.isFinite(numericId) || numericId <= 0) {
+    throw new Error('معرّف الطلب غير صالح');
+  }
+
+  const res = await apiRequest(API_ENDPOINTS.order(numericId));
+  return mapOrder(extractOrderRow(res));
 }
 
 /**
@@ -176,7 +249,7 @@ export async function updateOrderStatus(id, status) {
     method: 'PATCH',
     body: { status: mapStatusToApi(status) },
   });
-  return mapOrder(res?.data ?? res);
+  return mapOrder(extractOrderRow(res));
 }
 
 /**
@@ -187,7 +260,7 @@ export async function cancelOrder(id, reason = 'إلغاء من لوحة الم�
     method: 'POST',
     body: { reason: reason.trim() || 'إلغاء من لوحة المتجر' },
   });
-  return mapOrder(res?.data ?? res);
+  return mapOrder(extractOrderRow(res));
 }
 
 /**
@@ -195,7 +268,7 @@ export async function cancelOrder(id, reason = 'إلغاء من لوحة الم�
  */
 export async function prepareOrder(id) {
   const res = await apiRequest(API_ENDPOINTS.orderPrepare(id), { method: 'POST' });
-  return mapOrder(res?.data ?? res);
+  return mapOrder(extractOrderRow(res));
 }
 
 /**
@@ -203,7 +276,7 @@ export async function prepareOrder(id) {
  */
 export async function confirmOrderDelivery(id) {
   const res = await apiRequest(API_ENDPOINTS.orderConfirmDelivery(id), { method: 'POST' });
-  return mapOrder(res?.data ?? res);
+  return mapOrder(extractOrderRow(res));
 }
 
 export function canPrepareOrder(order) {

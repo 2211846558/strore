@@ -201,7 +201,9 @@ const Orders = () => {
                 </div>
                 <div className="order-detail-item">
                   <span className="label">المنتجات</span>
-                  <span className="value">{order.products.length} منتج</span>
+                  <span className="value">
+                    {order.productsCount ?? order.products.length} منتج
+                  </span>
                 </div>
                 <div className="order-detail-item">
                   <span className="label">الإجمالي</span>
