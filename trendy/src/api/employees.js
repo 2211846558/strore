@@ -1,26 +1,106 @@
 import { apiRequest } from './client';
 import { API_ENDPOINTS } from './config';
 
+const ROLE_ID_CACHE_KEY = 'trendy_role_id_map';
 
-function extractList(res) {
-  const payload = res?.data ?? res;
-  if (Array.isArray(payload)) return payload;
-  if (Array.isArray(payload?.data)) return payload.data;
-  return [];
+const ROLE_SEED_ORDER = [
+  'super_admin',
+  'stores_admin',
+  'accountant',
+  'operations_admin',
+  'store_manager',
+  'store_staff',
+];
+
+/** معرّفات seed نظيف — وليس 1855+ */
+const STANDARD_ROLE_IDS = {
+  super_admin: 1,
+  stores_admin: 2,
+  accountant: 3,
+  operations_admin: 4,
+  store_manager: 5,
+  store_staff: 6,
+};
+
+function readEnvRoleId(slug) {
+  const envMap = {
+    super_admin: import.meta.env.VITE_ROLE_SUPER_ADMIN_ID,
+    stores_admin: import.meta.env.VITE_ROLE_STORES_ADMIN_ID,
+    accountant: import.meta.env.VITE_ROLE_ACCOUNTANT_ID,
+    operations_admin: import.meta.env.VITE_ROLE_OPERATIONS_ADMIN_ID,
+    store_manager: import.meta.env.VITE_ROLE_STORE_MANAGER_ID,
+    store_staff: import.meta.env.VITE_ROLE_STORE_STAFF_ID,
+  };
+  const value = Number(envMap[slug]);
+  return !Number.isNaN(value) && value > 0 ? value : null;
 }
 
-/**
- * أرقام الأدوار في جدول roles — ترتيب افتراضي حسب api.md
- * يمكن تجاوزها من .env إذا اختلفت عندك في قاعدة البيانات
- */
-export const DEFAULT_ROLE_IDS = {
-  super_admin: Number(import.meta.env.VITE_ROLE_SUPER_ADMIN_ID) || 1855,
-  stores_admin: Number(import.meta.env.VITE_ROLE_STORES_ADMIN_ID) || 1856,
-  accountant: Number(import.meta.env.VITE_ROLE_ACCOUNTANT_ID) || 1857,
-  operations_admin: Number(import.meta.env.VITE_ROLE_OPERATIONS_ADMIN_ID) || 1858,
-  store_manager: Number(import.meta.env.VITE_ROLE_STORE_MANAGER_ID) || 1859,
-  store_staff: Number(import.meta.env.VITE_ROLE_STORE_STAFF_ID) || 1860,
-};
+function readCachedRoleIds() {
+  try {
+    const raw = localStorage.getItem(ROLE_ID_CACHE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeCachedRoleIds(map) {
+  localStorage.setItem(ROLE_ID_CACHE_KEY, JSON.stringify(map));
+}
+
+export function extractRoleIdsFromUser(user) {
+  const map = {};
+  const roles = user?.roles;
+  if (!Array.isArray(roles)) return map;
+
+  for (const role of roles) {
+    if (typeof role === 'object' && role?.id != null && role?.name) {
+      map[String(role.name)] = Number(role.id);
+    }
+  }
+  return map;
+}
+
+export function syncRoleIdCacheFromUser(user) {
+  const extracted = extractRoleIdsFromUser(user);
+  if (Object.keys(extracted).length === 0) return;
+  writeCachedRoleIds({ ...readCachedRoleIds(), ...extracted });
+}
+
+function inferRoleIdsFromKnown(known) {
+  const result = { ...known };
+  for (const [slug, id] of Object.entries(known)) {
+    const idx = ROLE_SEED_ORDER.indexOf(slug);
+    if (idx === -1 || !id) continue;
+    for (const targetSlug of ROLE_SEED_ORDER) {
+      if (result[targetSlug]) continue;
+      const targetIdx = ROLE_SEED_ORDER.indexOf(targetSlug);
+      if (targetIdx === -1) continue;
+      const inferred = Number(id) + (targetIdx - idx);
+      if (inferred > 0) result[targetSlug] = inferred;
+    }
+  }
+  return result;
+}
+
+export function getResolvedRoleIds(user = null) {
+  const cached = readCachedRoleIds();
+  const fromUser = user ? extractRoleIdsFromUser(user) : {};
+  const merged = { ...STANDARD_ROLE_IDS };
+
+  for (const slug of ROLE_SEED_ORDER) {
+    const id =
+      fromUser[slug] ??
+      cached[slug] ??
+      readEnvRoleId(slug) ??
+      STANDARD_ROLE_IDS[slug];
+    if (id) merged[slug] = id;
+  }
+
+  return inferRoleIdsFromKnown(merged);
+}
+
+export const DEFAULT_ROLE_IDS = STANDARD_ROLE_IDS;
 
 /** أدوار الموظفين — slug في الـ API → تسمية عربية في الواجهة */
 export const EMPLOYEE_ROLE_MAP = {
@@ -32,16 +112,8 @@ export const EMPLOYEE_ROLE_MAP = {
   super_admin: 'مدير النظام',
 };
 
-function resolveRoleIdFromForm(roleValue) {
-  const { roleId } = parseRoleSelection(roleValue);
-  if (roleId) return roleId;
-  const numeric = Number(roleValue);
-  if (!Number.isNaN(numeric) && numeric > 0) return numeric;
-  return DEFAULT_ROLE_IDS[roleValue] ?? null;
-}
-
 /** يفك قيمة الاختيار "roleId__label" أو role_id فقط */
-export function parseRoleSelection(roleValue) {
+export function parseRoleSelection(roleValue, user = null) {
   const raw = String(roleValue ?? '');
   if (raw.includes('__')) {
     const sep = raw.indexOf('__');
@@ -54,7 +126,8 @@ export function parseRoleSelection(roleValue) {
   if (!Number.isNaN(numeric) && numeric > 0) {
     return { roleId: numeric, jobTitle: '' };
   }
-  const slugId = DEFAULT_ROLE_IDS[raw];
+  const roleIds = getResolvedRoleIds(user);
+  const slugId = roleIds[raw];
   return { roleId: slugId ?? null, jobTitle: '' };
 }
 
@@ -64,20 +137,25 @@ export function formatRoleSelection(roleId, jobTitle) {
 }
 
 /** خيارات الأدوار في النماذج والفلترة */
-export const EMPLOYEE_ROLE_OPTIONS = [
-  {
-    value: formatRoleSelection(DEFAULT_ROLE_IDS.store_staff, 'موظف متجر'),
-    slug: 'store_staff',
-    label: 'موظف متجر',
-  },
-  {
-    value: formatRoleSelection(DEFAULT_ROLE_IDS.store_manager, 'مدير متجر'),
-    slug: 'store_manager',
-    label: 'مدير متجر',
-  },
-];
+export function getEmployeeRoleOptions(user = null) {
+  const roleIds = getResolvedRoleIds(user);
+  return [
+    {
+      value: formatRoleSelection(roleIds.store_staff, 'موظف متجر'),
+      slug: 'store_staff',
+      label: 'موظف متجر',
+    },
+    {
+      value: formatRoleSelection(roleIds.store_manager, 'مدير متجر'),
+      slug: 'store_manager',
+      label: 'مدير متجر',
+    },
+  ];
+}
 
-function resolveRoleId(row) {
+export const EMPLOYEE_ROLE_OPTIONS = getEmployeeRoleOptions();
+
+function resolveRoleId(row, user = null) {
   if (row.role_id != null) return Number(row.role_id);
   if (row.role?.id != null) return Number(row.role.id);
   const roles = row.roles;
@@ -89,7 +167,8 @@ function resolveRoleId(row) {
     }
   }
   const slug = resolveRoleSlug(row);
-  return slug ? DEFAULT_ROLE_IDS[slug] ?? null : null;
+  const roleIds = getResolvedRoleIds(user);
+  return slug ? roleIds[slug] ?? null : null;
 }
 
 function resolveRoleSlug(row) {
@@ -154,9 +233,9 @@ function resolveActive(row) {
   return true;
 }
 
-export function mapEmployee(row) {
+export function mapEmployee(row, user = null) {
   const roleSlug = resolveRoleSlug(row);
-  const roleId = resolveRoleId(row);
+  const roleId = resolveRoleId(row, user);
   let active = resolveActive(row);
   if (roleSlug === 'store_manager') {
     active = true;
@@ -180,12 +259,19 @@ export function mapEmployee(row) {
   };
 }
 
-export function buildRoleOptions(employees = []) {
-  return EMPLOYEE_ROLE_OPTIONS;
+export function buildRoleOptions(_employees = [], user = null) {
+  return getEmployeeRoleOptions(user);
 }
 
-export function buildEmployeePayload(form, { storeId, roleOptions } = {}) {
-  const { roleId } = parseRoleSelection(form.role);
+function extractList(res) {
+  const payload = res?.data ?? res;
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.data)) return payload.data;
+  return [];
+}
+
+export function buildEmployeePayload(form, { storeId, roleOptions, user } = {}) {
+  const { roleId } = parseRoleSelection(form.role, user);
   const jobTitle = resolveJobTitle(form, roleOptions);
 
   const body = {
@@ -258,6 +344,7 @@ export async function fetchEmployees({
   role,
   perPage = 50,
   page = 1,
+  user = null,
 } = {}) {
   const query = new URLSearchParams({
     per_page: String(perPage),
@@ -266,7 +353,8 @@ export async function fetchEmployees({
   if (storeId) query.set('store_id', String(storeId));
   if (search?.trim()) query.set('search', search.trim());
   if (role && role !== 'all') {
-    const opt = EMPLOYEE_ROLE_OPTIONS.find((o) => String(o.value) === String(role));
+    const roleOptions = getEmployeeRoleOptions(user);
+    const opt = roleOptions.find((o) => String(o.value) === String(role));
     if (opt) {
       query.set('role', opt.slug);
     } else {
@@ -276,7 +364,7 @@ export async function fetchEmployees({
 
   const res = await apiRequest(`${API_ENDPOINTS.employees}?${query}`);
   return {
-    employees: extractList(res).map(mapEmployee),
+    employees: extractList(res).map((row) => mapEmployee(row, user)),
     meta: res?.meta ?? null,
   };
 }

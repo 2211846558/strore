@@ -28,16 +28,18 @@ const StaffModal = ({ isOpen, onClose, onSave, member, roles, isSaving = false }
           password: '',
         });
       } else {
+        const defaultRole =
+          roles.find((r) => r.slug === 'store_staff')?.value ?? roles[0]?.value ?? '';
         setForm({
           name: '',
           email: '',
           phone: '',
-          role: '',
+          role: defaultRole,
           password: '',
         });
       }
     }
-  }, [isOpen, member]);
+  }, [isOpen, member, roles]);
 
   if (!isOpen) return null;
 

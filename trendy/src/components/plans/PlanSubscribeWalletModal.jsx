@@ -16,28 +16,12 @@ import {
   isStripeConfigured,
   STRIPE_PUBLISHABLE_KEY,
   translateStripeError,
+  getStripeCardNumberOptions,
+  getStripeSplitFieldStyle,
 } from '../../api/stripe';
 import { isValidDecimalInput, preventWheelChange } from '../../utils/numericInput';
+import { StripeModalElements } from '../../providers/StripeProvider';
 import './PlanSubscribeWalletModal.css';
-
-const getStripeFieldStyle = () => ({
-  style: {
-    base: {
-      fontSize: '16px',
-      color: '#131127',
-      fontFamily: '"Tajawal", system-ui, sans-serif',
-      iconColor: '#8b3dff',
-      lineHeight: '24px',
-      '::placeholder': {
-        color: '#7b7898',
-      },
-    },
-    invalid: {
-      color: '#dc2626',
-      iconColor: '#dc2626',
-    },
-  },
-});
 
 const usePlanWalletState = (plan) => {
   const { data: walletData, refetch: refreshWallet } = useWalletBalance();
@@ -146,11 +130,11 @@ const PlanSubscribeWalletForm = ({ plan, action = 'subscribe', onClose, onConfir
     expiry: false,
     cvc: false,
   });
-  const [readyCount, setReadyCount] = useState(0);
 
-  const stripeFieldOptions = useMemo(() => getStripeFieldStyle(), []);
+  const stripeNumberOptions = useMemo(() => getStripeCardNumberOptions(), []);
+  const stripeFieldOptions = useMemo(() => getStripeSplitFieldStyle(), []);
   const cardComplete = cardFields.number && cardFields.expiry && cardFields.cvc;
-  const cardReady = readyCount >= 3;
+  const stripeReady = Boolean(stripe && elements);
 
   const handleFieldChange = (field) => (event) => {
     setCardFields((prev) => ({ ...prev, [field]: event.complete }));
@@ -161,19 +145,15 @@ const PlanSubscribeWalletForm = ({ plan, action = 'subscribe', onClose, onConfir
     }
   };
 
-  const handleFieldReady = () => {
-    setReadyCount((count) => count + 1);
-  };
-
   useEffect(() => {
-    if (plan?.price) {
-      setAmount(String(plan.price));
+    const defaultAmount = missingAmount > 0 ? missingAmount : plan?.price;
+    if (defaultAmount != null) {
+      setAmount(String(defaultAmount));
     }
-    setReadyCount(0);
-    setCardFields({ number: false, expiry: false, cvc: false });
     setRechargeError('');
     setRechargeSuccess(false);
-  }, [plan?.id, plan?.price]);
+    setCardFields({ number: false, expiry: false, cvc: false });
+  }, [plan?.id, plan?.price, missingAmount]);
 
   const handleRecharge = async (e) => {
     e.preventDefault();
@@ -229,49 +209,46 @@ const PlanSubscribeWalletForm = ({ plan, action = 'subscribe', onClose, onConfir
           بيانات البطاقة
         </label>
         <div className="plan-wallet-stripe-fields">
-          <div className="plan-wallet-stripe-field">
-            <label className="plan-wallet-stripe-label">رقم البطاقة</label>
-            <div className="plan-wallet-stripe-card">
-              <CardNumberElement
-                key={`card-number-${plan.id}`}
-                options={stripeFieldOptions}
-                onReady={handleFieldReady}
-                onChange={handleFieldChange('number')}
-              />
-            </div>
-          </div>
-
-          <div className="plan-wallet-stripe-row">
-            <div className="plan-wallet-stripe-field">
-              <label className="plan-wallet-stripe-label">تاريخ الانتهاء</label>
-              <div className="plan-wallet-stripe-card">
-                <CardExpiryElement
-                  key={`card-expiry-${plan.id}`}
-                  options={stripeFieldOptions}
-                  onReady={handleFieldReady}
-                  onChange={handleFieldChange('expiry')}
-                />
+          {!stripeReady ? (
+            <p className="plan-wallet-stripe-loading">جاري تهيئة بوابة الدفع...</p>
+          ) : (
+            <>
+              <div className="plan-wallet-stripe-field">
+                <label className="plan-wallet-stripe-label">رقم البطاقة</label>
+                <div className="plan-wallet-stripe-card">
+                  <CardNumberElement
+                    options={stripeNumberOptions}
+                    onChange={handleFieldChange('number')}
+                  />
+                </div>
               </div>
-              <span className="plan-wallet-stripe-hint">مثال: 12 / 34</span>
-            </div>
 
-            <div className="plan-wallet-stripe-field">
-              <label className="plan-wallet-stripe-label">رمز الأمان (CVV)</label>
-              <div className="plan-wallet-stripe-card">
-                <CardCvcElement
-                  key={`card-cvc-${plan.id}`}
-                  options={stripeFieldOptions}
-                  onReady={handleFieldReady}
-                  onChange={handleFieldChange('cvc')}
-                />
+              <div className="plan-wallet-stripe-row">
+                <div className="plan-wallet-stripe-field">
+                  <label className="plan-wallet-stripe-label">تاريخ الانتهاء</label>
+                  <div className="plan-wallet-stripe-card">
+                    <CardExpiryElement
+                      options={stripeFieldOptions}
+                      onChange={handleFieldChange('expiry')}
+                    />
+                  </div>
+                  <span className="plan-wallet-stripe-hint">مثال: 12 / 34</span>
+                </div>
+
+                <div className="plan-wallet-stripe-field">
+                  <label className="plan-wallet-stripe-label">رمز الأمان (CVV)</label>
+                  <div className="plan-wallet-stripe-card">
+                    <CardCvcElement
+                      options={stripeFieldOptions}
+                      onChange={handleFieldChange('cvc')}
+                    />
+                  </div>
+                  <span className="plan-wallet-stripe-hint">3 أرقام خلف البطاقة</span>
+                </div>
               </div>
-              <span className="plan-wallet-stripe-hint">3 أرقام خلف البطاقة</span>
-            </div>
-          </div>
+            </>
+          )}
         </div>
-        {!cardReady && (
-          <p className="plan-wallet-stripe-loading">جاري تحميل حقول البطاقة...</p>
-        )}
         <p className="plan-wallet-secure-note">
           <ShieldCheck size={14} />
           بيانات البطاقة تُعالَج مباشرة عبر Stripe ولا تمرّ بخوادمنا
@@ -301,7 +278,7 @@ const PlanSubscribeWalletForm = ({ plan, action = 'subscribe', onClose, onConfir
         <button
           type="submit"
           className="plan-wallet-btn recharge"
-          disabled={rechargeLoading || !stripe || !cardReady || !cardComplete}
+          disabled={rechargeLoading || !stripeReady || !cardComplete}
         >
           {rechargeLoading ? 'جاري الشحن...' : 'شحن المحفظة'}
         </button>
@@ -483,14 +460,17 @@ const PlanSubscribeWalletModal = ({
             />
           </>
         ) : (
-          <PlanSubscribeWalletForm
-            plan={plan}
-            action={action}
-            onClose={onClose}
-            onConfirm={onConfirm}
-            onToast={onToast}
-            loadingPreview={loadingPreview}
-          />
+          <StripeModalElements mountKey={`plan-wallet-${plan.id}`}>
+            <PlanSubscribeWalletForm
+              key={plan.id}
+              plan={plan}
+              action={action}
+              onClose={onClose}
+              onConfirm={onConfirm}
+              onToast={onToast}
+              loadingPreview={loadingPreview}
+            />
+          </StripeModalElements>
         )}
       </div>
     </div>

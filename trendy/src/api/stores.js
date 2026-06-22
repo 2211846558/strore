@@ -32,6 +32,7 @@ const FIELD_LABELS = {
   start_at: 'تاريخ البداية',
   end_at: 'تاريخ النهاية',
   job_title: 'المسمى الوظيفي',
+  role_id: 'الدور الوظيفي',
   status: 'حالة الطلب',
   reason: 'سبب الإلغاء',
   cancellation_reason: 'سبب الإلغاء',
@@ -118,6 +119,12 @@ export async function fetchZones() {
 
 const translateValidationMessage = (message, field) => {
   const label = FIELD_LABELS[field] || field;
+  if (/exists/i.test(message) && field === 'role_id') {
+    return 'الدور الوظيفي غير صالح. حدّث الصفحة أو سجّل الخروج والدخول مرة أخرى.';
+  }
+  if (/selected role id is invalid/i.test(message)) {
+    return 'الدور الوظيفي غير صالح. حدّث الصفحة أو سجّل الخروج والدخول مرة أخرى.';
+  }
   if (/required/i.test(message)) return `${label} مطلوب`;
   if (/required_if/i.test(message)) return `${label} مطلوب`;
   if (/email/i.test(message)) return `${label} غير صالح`;
@@ -360,6 +367,27 @@ export async function fetchStoreRatings(storeId) {
   };
 }
 
+function isTechnicalErrorMessage(message) {
+  if (!message || typeof message !== 'string') return false;
+  return /SQLSTATE|(?:^|\s)SQL:|Connection:\s*mysql|Host:\s*127\.0\.0\.1|Database:|PDOException|QueryException|Illuminate\\Database|vendor[/\\]laravel|App\\(?:Http|Models)|actively refused|ECONNREFUSED|could not (?:find driver|connect)|Access denied for user|Unknown column|Table .* doesn't exist|must be of type|Call to undefined|Undefined array key|stack trace/i.test(
+    message,
+  );
+}
+
+function getFriendlyDatabaseError(message, fallback) {
+  if (
+    /SQLSTATE\[HY000\]\s*\[2002\]|actively refused|Connection refused|ECONNREFUSED|No connection could be made/i.test(
+      message,
+    )
+  ) {
+    return 'تعذّر الاتصال بقاعدة البيانات. تأكد من تشغيل خادم MySQL ثم أعد المحاولة.';
+  }
+  if (/SQLSTATE|Connection:\s*mysql|Illuminate\\Database|QueryException|PDOException/i.test(message)) {
+    return fallback || 'تعذّر تنفيذ الطلب حالياً بسبب مشكلة في قاعدة البيانات. حاول مرة أخرى لاحقاً.';
+  }
+  return null;
+}
+
 export function getApiErrorMessage(error, fallback = 'تعذّر إرسال الطلب، حاول مرة أخرى') {
   if (error?.isNetworkError) {
     return 'تعذّر الاتصال بالخادم. تأكد من تشغيل الباكند على المنفذ 8000 ثم حدّث الصفحة.';
@@ -404,6 +432,9 @@ export function getApiErrorMessage(error, fallback = 'تعذّر إرسال ال
     if (/Unknown column ['"]?sku['"]?/i.test(msg) || /column not found.*sku/i.test(msg)) {
       return 'تعذّر حفظ المنتج: قاعدة البيانات تحتاج تحديث. شغّل php artisan migrate على الباكند ثم أعد المحاولة.';
     }
+    if (/selected role id is invalid|role_id.*invalid/i.test(msg)) {
+      return 'الدور الوظيفي غير صالح. سجّل الخروج ثم ادخل مرة أخرى، أو حدّث الصفحة.';
+    }
     if (/sku.*unique|unique.*sku/i.test(msg) || /sku مستخدم/i.test(msg)) {
       return 'رمز SKU مستخدم مسبقاً. اختر رمزاً آخر.';
     }
@@ -418,6 +449,11 @@ export function getApiErrorMessage(error, fallback = 'تعذّر إرسال ال
     }
     if (/App\\Http\\Controllers/i.test(msg) || /vendor\\laravel/i.test(msg)) {
       return 'تعذّر تنفيذ الطلب حالياً بسبب مشكلة في الخادم. حاول مرة أخرى بعد قليل.';
+    }
+    const databaseError = getFriendlyDatabaseError(msg, fallback);
+    if (databaseError) return databaseError;
+    if (isTechnicalErrorMessage(msg)) {
+      return fallback;
     }
     return msg;
   }

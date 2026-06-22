@@ -180,27 +180,26 @@
 }
 
 .plan-wallet-stripe-card {
-  background: #ffffff;
-  border: 1px solid rgba(19, 17, 39, 0.12);
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
   border-radius: 12px;
-  padding: 14px 16px;
-  min-height: 52px;
+  padding: 12px 16px;
+  min-height: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
   text-align: left;
   direction: ltr;
   position: relative;
   z-index: 2;
-  overflow: visible;
+  overflow: hidden;
   pointer-events: auto;
-  isolation: isolate;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-.plan-wallet-stripe-card .StripeElement,
-.plan-wallet-stripe-card .__PrivateStripeElement,
-.plan-wallet-stripe-card iframe {
-  width: 100% !important;
-  min-height: 24px;
-  pointer-events: auto !important;
+.plan-wallet-stripe-card .StripeElement {
+  width: 100%;
+  flex: 1 1 auto;
 }
 
 .plan-wallet-stripe-loading {

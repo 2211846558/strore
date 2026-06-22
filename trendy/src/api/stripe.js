@@ -35,6 +35,40 @@ export function translateStripeError(message) {
   return STRIPE_ERROR_MESSAGES[message] || message;
 }
 
+/** تنسيق حقول Stripe (تاريخ/CVV) */
+export function getStripeSplitFieldStyle() {
+  const isLight =
+    typeof document !== 'undefined' &&
+    document.documentElement.getAttribute('data-theme') === 'light';
+
+  return {
+    style: {
+      base: {
+        fontSize: '16px',
+        color: isLight ? '#2d2d2d' : '#e8e6f5',
+        fontFamily: '"Tajawal", system-ui, sans-serif',
+        iconColor: isLight ? '#5d59af' : '#8b3dff',
+        lineHeight: '24px',
+        '::placeholder': {
+          color: isLight ? '#9e9e9e' : '#7b7898',
+        },
+      },
+      invalid: {
+        color: '#dc2626',
+        iconColor: '#dc2626',
+      },
+    },
+  };
+}
+
+/** رقم البطاقة — بدون زر Link «أدخل البيانات تلقائياً» */
+export function getStripeCardNumberOptions() {
+  return {
+    ...getStripeSplitFieldStyle(),
+    disableLink: true,
+  };
+}
+
 /**
  * إنشاء payment_method_id آمن عبر Stripe (CardElement).
  * بيانات البطاقة لا تمرّ بسيرفرنا — فقط المعرّف pm_...

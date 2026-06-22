@@ -1,5 +1,6 @@
 import { apiRequest } from './client';
 import { API_ENDPOINTS, STORE_AUTH_ENDPOINTS } from './config';
+import { syncRoleIdCacheFromUser } from './employees';
 
 const LOCAL_SUBSCRIPTION_KEY_PREFIX = 'trendy_plan_sub_';
 
@@ -327,6 +328,7 @@ export function storeHasActivePlan(store, storeId = null) {
 export const persistAuthSession = ({ token, user }) => {
   localStorage.setItem(TOKEN_KEY, token);
   localStorage.setItem(USER_KEY, JSON.stringify(user));
+  syncRoleIdCacheFromUser(user);
   const storeId = user.store_id || getActiveStore(user)?.id;
   if (storeId) {
     localStorage.setItem(STORE_ID_KEY, String(storeId));

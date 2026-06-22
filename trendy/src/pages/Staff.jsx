@@ -8,7 +8,6 @@ import {
   buildEmployeePayload,
   buildEmployeeUpdatePayload,
   buildRoleOptions,
-  EMPLOYEE_ROLE_OPTIONS,
 } from '../api/employees';
 import { getApiErrorMessage } from '../api/stores';
 import {
@@ -18,11 +17,12 @@ import {
   useToggleEmployee,
   useDeleteEmployee,
 } from '../api/hooks/useEmployees';
-import { useStore } from '../context/AuthContext';
+import { useStore, useAuth } from '../context/AuthContext';
 import './Staff.css';
 
 const Staff = () => {
   const { storeId } = useStore();
+  const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
@@ -42,15 +42,15 @@ const Staff = () => {
   }, [searchQuery]);
 
   const filters = useMemo(
-    () => ({ storeId, search: debouncedSearch, role: roleFilter, maxPages: 3 }),
-    [storeId, debouncedSearch, roleFilter],
+    () => ({ storeId, search: debouncedSearch, role: roleFilter, maxPages: 3, user }),
+    [storeId, debouncedSearch, roleFilter, user],
   );
 
   const { data: staff = [], isLoading: loading, error } = useEmployees(filters);
 
   const formRoleOptions = useMemo(
-    () => (buildRoleOptions(staff).length ? buildRoleOptions(staff) : EMPLOYEE_ROLE_OPTIONS),
-    [staff],
+    () => buildRoleOptions(staff, user),
+    [staff, user],
   );
 
   const roleOptions = useMemo(
@@ -76,6 +76,7 @@ const Staff = () => {
       const payload = buildEmployeeUpdatePayload(formData, {
         storeId,
         roleOptions: formRoleOptions,
+        user,
       });
       await updateMutation.mutateAsync({ id: editingStaff.id, ...payload });
       showToast('تم حفظ التغييرات بنجاح');
@@ -83,6 +84,7 @@ const Staff = () => {
       const payload = buildEmployeePayload(formData, {
         storeId,
         roleOptions: formRoleOptions,
+        user,
       });
       await createMutation.mutateAsync(payload);
       showToast('تم إضافة الموظف بنجاح');

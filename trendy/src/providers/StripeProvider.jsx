@@ -18,4 +18,17 @@ export function StripeProvider({ children }) {
   );
 }
 
+/** سياق Elements منفصل للنوافذ المنبثقة — يضمن تحميل حقول البطاقة بشكل صحيح */
+export function StripeModalElements({ children, mountKey = 'stripe-modal' }) {
+  if (!isStripeConfigured() || !stripePromise) {
+    return children;
+  }
+
+  return (
+    <Elements stripe={stripePromise} options={elementsOptions} key={mountKey}>
+      {children}
+    </Elements>
+  );
+}
+
 export default StripeProvider;
