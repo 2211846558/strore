@@ -225,6 +225,11 @@
   color: #ef4444;
 }
 
+.status-badge.archived {
+  background-color: rgba(251, 191, 36, 0.15);
+  color: #fbbf24;
+}
+
 .inventory-error {
   margin: 0 0 16px;
   color: #ef4444;

@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   X, Truck, Calendar, Package,
-  CheckCircle2, Clock, XCircle, Tag, Hash, Layers, Pencil
+  CheckCircle2, Clock, XCircle, Tag, Hash, Layers, Pencil, Archive
 } from 'lucide-react';
 import './ShipmentDetailModal.css';
 
@@ -9,6 +9,7 @@ const STATUS_MAP = {
   received: { Icon: CheckCircle2, cls: 'received', label: 'مستلمة' },
   pending:  { Icon: Clock,         cls: 'pending',  label: 'قيد الانتظار' },
   cancelled:{ Icon: XCircle,       cls: 'cancelled',label: 'ملغاة' },
+  archived: { Icon: Archive,      cls: 'archived', label: 'مؤرشف' },
 };
 
 /* تجميع العناصر حسب المنتج */
@@ -22,7 +23,7 @@ function groupByProduct(items = []) {
   return Object.values(map);
 }
 
-const ShipmentDetailModal = ({ isOpen, onClose, shipment, onEdit }) => {
+const ShipmentDetailModal = ({ isOpen, onClose, shipment, onEdit, onArchive }) => {
   if (!isOpen || !shipment) return null;
 
   const statusInfo = STATUS_MAP[shipment.statusRaw] ?? STATUS_MAP.pending;
@@ -30,6 +31,8 @@ const ShipmentDetailModal = ({ isOpen, onClose, shipment, onEdit }) => {
 
   const productGroups = groupByProduct(shipment.items);
   const totalQty = (shipment.items || []).reduce((s, i) => s + Number(i.quantity || 0), 0);
+  const canArchive = shipment.statusRaw === 'received';
+  const canEdit = shipment.statusRaw !== 'archived' && shipment.statusRaw !== 'cancelled';
 
   /* سعر البيع من أول عنصر */
   const sampleItem = shipment.items?.[0];
@@ -177,16 +180,28 @@ const ShipmentDetailModal = ({ isOpen, onClose, shipment, onEdit }) => {
           <button className="cancel-button" onClick={onClose} type="button">
             إغلاق
           </button>
-          {onEdit && (
-            <button
-              className="save-button sdm-edit-btn"
-              onClick={() => onEdit(shipment)}
-              type="button"
-            >
-              <Pencil size={16} />
-              تعديل الشحنة
-            </button>
-          )}
+          <div className="sdm-footer-actions">
+            {onArchive && canArchive && (
+              <button
+                className="save-button archive-btn sdm-archive-btn"
+                onClick={() => onArchive(shipment)}
+                type="button"
+              >
+                <Archive size={16} />
+                أرشفة الشحنة
+              </button>
+            )}
+            {onEdit && canEdit && (
+              <button
+                className="save-button sdm-edit-btn"
+                onClick={() => onEdit(shipment)}
+                type="button"
+              >
+                <Pencil size={16} />
+                تعديل الشحنة
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>

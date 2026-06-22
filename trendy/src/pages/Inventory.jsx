@@ -1,14 +1,16 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Search, Plus, Eye, Package, CheckCircle2,
-  Truck, Clock, XCircle, BarChart2
+  Truck, Clock, XCircle, BarChart2, Archive
 } from 'lucide-react';
 import AddShipmentModal from '../components/inventory/AddShipmentModal';
 import ShipmentDetailModal from '../components/inventory/ShipmentDetailModal';
+import ShipmentArchiveConfirmModal from '../components/inventory/ShipmentArchiveConfirmModal';
 import {
   createShipment,
   updateShipment,
   fetchShipments,
+  archiveShipment,
 } from '../api/inventory';
 import { getApiErrorMessage } from '../api/stores';
 import { useAuth } from '../context/AuthContext';
@@ -18,12 +20,14 @@ const STATUS_FILTERS = [
   { value: 'all', label: 'جميع الشحنات' },
   { value: 'pending', label: 'قيد الانتظار' },
   { value: 'received', label: 'مستلمة' },
+  { value: 'archived', label: 'مؤرشفة' },
   { value: 'cancelled', label: 'ملغاة' },
 ];
 
 const STATUS_ICONS = {
   pending: { icon: Clock, cls: 'pending', label: 'قيد الانتظار' },
   received: { icon: CheckCircle2, cls: 'received', label: 'مستلمة' },
+  archived: { icon: Archive, cls: 'archived', label: 'مؤرشف' },
   cancelled: { icon: XCircle, cls: 'cancelled', label: 'ملغاة' },
 };
 
@@ -40,6 +44,8 @@ const Inventory = () => {
   const [isShipmentModalOpen, setIsShipmentModalOpen] = useState(false);
   const [editingShipment, setEditingShipment] = useState(null);
   const [detailShipment, setDetailShipment] = useState(null);
+  const [archiveTarget, setArchiveTarget] = useState(null);
+  const [isArchiving, setIsArchiving] = useState(false);
   const [toast, setToast] = useState(null);
 
   const showToast = (message) => {
@@ -128,6 +134,26 @@ const Inventory = () => {
   const handleEditFromDetail = (shipment) => {
     setDetailShipment(null);
     handleOpenEdit(shipment);
+  };
+
+  const handleArchiveRequest = (shipment) => {
+    setArchiveTarget(shipment);
+  };
+
+  const handleConfirmArchive = async () => {
+    if (!archiveTarget) return;
+    setIsArchiving(true);
+    try {
+      await archiveShipment(archiveTarget, { storeId });
+      showToast('تم أرشفة الشحنة بنجاح');
+      setArchiveTarget(null);
+      setDetailShipment(null);
+      loadShipments();
+    } catch (err) {
+      showToast(getApiErrorMessage(err, 'تعذّر أرشفة الشحنة. تأكد أن جميع الكميات غير متوفرة للبيع.'));
+    } finally {
+      setIsArchiving(false);
+    }
   };
 
   const formatDate = (d) => d || '—';
@@ -326,6 +352,15 @@ const Inventory = () => {
         onClose={() => setDetailShipment(null)}
         shipment={detailShipment}
         onEdit={handleEditFromDetail}
+        onArchive={handleArchiveRequest}
+      />
+
+      <ShipmentArchiveConfirmModal
+        isOpen={!!archiveTarget}
+        onClose={() => !isArchiving && setArchiveTarget(null)}
+        onConfirm={handleConfirmArchive}
+        shipment={archiveTarget}
+        isArchiving={isArchiving}
       />
 
       {/* ── Toast ── */}

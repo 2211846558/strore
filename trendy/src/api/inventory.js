@@ -75,6 +75,8 @@ export function mapShipment(row) {
     statusRaw = 'pending';
   } else if (row.dynamic_status === 'حالية') {
     statusRaw = 'received';
+  } else if (row.dynamic_status === 'مؤرشف' || row.dynamic_status === 'مؤرشفة') {
+    statusRaw = 'archived';
   }
 
   return {
@@ -245,6 +247,25 @@ export async function cancelShipment(id, { storeId } = {}) {
   const res = await apiRequest(API_ENDPOINTS.inventoryShipment(id), {
     method: 'PUT',
     body,
+  });
+  const row = res?.data ?? res;
+  return mapShipment(row);
+}
+
+/**
+ * POST /api/inventory/shipments/{id}/archive
+ * - يُغيِّر حالة الشحنة من "received" إلى "archived"
+ */
+export async function archiveShipment(shipment, { storeId } = {}) {
+  const id = typeof shipment === 'object' ? shipment?.id : shipment;
+  if (!id) throw new Error('معرّف الشحنة مطلوب');
+
+  const body = {};
+  if (storeId) body.store_id = storeId;
+
+  const res = await apiRequest(API_ENDPOINTS.inventoryShipmentArchive(id), {
+    method: 'POST',
+    body: Object.keys(body).length ? body : undefined,
   });
   const row = res?.data ?? res;
   return mapShipment(row);

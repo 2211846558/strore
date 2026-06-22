@@ -53,6 +53,7 @@ export const API_ENDPOINTS = {
   inventory: '/inventory',
   inventoryShipments: '/inventory/shipments',
   inventoryShipment: (id) => `/inventory/shipments/${id}`,
+  inventoryShipmentArchive: (id) => `/inventory/shipments/${id}/archive`,
   inventoryVariant: (variantId) => `/inventory/variants/${variantId}`,
   inventoryVariantMovements: (variantId) => `/inventory/variants/${variantId}/movements`,
   inventoryAdjust: '/inventory/adjust',

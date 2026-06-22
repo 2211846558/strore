@@ -293,6 +293,21 @@
   gap: 8px;
 }
 
+.sdm-archive-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sdm-footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-right: auto;
+}
+
+.sdm-status.archived { color: #fbbf24; }
+
 /* ── Status badge (reuse) ── */
 .status-badge {
   display: inline-flex;
