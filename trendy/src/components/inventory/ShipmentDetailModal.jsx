@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   X, Truck, Calendar, Package,
-  CheckCircle2, Clock, XCircle, Tag, Hash, Layers
+  CheckCircle2, Clock, XCircle, Tag, Hash, Layers, Pencil
 } from 'lucide-react';
 import './ShipmentDetailModal.css';
 
@@ -22,7 +22,7 @@ function groupByProduct(items = []) {
   return Object.values(map);
 }
 
-const ShipmentDetailModal = ({ isOpen, onClose, shipment }) => {
+const ShipmentDetailModal = ({ isOpen, onClose, shipment, onEdit }) => {
   if (!isOpen || !shipment) return null;
 
   const statusInfo = STATUS_MAP[shipment.statusRaw] ?? STATUS_MAP.pending;
@@ -177,6 +177,16 @@ const ShipmentDetailModal = ({ isOpen, onClose, shipment }) => {
           <button className="cancel-button" onClick={onClose} type="button">
             إغلاق
           </button>
+          {onEdit && (
+            <button
+              className="save-button sdm-edit-btn"
+              onClick={() => onEdit(shipment)}
+              type="button"
+            >
+              <Pencil size={16} />
+              تعديل الشحنة
+            </button>
+          )}
         </div>
       </div>
     </div>

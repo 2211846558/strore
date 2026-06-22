@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Search, Plus, Eye, Package, CheckCircle2,
-  Truck, Clock, XCircle, BarChart2, Edit2
+  Truck, Clock, XCircle, BarChart2
 } from 'lucide-react';
 import AddShipmentModal from '../components/inventory/AddShipmentModal';
 import ShipmentDetailModal from '../components/inventory/ShipmentDetailModal';
@@ -123,6 +123,11 @@ const Inventory = () => {
 
   const handleViewDetail = (shipment) => {
     setDetailShipment(shipment);
+  };
+
+  const handleEditFromDetail = (shipment) => {
+    setDetailShipment(null);
+    handleOpenEdit(shipment);
   };
 
   const formatDate = (d) => d || '—';
@@ -290,14 +295,6 @@ const Inventory = () => {
                         >
                           <Eye size={16} />
                         </button>
-                        <button
-                          className="action-btn edit-btn"
-                          onClick={() => handleOpenEdit(shipment)}
-                          title="تعديل الشحنة"
-                          type="button"
-                        >
-                          <Edit2 size={16} />
-                        </button>
                       </div>
                     </td>
                   </tr>
@@ -328,6 +325,7 @@ const Inventory = () => {
         isOpen={!!detailShipment}
         onClose={() => setDetailShipment(null)}
         shipment={detailShipment}
+        onEdit={handleEditFromDetail}
       />
 
       {/* ── Toast ── */}

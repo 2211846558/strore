@@ -252,8 +252,45 @@
   padding: 20px 24px 24px;
   display: flex;
   justify-content: flex-start;
+  gap: 12px;
   margin-top: 0;
   border-top: 1px solid var(--border-color);
+}
+
+.shipment-detail-modal .cancel-button {
+  background-color: transparent;
+  color: var(--text-primary);
+  padding: 12px 24px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.shipment-detail-modal .cancel-button:hover {
+  background-color: var(--bg-main);
+}
+
+.shipment-detail-modal .save-button {
+  background: var(--gradient-primary);
+  color: white;
+  padding: 12px 24px;
+  border-radius: 10px;
+  border: none;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.sdm-edit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 /* ── Status badge (reuse) ── */
