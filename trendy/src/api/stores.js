@@ -206,6 +206,80 @@ export async function fetchStoreRatings(storeId) {
   };
 }
 
+<<<<<<< HEAD
+=======
+function isTechnicalErrorMessage(message) {
+  if (!message || typeof message !== 'string') return false;
+  return /SQLSTATE|(?:^|\s)SQL:|Connection:\s*mysql|Host:\s*127\.0\.0\.1|Database:|PDOException|QueryException|Illuminate\\Database|vendor[/\\]laravel|App\\(?:Http|Models)|actively refused|ECONNREFUSED|could not (?:find driver|connect)|Access denied for user|Unknown column|Table .* doesn't exist|must be of type|Call to undefined|Undefined array key|stack trace/i.test(
+    message,
+  );
+}
+
+function getFriendlyDatabaseError(message, fallback) {
+  if (
+    /SQLSTATE\[HY000\]\s*\[2002\]|actively refused|Connection refused|ECONNREFUSED|No connection could be made/i.test(
+      message,
+    )
+  ) {
+    return 'تعذّر الاتصال بقاعدة البيانات. تأكد من تشغيل خادم MySQL ثم أعد المحاولة.';
+  }
+  if (/SQLSTATE|Connection:\s*mysql|Illuminate\\Database|QueryException|PDOException/i.test(message)) {
+    return fallback || 'تعذّر تنفيذ الطلب حالياً بسبب مشكلة في قاعدة البيانات. حاول مرة أخرى لاحقاً.';
+  }
+  return null;
+}
+
+const LOGIN_CREDENTIALS_ERROR =
+  'تحقق من رقم كود المتجر او البريد الالكتروني او كلمة المرور واعد المحاولة مجددا';
+
+const LOGIN_CREDENTIAL_PATTERNS = [
+  /selected store code is invalid/i,
+  /credentials do not match/i,
+  /invalid credentials/i,
+  /these credentials/i,
+  /wrong password/i,
+  /incorrect password/i,
+  /authentication failed/i,
+];
+
+function isLoginCredentialFailure(error) {
+  const message = String(error?.message ?? '');
+  if (LOGIN_CREDENTIAL_PATTERNS.some((pattern) => pattern.test(message))) {
+    return true;
+  }
+
+  if (error?.status === 401 && !/bearer token/i.test(message)) {
+    return true;
+  }
+
+  if (!error?.errors || typeof error.errors !== 'object') {
+    return false;
+  }
+
+  const loginFields = ['store_code', 'email', 'password'];
+  return Object.entries(error.errors).some(([field, messages]) => {
+    if (!loginFields.includes(field)) return false;
+    const msg = Array.isArray(messages) ? messages.join(' ') : String(messages);
+    if (/required/i.test(msg)) return false;
+    return (
+      LOGIN_CREDENTIAL_PATTERNS.some((pattern) => pattern.test(msg))
+      || (field === 'store_code' && /invalid|exists|selected/i.test(msg))
+      || ((field === 'email' || field === 'password') && /invalid|incorrect|match|failed/i.test(msg))
+    );
+  });
+}
+
+export function getLoginErrorMessage(error) {
+  if (error?.isNetworkError) {
+    return getApiErrorMessage(error);
+  }
+  if (isLoginCredentialFailure(error)) {
+    return LOGIN_CREDENTIALS_ERROR;
+  }
+  return getApiErrorMessage(error, LOGIN_CREDENTIALS_ERROR);
+}
+
+>>>>>>> fc1b287ebcd02fd7687499fcd16b6b5e92013e88
 export function getApiErrorMessage(error, fallback = 'تعذّر إرسال الطلب، حاول مرة أخرى') {
   if (error?.isNetworkError) {
     return 'تعذّر الاتصال بالخادم. شغّل الباكند (php artisan serve) وتأكد أن VITE_API_BASE_URL=http://localhost:8000/api في ملف .env';
