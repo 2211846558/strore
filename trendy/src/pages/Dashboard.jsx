@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import StatCard from '../components/dashboard/StatCard';
 import StoreCard from '../components/dashboard/StoreCard';
 import EditStoreModal from '../components/dashboard/EditStoreModal';
+import StoreDetailsModal from '../components/dashboard/StoreDetailsModal';
 import ChartsSection from '../components/dashboard/ChartsSection';
 import { Edit, Package, ShoppingCart, DollarSign, TrendingUp, Users } from 'lucide-react';
 import ChatBadge from '../components/chat/ChatBadge';
@@ -14,16 +15,20 @@ import {
   getApiErrorMessage,
   fetchStoreProfile,
   fetchStoreRatings,
+  fetchZones,
   mergeStoreProfile,
   resolveStoreEmail,
   resolveStoreStatus,
+  resolveStoreLocation,
+  normalizeStoreTypeLabel,
+  normalizeEntityTypeLabel,
   getStoreStatusLabel,
 } from '../api/stores';
 import { useDashboard } from '../api/hooks/useDashboard';
 import { getStoreLogoCandidates, resolveStoreLogoUrl } from '../api/media';
 import './Dashboard.css';
 
-const mapStoreToForm = (store, ratingAverage = null, user = null) => {
+const mapStoreToForm = (store, ratingAverage = null, user = null, zones = []) => {
   const rawLogo = store?.logo || '';
   const id = store?.id;
   const imageCandidates = getStoreLogoCandidates(rawLogo, id);
@@ -33,6 +38,7 @@ const mapStoreToForm = (store, ratingAverage = null, user = null) => {
       : '—';
 
   const statusRaw = resolveStoreStatus(store, user, id);
+  const location = resolveStoreLocation(store, zones);
 
   return {
     id,
@@ -41,8 +47,15 @@ const mapStoreToForm = (store, ratingAverage = null, user = null) => {
     phone: store?.phone || '',
     email: resolveStoreEmail(store, user),
     zoneId: String(store?.zone_id ?? store?.zone?.id ?? ''),
-    location: store?.zone?.name ?? store?.zone_name ?? '',
+    location: location || '—',
     type: store?.type || 'local',
+    typeLabel: normalizeStoreTypeLabel(store?.type),
+    storeCode: store?.store_code ?? store?.code ?? '',
+    entityType: store?.entity_type ?? '',
+    entityTypeLabel: normalizeEntityTypeLabel(store?.entity_type),
+    commercialRegisterNumber:
+      store?.commercial_register_number ?? store?.merchant_data?.commercial_register ?? '',
+    notes: store?.notes ?? '',
     googleMapUrl: store?.google_map_url || '',
     merchantData: {
       tax_number: store?.merchant_data?.tax_number || '',
@@ -67,7 +80,11 @@ const Dashboard = () => {
   const { store, storeId } = useStore();
   const { updateStoreInSession } = useAuthActions();
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [storeData, setStoreData] = useState(() => mapStoreToForm(store, null, user));
+  const [zones, setZones] = useState([]);
+  const [profileStore, setProfileStore] = useState(null);
+  const [profileRating, setProfileRating] = useState(null);
   const [toast, setToast] = useState(null);
   const [saving, setSaving] = useState(false);
   const storeRef = useRef(store);
@@ -88,7 +105,10 @@ const Dashboard = () => {
     const sessionStore = storeRef.current;
     const currentUser = userRef.current;
     try {
-      const storeDetails = await fetchStoreProfile(storeId, sessionStore, currentUser);
+      const [storeDetails, zonesList] = await Promise.all([
+        fetchStoreProfile(storeId, sessionStore, currentUser),
+        fetchZones().catch(() => []),
+      ]);
 
       let ratingAverage = null;
       try {
@@ -99,11 +119,18 @@ const Dashboard = () => {
       }
 
       if (cancelled?.current) return;
-      setStoreData(mapStoreToForm(storeDetails, ratingAverage, currentUser));
+      setZones(Array.isArray(zonesList) ? zonesList : []);
+      setProfileStore(storeDetails);
+      setProfileRating(ratingAverage);
+      setStoreData(mapStoreToForm(storeDetails, ratingAverage, currentUser, zonesList));
       updateStoreInSession(storeDetails);
     } catch {
       if (cancelled?.current) return;
-      if (sessionStore) setStoreData(mapStoreToForm(sessionStore, null, currentUser));
+      if (sessionStore) {
+        setProfileStore(sessionStore);
+        setProfileRating(null);
+        setStoreData(mapStoreToForm(sessionStore, null, currentUser, []));
+      }
     }
   }, [storeId, updateStoreInSession]);
 
@@ -112,6 +139,11 @@ const Dashboard = () => {
     loadStoreProfile(cancelled);
     return () => { cancelled.current = true; };
   }, [loadStoreProfile]);
+
+  useEffect(() => {
+    if (!profileStore || zones.length === 0) return;
+    setStoreData(mapStoreToForm(profileStore, profileRating, userRef.current, zones));
+  }, [zones, profileStore, profileRating]);
 
   const showToast = (message) => {
     setToast(message);
@@ -145,6 +177,7 @@ const Dashboard = () => {
         merchant_data: updated.merchant_data,
         zone_id: updated.zone_id,
         google_map_url: updated.google_map_url,
+        zone_name: zones.find((zone) => Number(zone.id) === Number(formData.zoneId))?.name ?? storeData.location,
       });
       await loadStoreProfile();
       showToast('تم تحديث بيانات المتجر بنجاح');
@@ -181,7 +214,7 @@ const Dashboard = () => {
       </header>
 
       <div className="dashboard-grid store-section">
-        <StoreCard store={storeData} />
+        <StoreCard store={storeData} onViewDetails={() => setIsDetailsModalOpen(true)} />
       </div>
 
       {statsError && <div className="dashboard-error">{statsError.message || 'تعذّر تحميل الإحصائيات'}</div>}
@@ -240,6 +273,12 @@ const Dashboard = () => {
           saving={saving}
         />
       )}
+
+      <StoreDetailsModal
+        isOpen={isDetailsModalOpen}
+        onClose={() => setIsDetailsModalOpen(false)}
+        store={storeData}
+      />
 
       {toast && (
         <div className="toast-notification">

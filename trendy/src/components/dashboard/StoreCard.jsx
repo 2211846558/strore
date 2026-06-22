@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Phone, Mail, MapPin, Star } from 'lucide-react';
+import { Phone, Mail, MapPin, Star, Info } from 'lucide-react';
 import { productPlaceholderImage } from '../../api/media';
 import './StoreCard.css';
 
-const StoreCard = ({ store }) => {
+const StoreCard = ({ store, onViewDetails }) => {
   const candidates = store.imageCandidates?.length
     ? store.imageCandidates
     : store.image
@@ -63,12 +63,18 @@ const StoreCard = ({ store }) => {
             <Mail size={18} className="info-icon" />
           </div>
           <div className="info-row location-row">
-            <span className="info-text">{store.location}</span>
+            <span className="info-text">{store.location || '—'}</span>
             <MapPin size={18} className="info-icon" />
           </div>
         </div>
 
         <div className="store-card-footer">
+          {typeof onViewDetails === 'function' && (
+            <button type="button" className="store-details-btn" onClick={onViewDetails}>
+              <Info size={18} />
+              <span>عرض التفاصيل</span>
+            </button>
+          )}
           <div className="rating">
             <span className="rating-value">{store.rating}</span>
             <span className="rating-text">التقييم العام</span>

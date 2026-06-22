@@ -126,8 +126,37 @@
 
 .store-card-footer {
   display: flex;
-  justify-content: flex-start;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
   padding: 0;
+  flex-wrap: wrap;
+}
+
+.store-details-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 18px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s ease;
+}
+
+.store-details-btn:hover {
+  background: var(--primary-light);
+  border-color: var(--border-focus);
+  color: var(--primary-dark);
+}
+
+.store-details-btn svg {
+  color: var(--primary);
 }
 
 .rating {

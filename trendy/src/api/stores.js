@@ -130,6 +130,9 @@ const translateValidationMessage = (message, field) => {
   if (/email/i.test(message)) return `${label} غير صالح`;
   if (/min/i.test(message) && field === 'password') return 'كلمة المرور يجب أن تكون 8 أحرف على الأقل';
   if (/max/i.test(message) && field === 'notes') return 'الملاحظات يجب ألا تتجاوز 2000 حرف';
+  if (/unique/i.test(message) && field === 'store_email') {
+    return 'إيميل المتجر مستخدم مسبقاً أو يوجد طلب انضمام قيد المراجعة بهذا الإيميل.';
+  }
   if (/unique/i.test(message)) return `${label} مستخدم مسبقاً`;
   if (/after_or_equal|after or equal.*now/i.test(message)) {
     return `${label} يجب أن يكون اليوم أو تاريخاً لاحقاً`;
@@ -283,6 +286,51 @@ export function getStoreStatusLabel(statusRaw) {
   return STORE_STATUS_LABELS[statusRaw] ?? statusRaw ?? '—';
 }
 
+export function normalizeStoreTypeLabel(type) {
+  const value = String(type ?? '').trim().toLowerCase();
+  if (!value) return '—';
+  if (value === 'local' || value === 'محلي') return 'محلي';
+  if (value === 'electronic' || value === 'الكتروني' || value === 'إلكتروني') return 'إلكتروني';
+  return String(type).trim();
+}
+
+export function normalizeEntityTypeLabel(entityType) {
+  const value = String(entityType ?? '').trim().toLowerCase();
+  if (!value) return '—';
+  if (value === 'company') return 'شركة';
+  if (value === 'individual') return 'فرد';
+  return String(entityType).trim();
+}
+
+/**
+ * استخراج موقع/منطقة المتجر — مع fallback لقائمة المناطق عند غياب الاسم في الاستجابة
+ */
+export function resolveStoreLocation(store, zones = []) {
+  const candidates = [
+    store?.location,
+    store?.address,
+    store?.full_address,
+    store?.zone?.name,
+    store?.zone?.title,
+    store?.zone_name,
+  ];
+
+  for (const value of candidates) {
+    if (value != null && String(value).trim()) {
+      return String(value).trim();
+    }
+  }
+
+  const zoneId = store?.zone_id ?? store?.zone?.id;
+  if (zoneId != null && Array.isArray(zones) && zones.length > 0) {
+    const zone = zones.find((entry) => Number(entry?.id) === Number(zoneId));
+    const name = zone?.name ?? zone?.title;
+    if (name) return String(name).trim();
+  }
+
+  return '';
+}
+
 /**
  * دمج بيانات المتجر من API مع الجلسة دون فقدان الحقول الناقصة في الاستجابة
  */
@@ -294,6 +342,15 @@ export function mergeStoreProfile(apiStore, sessionStore, user = null) {
     ...sessionStore,
     ...apiStore,
     status: hasApiStatus ? apiStatus : sessionStore?.status,
+    zone_id: apiStore?.zone_id ?? sessionStore?.zone_id,
+    zone_name: apiStore?.zone_name ?? sessionStore?.zone_name ?? apiStore?.zone?.name ?? sessionStore?.zone?.name,
+    zone: apiStore?.zone ?? sessionStore?.zone,
+    google_map_url: apiStore?.google_map_url ?? sessionStore?.google_map_url,
+    store_code: apiStore?.store_code ?? sessionStore?.store_code ?? apiStore?.code ?? sessionStore?.code,
+    entity_type: apiStore?.entity_type ?? sessionStore?.entity_type,
+    commercial_register_number:
+      apiStore?.commercial_register_number ?? sessionStore?.commercial_register_number,
+    notes: apiStore?.notes ?? sessionStore?.notes,
     plan_id: apiStore?.plan_id ?? sessionStore?.plan_id,
     subscription_starts_at:
       apiStore?.subscription_starts_at ??
@@ -367,6 +424,7 @@ export async function fetchStoreRatings(storeId) {
   };
 }
 
+<<<<<<< HEAD
 function isTechnicalErrorMessage(message) {
   if (!message || typeof message !== 'string') return false;
   return /SQLSTATE|(?:^|\s)SQL:|Connection:\s*mysql|Host:\s*127\.0\.0\.1|Database:|PDOException|QueryException|Illuminate\\Database|vendor[/\\]laravel|App\\(?:Http|Models)|actively refused|ECONNREFUSED|could not (?:find driver|connect)|Access denied for user|Unknown column|Table .* doesn't exist|must be of type|Call to undefined|Undefined array key|stack trace/i.test(
@@ -386,6 +444,56 @@ function getFriendlyDatabaseError(message, fallback) {
     return fallback || 'تعذّر تنفيذ الطلب حالياً بسبب مشكلة في قاعدة البيانات. حاول مرة أخرى لاحقاً.';
   }
   return null;
+=======
+const LOGIN_CREDENTIALS_ERROR =
+  'تحقق من رقم كود المتجر او البريد الالكتروني او كلمة المرور واعد المحاولة مجددا';
+
+const LOGIN_CREDENTIAL_PATTERNS = [
+  /selected store code is invalid/i,
+  /credentials do not match/i,
+  /invalid credentials/i,
+  /these credentials/i,
+  /wrong password/i,
+  /incorrect password/i,
+  /authentication failed/i,
+];
+
+function isLoginCredentialFailure(error) {
+  const message = String(error?.message ?? '');
+  if (LOGIN_CREDENTIAL_PATTERNS.some((pattern) => pattern.test(message))) {
+    return true;
+  }
+
+  if (error?.status === 401 && !/bearer token/i.test(message)) {
+    return true;
+  }
+
+  if (!error?.errors || typeof error.errors !== 'object') {
+    return false;
+  }
+
+  const loginFields = ['store_code', 'email', 'password'];
+  return Object.entries(error.errors).some(([field, messages]) => {
+    if (!loginFields.includes(field)) return false;
+    const msg = Array.isArray(messages) ? messages.join(' ') : String(messages);
+    if (/required/i.test(msg)) return false;
+    return (
+      LOGIN_CREDENTIAL_PATTERNS.some((pattern) => pattern.test(msg))
+      || (field === 'store_code' && /invalid|exists|selected/i.test(msg))
+      || ((field === 'email' || field === 'password') && /invalid|incorrect|match|failed/i.test(msg))
+    );
+  });
+}
+
+export function getLoginErrorMessage(error) {
+  if (error?.isNetworkError) {
+    return getApiErrorMessage(error);
+  }
+  if (isLoginCredentialFailure(error)) {
+    return LOGIN_CREDENTIALS_ERROR;
+  }
+  return getApiErrorMessage(error, LOGIN_CREDENTIALS_ERROR);
+>>>>>>> 2074f1194b39a27c719d48042e4b5c813e9908b8
 }
 
 export function getApiErrorMessage(error, fallback = 'تعذّر إرسال الطلب، حاول مرة أخرى') {

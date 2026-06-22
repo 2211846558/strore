@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, ArrowRight, Hash } from 'lucide-react';
 import { useAuth, useAuthActions } from '../context/AuthContext';
-import { getApiErrorMessage } from '../api/stores';
+import { getLoginErrorMessage } from '../api/stores';
 import './Login.css';
 
 const Login = () => {
@@ -25,7 +25,7 @@ const Login = () => {
       });
       navigate('/');
     } catch (err) {
-      setError(getApiErrorMessage(err, 'فشل تسجيل الدخول. تحقق من البيانات.'));
+      setError(getLoginErrorMessage(err));
     }
   };
 
