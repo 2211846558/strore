@@ -1,51 +1,45 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { MessageCircle, X, Send, User, ChevronLeft } from 'lucide-react';
-import {
-  useChats,
-  useChatMessages,
-  useSendMessage,
-  LIVE_CHATS_INTERVAL,
-  CHATS_BACKGROUND_INTERVAL,
-} from '../../api/hooks/useChat';
+import { fetchChats, fetchChatMessages, sendChatMessage } from '../../api/chat';
 import { getApiErrorMessage } from '../../api/stores';
-import { useStore } from '../../context/AuthContext';
+import { useAuth } from '../../context/AuthContext';
 import './ChatBadge.css';
 
 const ChatBadge = () => {
-  const { storeId } = useStore();
+  const { storeId } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
+  const [chats, setChats] = useState([]);
   const [activeChat, setActiveChat] = useState(null);
   const [replyText, setReplyText] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [loadingMessages, setLoadingMessages] = useState(false);
+  const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const dropdownRef = useRef(null);
-  const messagesEndRef = useRef(null);
-  const messagesContainerRef = useRef(null);
-  const messagesCountRef = useRef(0);
 
-  const {
-    data: chatsData = [],
-    isLoading: loading,
-    error: chatsError,
-  } = useChats(
-    { storeId },
-    { refetchInterval: isOpen ? LIVE_CHATS_INTERVAL : CHATS_BACKGROUND_INTERVAL },
-  );
+  const loadChats = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const list = await fetchChats({ storeId });
+      setChats(list);
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'تعذّر تحميل المحادثات'));
+      setChats([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [storeId]);
 
-  const chats = useMemo(
-    () =>
-      chatsData.map((chat) =>
-        chat.id === activeChat?.id ? { ...chat, unread: 0 } : chat,
-      ),
-    [chatsData, activeChat?.id],
-  );
+  useEffect(() => {
+    loadChats();
+  }, [loadChats]);
 
-  const {
-    data: messages = [],
-    isLoading: messagesLoading,
-    error: messagesError,
-  } = useChatMessages(activeChat?.id, { enabled: Boolean(activeChat?.id) });
-
-  const sendMutation = useSendMessage();
+  useEffect(() => {
+    if (isOpen) {
+      loadChats();
+    }
+  }, [isOpen, loadChats]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -60,49 +54,48 @@ const ChatBadge = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isOpen]);
 
-  useEffect(() => {
-    if (!activeChat) {
-      messagesCountRef.current = 0;
-      return;
-    }
-
-    const prevCount = messagesCountRef.current;
-    const newCount = messages.length;
-    messagesCountRef.current = newCount;
-
-    if (newCount > prevCount && messagesEndRef.current) {
-      const lastMsg = messages[newCount - 1];
-      const sentByMe = lastMsg?.sender === 'store';
-      let isNearBottom = true;
-      if (messagesContainerRef.current) {
-        const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
-        isNearBottom = scrollHeight - scrollTop - clientHeight < 120;
-      }
-      if (sentByMe || isNearBottom) {
-        messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-      }
-    }
-  }, [messages, activeChat?.id]);
-
   const totalUnread = chats.reduce((sum, c) => sum + c.unread, 0);
-  const displayError =
-    error ||
-    (chatsError ? getApiErrorMessage(chatsError, 'تعذّر تحميل المحادثات') : '') ||
-    (messagesError ? getApiErrorMessage(messagesError, 'تعذّر تحميل الرسائل') : '');
 
-  const handleOpenChat = (chat) => {
-    setActiveChat(chat);
-    setError('');
+  const handleOpenChat = async (chat) => {
+    setActiveChat({ ...chat, messages: [] });
+    setLoadingMessages(true);
+    try {
+      const messages = await fetchChatMessages(chat.id);
+      setActiveChat({ ...chat, messages, unread: 0 });
+      setChats((prev) => prev.map((c) => (c.id === chat.id ? { ...c, unread: 0 } : c)));
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'تعذّر تحميل الرسائل'));
+      setActiveChat(null);
+    } finally {
+      setLoadingMessages(false);
+    }
   };
 
   const handleSendReply = async () => {
-    if (!replyText.trim() || !activeChat || sendMutation.isPending) return;
+    if (!replyText.trim() || !activeChat || sending) return;
 
+    setSending(true);
     try {
-      await sendMutation.mutateAsync({ orderId: activeChat.id, message: replyText.trim() });
+      const newMessage = await sendChatMessage(activeChat.id, replyText.trim());
+      const updated = {
+        ...activeChat,
+        messages: [...activeChat.messages, newMessage],
+        lastTime: newMessage.time,
+        lastPreview: newMessage.text,
+      };
+      setActiveChat(updated);
+      setChats((prev) =>
+        prev.map((c) =>
+          c.id === activeChat.id
+            ? { ...c, lastTime: newMessage.time, lastPreview: newMessage.text }
+            : c,
+        ),
+      );
       setReplyText('');
     } catch (err) {
       setError(getApiErrorMessage(err, 'تعذّر إرسال الرسالة'));
+    } finally {
+      setSending(false);
     }
   };
 
@@ -143,13 +136,18 @@ const ChatBadge = () => {
             </button>
           </div>
 
-          {displayError && <div className="chat-dropdown-error">{displayError}</div>}
+          {error && <div className="chat-dropdown-error">{error}</div>}
 
           {!activeChat ? (
             <div className="chat-list">
               {loading ? (
                 <div className="chat-empty">
                   <p>جاري التحميل...</p>
+                </div>
+              ) : error ? (
+                <div className="chat-empty">
+                  <MessageCircle size={40} className="chat-empty-icon" />
+                  <p>تعذّر تحميل المحادثات</p>
                 </div>
               ) : chats.length === 0 ? (
                 <div className="chat-empty">
@@ -194,18 +192,17 @@ const ChatBadge = () => {
                   <span className="chat-window-product">{activeChat.product}</span>
                 </div>
               </div>
-              <div className="chat-messages" ref={messagesContainerRef}>
-                {messagesLoading && messages.length === 0 ? (
+              <div className="chat-messages">
+                {loadingMessages ? (
                   <div className="chat-messages-loading">جاري تحميل الرسائل...</div>
                 ) : (
-                  messages.map((msg) => (
+                  activeChat.messages.map((msg) => (
                     <div key={msg.id} className={`chat-message ${msg.sender}`}>
                       <div className="chat-bubble">{msg.text}</div>
                       <span className="chat-message-time">{msg.time}</span>
                     </div>
                   ))
                 )}
-                <div ref={messagesEndRef} />
               </div>
               <div className="chat-input-row">
                 <input
@@ -215,12 +212,12 @@ const ChatBadge = () => {
                   value={replyText}
                   onChange={(e) => setReplyText(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  disabled={sendMutation.isPending}
+                  disabled={sending || loadingMessages}
                 />
                 <button
                   className="chat-send-btn"
                   onClick={handleSendReply}
-                  disabled={sendMutation.isPending || !replyText.trim()}
+                  disabled={sending || loadingMessages || !replyText.trim()}
                   type="button"
                 >
                   <Send size={16} />

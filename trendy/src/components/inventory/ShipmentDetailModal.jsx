@@ -1,9 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import ConfirmDialog from '../common/ConfirmDialog';
-import { ARCHIVE_SHIPMENT_CONFIRM } from './shipmentStatusConfirm';
+import React from 'react';
 import {
   X, Truck, Calendar, Package,
-  CheckCircle2, Clock, XCircle, Tag, Hash, Layers, Edit2
+  CheckCircle2, Clock, XCircle, Tag, Hash, Layers
 } from 'lucide-react';
 import './ShipmentDetailModal.css';
 
@@ -11,7 +9,6 @@ const STATUS_MAP = {
   received: { Icon: CheckCircle2, cls: 'received', label: 'مستلمة' },
   pending:  { Icon: Clock,         cls: 'pending',  label: 'قيد الانتظار' },
   cancelled:{ Icon: XCircle,       cls: 'cancelled',label: 'ملغاة' },
-  finished: { Icon: CheckCircle2,  cls: 'received', label: 'منتهية' },
 };
 
 /* تجميع العناصر حسب المنتج */
@@ -25,13 +22,7 @@ function groupByProduct(items = []) {
   return Object.values(map);
 }
 
-const ShipmentDetailModal = ({ isOpen, onClose, shipment, onArchive, onEdit, isSaving = false }) => {
-  const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
-
-  useEffect(() => {
-    if (!isOpen) setShowArchiveConfirm(false);
-  }, [isOpen]);
-
+const ShipmentDetailModal = ({ isOpen, onClose, shipment }) => {
   if (!isOpen || !shipment) return null;
 
   const statusInfo = STATUS_MAP[shipment.statusRaw] ?? STATUS_MAP.pending;
@@ -44,22 +35,8 @@ const ShipmentDetailModal = ({ isOpen, onClose, shipment, onArchive, onEdit, isS
   const sampleItem = shipment.items?.[0];
   const sellingPrice = sampleItem?.sellingPrice ?? null;
   const unitCost    = sampleItem?.unitCost ?? null;
-  const canArchive =
-    shipment.statusRaw !== 'finished' &&
-    shipment.statusRaw !== 'cancelled' &&
-    typeof onArchive === 'function';
-
-  const handleArchive = () => {
-    setShowArchiveConfirm(true);
-  };
-
-  const handleConfirmArchive = async () => {
-    await onArchive(shipment);
-    setShowArchiveConfirm(false);
-  };
 
   return (
-    <>
     <div className="modal-overlay" onClick={onClose}>
       <div
         className="modal-content shipment-detail-modal"
@@ -197,44 +174,12 @@ const ShipmentDetailModal = ({ isOpen, onClose, shipment, onArchive, onEdit, isS
 
         {/* ── Footer ── */}
         <div className="modal-footer">
-          {canArchive && (
-            <button
-              className="archive-button"
-              onClick={handleArchive}
-              type="button"
-              disabled={isSaving}
-            >
-              {isSaving ? 'جاري التحديث...' : 'أرشفة الشحنة'}
-            </button>
-          )}
-          {typeof onEdit === 'function' && (
-            <button
-              className="save-button sdm-edit-button"
-              onClick={() => onEdit(shipment)}
-              type="button"
-              disabled={isSaving}
-            >
-              <Edit2 size={16} />
-              تعديل الشحنة
-            </button>
-          )}
-          <button className="cancel-button" onClick={onClose} type="button" disabled={isSaving}>
+          <button className="cancel-button" onClick={onClose} type="button">
             إغلاق
           </button>
         </div>
       </div>
     </div>
-
-    <ConfirmDialog
-      isOpen={showArchiveConfirm}
-      onClose={() => !isSaving && setShowArchiveConfirm(false)}
-      onConfirm={handleConfirmArchive}
-      title={ARCHIVE_SHIPMENT_CONFIRM.title}
-      message={ARCHIVE_SHIPMENT_CONFIRM.message}
-      confirmText={ARCHIVE_SHIPMENT_CONFIRM.confirmText}
-      isLoading={isSaving}
-    />
-    </>
   );
 };
 

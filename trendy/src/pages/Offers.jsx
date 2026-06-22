@@ -1,30 +1,31 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Trash2, CheckCircle2, Eye } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Plus, Trash2, Edit2, CheckCircle2 } from 'lucide-react';
 import OfferModal from '../components/offers/OfferModal';
-import OfferDetailModal from '../components/offers/OfferDetailModal';
 import {
+  fetchAllPromotions,
   fetchPromotion,
+  createPromotion,
+  updatePromotion,
+  deletePromotion,
+  togglePromotion,
   buildPromotionPayload,
   buildPromotionUpdatePayload,
 } from '../api/promotions';
-import { useProducts } from '../api/hooks/useProducts';
-import {
-  usePromotions,
-  useCreatePromotion,
-  useUpdatePromotion,
-  useTogglePromotion,
-  useDeletePromotion,
-} from '../api/hooks/usePromotions';
+import { fetchStoreProducts } from '../api/products';
 import { getApiErrorMessage } from '../api/stores';
-import { useStore } from '../context/AuthContext';
+import { useAuth } from '../context/AuthContext';
 import './Offers.css';
 
 const Offers = () => {
-  const { storeId } = useStore();
+  const { storeId } = useAuth();
+  const [offers, setOffers] = useState([]);
+  const [catalogProducts, setCatalogProducts] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [togglingId, setTogglingId] = useState(null);
+  const [error, setError] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isDetailOpen, setIsDetailOpen] = useState(false);
-  const [detailOffer, setDetailOffer] = useState(null);
   const [editingOffer, setEditingOffer] = useState(null);
   const [loadingOfferDetails, setLoadingOfferDetails] = useState(false);
   const [toast, setToast] = useState(null);
@@ -34,61 +35,79 @@ const Offers = () => {
     setTimeout(() => setToast(null), 2500);
   };
 
-  const { data: offers = [], isLoading: loading, error } = usePromotions({ storeId, maxPages: 3 });
-  const { data: products = [] } = useProducts({ storeId, status: 'active', perPage: 100 });
+  const loadOffers = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const [promotions, products] = await Promise.all([
+        fetchAllPromotions({ storeId }),
+        fetchStoreProducts({ storeId, status: 'active', perPage: 100 }),
+      ]);
+      setOffers(promotions);
+      setCatalogProducts(products.map((p) => ({ id: p.id, name: p.name })));
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'تعذّر تحميل الحملات'));
+      setOffers([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [storeId]);
 
-  const catalogProducts = useMemo(
-    () => products.map((p) => ({ id: p.id, name: p.name })),
-    [products],
-  );
-
-  const catalogProductsWithPrice = useMemo(
-    () => products.map((p) => ({ id: p.id, name: p.name, price: p.price })),
-    [products],
-  );
+  useEffect(() => {
+    loadOffers();
+  }, [loadOffers]);
 
   const filteredOffers = offers.filter((o) =>
     o.name.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
-  const createMutation = useCreatePromotion();
-  const updateMutation = useUpdatePromotion();
-  const toggleMutation = useTogglePromotion();
-  const deleteMutation = useDeletePromotion();
-
-  const isSaving = createMutation.isPending || updateMutation.isPending || deleteMutation.isPending;
-
   const handleSave = async (formData) => {
-    const payload = editingOffer
-      ? buildPromotionUpdatePayload(formData, { storeId })
-      : buildPromotionPayload(formData, { storeId, forCreate: true });
+    setIsSaving(true);
+    try {
+      const payload = editingOffer
+        ? buildPromotionUpdatePayload(formData, { storeId })
+        : buildPromotionPayload(formData, { storeId });
 
-    if (editingOffer) {
-      await updateMutation.mutateAsync({ id: editingOffer.id, ...payload });
-      showToast('تم تحديث الحملة');
-    } else {
-      await createMutation.mutateAsync(payload);
-      showToast('تم إنشاء الحملة بنجاح');
+      if (editingOffer) {
+        await updatePromotion(editingOffer.id, payload);
+        showToast('تم تحديث الحملة');
+      } else {
+        await createPromotion(payload);
+        showToast('تم إنشاء الحملة بنجاح');
+      }
+      setIsModalOpen(false);
+      setEditingOffer(null);
+      await loadOffers();
+    } catch (err) {
+      throw err;
+    } finally {
+      setIsSaving(false);
     }
-    setIsModalOpen(false);
-    setEditingOffer(null);
   };
 
   const handleDelete = async (id) => {
+    setIsSaving(true);
     try {
-      await deleteMutation.mutateAsync(id);
+      await deletePromotion(id);
       showToast('تم حذف الحملة');
+      await loadOffers();
     } catch (err) {
       showToast(getApiErrorMessage(err, 'تعذّر حذف الحملة'));
+    } finally {
+      setIsSaving(false);
     }
   };
 
   const handleToggleActive = async (id) => {
+    setTogglingId(id);
     try {
-      await toggleMutation.mutateAsync(id);
+      await togglePromotion(id);
       showToast('تم تحديث حالة الحملة');
+      await loadOffers();
     } catch (err) {
       showToast(getApiErrorMessage(err, 'تعذّر تغيير حالة الحملة'));
+    } finally {
+      setTogglingId(null);
     }
   };
 
@@ -108,28 +127,6 @@ const Offers = () => {
     } finally {
       setLoadingOfferDetails(false);
     }
-  };
-
-  const openDetails = async (offer) => {
-    setIsDetailOpen(true);
-    setDetailOffer(null);
-    setLoadingOfferDetails(true);
-    try {
-      const full = await fetchPromotion(offer.id);
-      setDetailOffer(full);
-    } catch (err) {
-      showToast(getApiErrorMessage(err, 'تعذّر تحميل تفاصيل العرض'));
-      setIsDetailOpen(false);
-    } finally {
-      setLoadingOfferDetails(false);
-    }
-  };
-
-  const handleEditFromDetail = (offer) => {
-    setIsDetailOpen(false);
-    setDetailOffer(null);
-    setEditingOffer(offer);
-    setIsModalOpen(true);
   };
 
   const getStatusClass = (status) => {
@@ -154,7 +151,7 @@ const Offers = () => {
         </button>
       </div>
 
-      {error && <p className="offers-error">{error?.message || 'تعذّر تحميل الحملات'}</p>}
+      {error && <p className="offers-error">{error}</p>}
 
       <div className="offers-grid">
         {loading ? (
@@ -206,7 +203,7 @@ const Offers = () => {
                   type="button"
                   className={`toggle-switch ${offer.statusRaw === 'active' ? 'active' : ''}`}
                   onClick={() => handleToggleActive(offer.id)}
-                  disabled={toggleMutation.isPending || isSaving}
+                  disabled={togglingId === offer.id || isSaving}
                 >
                   <span className="toggle-thumb" />
                 </button>
@@ -223,12 +220,12 @@ const Offers = () => {
                 </button>
                 <button
                   type="button"
-                  className="offer-btn view-btn"
-                  onClick={() => openDetails(offer)}
+                  className="offer-btn edit-btn"
+                  onClick={() => openEdit(offer)}
                   disabled={isSaving || loadingOfferDetails}
                 >
-                  <Eye size={16} />
-                  عرض التفاصيل
+                  <Edit2 size={16} />
+                  تعديل
                 </button>
               </div>
             </div>
@@ -237,19 +234,6 @@ const Offers = () => {
           <p className="no-results">لا توجد عروض تطابق بحثك.</p>
         )}
       </div>
-
-      <OfferDetailModal
-        isOpen={isDetailOpen}
-        onClose={() => {
-          setIsDetailOpen(false);
-          setDetailOffer(null);
-        }}
-        offer={detailOffer}
-        catalogProducts={catalogProductsWithPrice}
-        loading={loadingOfferDetails && !detailOffer}
-        onEdit={handleEditFromDetail}
-        editDisabled={isSaving}
-      />
 
       <OfferModal
         isOpen={isModalOpen}

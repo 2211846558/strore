@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
-import { formatRoleSelection, validateEmployeeForm } from '../../api/employees';
+import { formatRoleSelection } from '../../api/employees';
 import { getApiErrorMessage } from '../../api/stores';
 import './StaffModal.css';
 
@@ -28,18 +28,16 @@ const StaffModal = ({ isOpen, onClose, onSave, member, roles, isSaving = false }
           password: '',
         });
       } else {
-        const defaultRole =
-          roles.find((r) => r.slug === 'store_staff')?.value ?? roles[0]?.value ?? '';
         setForm({
           name: '',
           email: '',
           phone: '',
-          role: defaultRole,
+          role: '',
           password: '',
         });
       }
     }
-  }, [isOpen, member, roles]);
+  }, [isOpen, member]);
 
   if (!isOpen) return null;
 
@@ -62,12 +60,7 @@ const StaffModal = ({ isOpen, onClose, onSave, member, roles, isSaving = false }
     try {
       await onSave({ ...form });
     } catch (err) {
-      const fallback = isEdit ? 'تعذّر حفظ بيانات الموظف' : 'تعذّر إضافة الموظف';
-      if (err?.status === 403) {
-        setError('إدارة الموظفين متاحة لمدير المتجر فقط. سجّل الدخول بحساب المدير.');
-        return;
-      }
-      setError(getApiErrorMessage(err, fallback));
+      setError(getApiErrorMessage(err, 'تعذّر حفظ بيانات الموظف'));
     }
   };
 
@@ -81,56 +74,38 @@ const StaffModal = ({ isOpen, onClose, onSave, member, roles, isSaving = false }
           </button>
         </div>
 
-        <form
-          className="staff-form"
-          autoComplete="off"
-          key={isEdit ? `edit-${member.id}` : 'add-employee'}
-          onSubmit={(e) => {
-            e.preventDefault();
-            handleSubmit();
-          }}
-        >
+        <div className="staff-form">
           {error && <div className="staff-form-error">{error}</div>}
 
           <div className="form-group">
-            <label htmlFor="staff-name">الاسم الكامل</label>
+            <label>الاسم الكامل</label>
             <input
-              id="staff-name"
-              name="staff_name"
               type="text"
               value={form.name}
               onChange={(e) => handleChange('name', e.target.value)}
               placeholder="أدخل الاسم الكامل"
-              autoComplete="off"
               disabled={isSaving}
             />
           </div>
 
           <div className="form-row">
             <div className="form-group">
-              <label htmlFor="staff-email">البريد الإلكتروني</label>
+              <label>البريد الإلكتروني</label>
               <input
-                id="staff-email"
-                name="staff_email"
                 type="email"
                 value={form.email}
                 onChange={(e) => handleChange('email', e.target.value)}
                 placeholder="email@trendy.com"
-                autoComplete="off"
                 disabled={isSaving}
               />
             </div>
             <div className="form-group">
-              <label htmlFor="staff-phone">رقم الهاتف</label>
+              <label>رقم الهاتف</label>
               <input
-                id="staff-phone"
-                name="staff_phone"
-                type="tel"
-                inputMode="tel"
+                type="text"
                 value={form.phone}
                 onChange={(e) => handleChange('phone', e.target.value)}
                 placeholder="09XXXXXXXX"
-                autoComplete="off"
                 disabled={isSaving}
               />
             </div>
@@ -157,17 +132,14 @@ const StaffModal = ({ isOpen, onClose, onSave, member, roles, isSaving = false }
               {isEdit ? 'كلمة المرور الجديدة (اتركها فارغة للإبقاء على الحالية)' : 'كلمة المرور الأولية'}
             </label>
             <input
-              id="staff-password"
-              name="staff_initial_password"
               type="password"
               value={form.password}
               onChange={(e) => handleChange('password', e.target.value)}
               placeholder={isEdit ? 'أدخل كلمة مرور جديدة' : 'أدخل كلمة المرور'}
-              autoComplete="new-password"
               disabled={isSaving}
             />
           </div>
-        </form>
+        </div>
 
         <div className="modal-footer">
           <button className="cancel-button" onClick={onClose} type="button" disabled={isSaving}>

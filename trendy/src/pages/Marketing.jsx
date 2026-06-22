@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import CampaignCard from '../components/marketing/CampaignCard';
 import SubscribedCampaignCard from '../components/marketing/SubscribedCampaignCard';
 import CampaignPaymentModal from '../components/marketing/CampaignPaymentModal';
 import ProductSelectionModal from '../components/marketing/ProductSelectionModal';
 import {
+  fetchAvailableCampaigns,
   fetchMyCampaigns,
   saveMyCampaign,
   subscribeToCampaign,
@@ -11,19 +12,19 @@ import {
   resolveCampaignBanner,
   isStoreSubscribedToCampaign,
 } from '../api/campaigns';
-import { useCampaigns } from '../api/hooks/useCampaigns';
 import { getApiErrorMessage } from '../api/stores';
-import { useStore } from '../context/AuthContext';
-import { useWalletBalance } from '../api/hooks/useWallet';
+import { useAuth } from '../context/AuthContext';
+import { useWallet } from '../context/WalletContext';
 import './Marketing.css';
 
 const Marketing = () => {
-  const { storeId } = useStore();
-  const { data: walletData, refetch: refreshWallet } = useWalletBalance();
-  const balance = walletData?.balance ?? 0;
+  const { storeId } = useAuth();
+  const { balance, refreshWallet } = useWallet();
   const [activeTab, setActiveTab] = useState('available');
+  const [availableCampaigns, setAvailableCampaigns] = useState([]);
   const [myCampaigns, setMyCampaigns] = useState([]);
-  const [loadingMyCampaigns, setLoadingMyCampaigns] = useState(false);
+  const [loadingCampaigns, setLoadingCampaigns] = useState(true);
+  const [campaignsError, setCampaignsError] = useState('');
   const [toast, setToast] = useState('');
 
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
@@ -36,29 +37,39 @@ const Marketing = () => {
     setTimeout(() => setToast(null), 3000);
   };
 
-  const { data: availableCampaigns = [], isLoading: loadingCampaigns, error: campaignsError } = useCampaigns();
+  const loadCampaigns = useCallback(async () => {
+    setLoadingCampaigns(true);
+    setCampaignsError('');
+    try {
+      const campaigns = await fetchAvailableCampaigns();
+      setAvailableCampaigns(campaigns);
+    } catch (err) {
+      setCampaignsError(getApiErrorMessage(err, 'تعذّر تحميل الحملات المتاحة'));
+    } finally {
+      setLoadingCampaigns(false);
+    }
+  }, []);
 
-  const loadMyCampaigns = async () => {
+  useEffect(() => {
+    loadCampaigns();
+  }, [loadCampaigns]);
+
+  const loadMyCampaigns = useCallback(async () => {
     if (!storeId) {
       setMyCampaigns([]);
       return;
     }
-    setLoadingMyCampaigns(true);
     try {
       const list = await fetchMyCampaigns(storeId, availableCampaigns);
       setMyCampaigns(list);
     } catch {
       setMyCampaigns([]);
-    } finally {
-      setLoadingMyCampaigns(false);
     }
-  };
+  }, [storeId, availableCampaigns]);
 
   useEffect(() => {
-    if (activeTab === 'my-campaigns') {
-      loadMyCampaigns();
-    }
-  }, [activeTab, availableCampaigns]);
+    loadMyCampaigns();
+  }, [loadMyCampaigns]);
 
   const getCampaignBanner = (campaign) =>
     resolveCampaignBanner(campaign, availableCampaigns);
@@ -77,7 +88,7 @@ const Marketing = () => {
     setIsProductModalOpen(true);
   };
 
-  const handleCampaignActivate = async (campaign, selectedProducts) => {
+  const handleCampaignActivate = async (campaign, selectedProducts, discountPercentage) => {
     if (!storeId) {
       showToast('لم يتم تحديد المتجر. يرجى تسجيل الدخول مرة أخرى.');
       return;
@@ -89,15 +100,19 @@ const Marketing = () => {
         storeId,
         megaCampaignId: campaign.megaCampaignId ?? campaign.id,
         productIds: selectedProducts.map((p) => p.id),
+        discountPercentage,
       });
 
       const entry = buildSubscriptionEntry(
         { ...campaign, bannerImage: getCampaignBanner(campaign) ?? campaign.bannerImage },
         selectedProducts,
+        discountPercentage,
         apiRes,
       );
       saveMyCampaign(storeId, entry);
-      setMyCampaigns(await fetchMyCampaigns(storeId, availableCampaigns));
+      const campaigns = await fetchAvailableCampaigns();
+      setAvailableCampaigns(campaigns);
+      setMyCampaigns(await fetchMyCampaigns(storeId, campaigns));
       await refreshWallet();
 
       setIsProductModalOpen(false);
@@ -145,7 +160,7 @@ const Marketing = () => {
         {activeTab === 'available' && (
           <>
             {loadingCampaigns && <p className="no-results">جاري تحميل الحملات...</p>}
-            {campaignsError && <p className="form-error-banner">{campaignsError?.message || 'تعذّر تحميل الحملات المتاحة'}</p>}
+            {campaignsError && <p className="form-error-banner">{campaignsError}</p>}
             {!loadingCampaigns && !campaignsError && visibleCampaigns.length === 0 && (
               <p className="no-results">لا توجد حملات متاحة حالياً.</p>
             )}
@@ -157,6 +172,7 @@ const Marketing = () => {
                   type={campaign.type}
                   description={campaign.description}
                   duration={campaign.duration}
+                  productsCount={campaign.productsCount}
                   price={campaign.price}
                   bannerImage={getCampaignBanner(campaign)}
                   status={campaign.status}
@@ -169,8 +185,7 @@ const Marketing = () => {
 
         {activeTab === 'my-campaigns' && (
           <div className="plans-grid">
-            {loadingMyCampaigns && <p className="no-results">جاري تحميل حملاتك المشتركة...</p>}
-            {!loadingMyCampaigns && myCampaigns.length > 0 ? (
+            {myCampaigns.length > 0 ? (
               myCampaigns.map((campaign) => (
                 <SubscribedCampaignCard
                   key={campaign.megaCampaignId ?? campaign.id}
@@ -178,15 +193,16 @@ const Marketing = () => {
                   description={campaign.description}
                   price={campaign.price}
                   duration={campaign.duration}
+                  productsCount={campaign.productsCount}
                   dateRange={campaign.dateRange}
                   status={campaign.status}
                   bannerImage={getCampaignBanner(campaign)}
                   selectedProducts={campaign.selectedProducts}
                 />
               ))
-            ) : !loadingMyCampaigns ? (
+            ) : (
               <p className="no-results">لا توجد حملات مشتركة حالياً. اشترك في حملة جديدة!</p>
-            ) : null}
+            )}
           </div>
         )}
       </div>

@@ -1,14 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Upload, ImageIcon, Layers } from 'lucide-react';
 import { getApiErrorMessage } from '../../api/stores';
-import { fetchManagedProductDetails } from '../../api/products';
 import './ProductModal.css';
-
-const normalizeProductImages = (product) => {
-  if (product?.images?.length) return product.images;
-  if (product?.image) return [{ url: product.image }];
-  return [];
-};
 
 const ProductModal = ({
   isOpen,
@@ -31,26 +24,14 @@ const ProductModal = ({
   });
   const [existingImages, setExistingImages] = useState([]);
   const [newImages, setNewImages] = useState([]);
-  const [deletedImageIds, setDeletedImageIds] = useState([]);
-  const [loadingDetails, setLoadingDetails] = useState(false);
   const [savedProduct, setSavedProduct] = useState(null);
   const [error, setError] = useState('');
-  const ignoreOverlayClickRef = useRef(false);
-  const wasOpenRef = useRef(false);
-  const fileInputRef = useRef(null);
 
   useEffect(() => {
-    if (!isOpen) {
-      wasOpenRef.current = false;
-      return;
-    }
-
-    if (wasOpenRef.current) return;
-    wasOpenRef.current = true;
+    if (!isOpen) return;
 
     setSavedProduct(null);
     setError('');
-    setDeletedImageIds([]);
     setNewImages((prev) => {
       prev.forEach((img) => {
         if (img.preview?.startsWith('blob:')) URL.revokeObjectURL(img.preview);
@@ -58,8 +39,22 @@ const ProductModal = ({
       return [];
     });
 
-    if (!product) {
-      setLoadingDetails(false);
+    if (product) {
+      setForm({
+        name: product.name || '',
+        sku: product.sku || '',
+        description: product.description || '',
+        price: product.price || '',
+        categoryId: product.categoryId ? String(product.categoryId) : '',
+        stock: product.stock || '',
+      });
+      const imgs = product.images?.length
+        ? product.images
+        : product.image
+          ? [{ url: product.image }]
+          : [];
+      setExistingImages(imgs);
+    } else {
       setForm({
         name: '',
         sku: '',
@@ -69,37 +64,7 @@ const ProductModal = ({
         stock: '',
       });
       setExistingImages([]);
-      return undefined;
     }
-
-    let cancelled = false;
-    setLoadingDetails(true);
-
-    (async () => {
-      let source = product;
-      try {
-        source = await fetchManagedProductDetails(product.id);
-      } catch {
-        // نستخدم بيانات المنتج المتاحة محلياً
-      }
-
-      if (cancelled) return;
-
-      setForm({
-        name: source.name || '',
-        sku: source.sku || '',
-        description: source.description || '',
-        price: source.price || '',
-        categoryId: source.categoryId ? String(source.categoryId) : '',
-        stock: source.stock || '',
-      });
-      setExistingImages(normalizeProductImages(source));
-      setLoadingDetails(false);
-    })();
-
-    return () => {
-      cancelled = true;
-    };
   }, [isOpen, product]);
 
   if (!isOpen) return null;
@@ -117,18 +82,6 @@ const ProductModal = ({
       file,
       preview: URL.createObjectURL(file),
     }));
-
-    if (isEdit && existingImages.length > 0 && newImages.length === 0) {
-      const idsToRemove = existingImages.map((img) => img.id).filter(Boolean);
-      if (!idsToRemove.length) {
-        setError('تعذّر استبدال الصورة. انتظر تحميل بيانات المنتج ثم حاول مرة أخرى.');
-        e.target.value = '';
-        return;
-      }
-      setDeletedImageIds((prev) => [...new Set([...prev, ...idsToRemove])]);
-      setExistingImages([]);
-    }
-
     setNewImages((prev) => [...prev, ...added]);
     setError('');
     e.target.value = '';
@@ -142,33 +95,6 @@ const ProductModal = ({
     });
   };
 
-  const handleRemoveExistingImage = (id) => {
-    if (!id) {
-      setError('تعذّر حذف الصورة. أغلق النافذة وافتح التعديل مرة أخرى.');
-      return;
-    }
-    setDeletedImageIds((prev) => [...new Set([...prev, id])]);
-    setExistingImages((prev) => prev.filter((img) => img.id !== id));
-    setError('');
-  };
-
-  const handleOverlayMouseDown = (e) => {
-    if (e.target !== e.currentTarget) return;
-    if (ignoreOverlayClickRef.current) return;
-    onClose();
-  };
-
-  const openFilePicker = () => {
-    ignoreOverlayClickRef.current = true;
-    const releaseOverlayGuard = () => {
-      window.setTimeout(() => {
-        ignoreOverlayClickRef.current = false;
-      }, 300);
-    };
-    window.addEventListener('focus', releaseOverlayGuard, { once: true });
-    fileInputRef.current?.click();
-  };
-
   const totalImages = existingImages.length + newImages.length;
 
   const handleSubmit = async () => {
@@ -178,10 +104,6 @@ const ProductModal = ({
     }
     if (!isEdit && totalImages === 0) {
       setError('يجب رفع صورة واحدة على الأقل للمنتج.');
-      return;
-    }
-    if (isEdit && totalImages === 0) {
-      setError('يجب أن يبقى للمنتج صورة واحدة على الأقل.');
       return;
     }
 
@@ -195,14 +117,9 @@ const ProductModal = ({
         categoryId: form.categoryId,
         stock: form.stock,
         imageFiles: newImages.map((img) => img.file),
-        deletedImageIds,
       });
-      if (!isEdit && result?.id) {
+      if (!isEdit && result) {
         setSavedProduct(result);
-        return;
-      }
-      if (!isEdit && result && !result.id) {
-        setError('تعذّر إنشاء المنتج. تحقق من البيانات وحاول مرة أخرى.');
         return;
       }
       onClose();
@@ -215,7 +132,7 @@ const ProductModal = ({
   const showSuccessStep = !!savedProduct;
 
   return (
-    <div className="modal-overlay" onMouseDown={handleOverlayMouseDown}>
+    <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content product-modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2 className="modal-title">
@@ -241,26 +158,12 @@ const ProductModal = ({
               )}
             </label>
 
-            {loadingDetails ? (
-              <p className="field-hint">جاري تحميل صور المنتج...</p>
-            ) : (
-              <>
             {totalImages > 0 ? (
               <div className="images-gallery">
                 {existingImages.map((img, index) => (
                   <div key={img.id ?? `existing-${index}`} className="gallery-item existing">
                     <img src={img.url} alt={`صورة ${index + 1}`} />
                     {isEdit && <span className="gallery-item-tag">حالية</span>}
-                    {isEdit && (
-                      <button
-                        type="button"
-                        className="gallery-remove-btn"
-                        onClick={() => handleRemoveExistingImage(img.id)}
-                        aria-label="حذف الصورة الحالية"
-                      >
-                        <X size={14} />
-                      </button>
-                    )}
                   </div>
                 ))}
                 {newImages.map((img, index) => (
@@ -284,24 +187,17 @@ const ProductModal = ({
               </div>
             )}
 
-            <button type="button" className="upload-btn" onClick={openFilePicker} disabled={loadingDetails}>
+            <label className="upload-btn">
               <Upload size={16} />
-              {isEdit && existingImages.length > 0 && newImages.length === 0
-                ? 'تغيير الصورة'
-                : totalImages > 0
-                  ? 'إضافة صور'
-                  : 'رفع صور'}
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              multiple={!(isEdit && existingImages.length > 0 && newImages.length === 0)}
-              onChange={handleImageChange}
-              hidden
-            />
-              </>
-            )}
+              {totalImages > 0 ? 'إضافة صور' : 'رفع صور'}
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                multiple
+                onChange={handleImageChange}
+                hidden
+              />
+            </label>
           </div>
 
           <div className="form-group">
@@ -409,7 +305,7 @@ const ProductModal = ({
                   إضافة تنوع
                 </button>
               )}
-              <button className="save-button" onClick={handleSubmit} type="button" disabled={isSaving || loadingDetails}>
+              <button className="save-button" onClick={handleSubmit} type="button" disabled={isSaving}>
                 {isSaving ? 'جاري الحفظ...' : isEdit ? 'حفظ التغييرات' : 'إضافة المنتج'}
               </button>
             </>

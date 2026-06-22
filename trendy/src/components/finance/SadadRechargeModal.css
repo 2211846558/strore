@@ -157,20 +157,10 @@
 }
 
 .sadad-stripe-input {
-  background: var(--bg-main);
-  border: 1px solid var(--border-color);
+  background: #242240;
+  border: 1px solid #3a3658;
   border-radius: 12px;
   padding: 12px 14px;
-  min-height: 48px;
-  height: 48px;
-  display: flex;
-  align-items: center;
-  overflow: hidden;
-}
-
-.sadad-stripe-input .StripeElement {
-  width: 100%;
-  flex: 1 1 auto;
 }
 
 .sadad-stripe-input:focus-within {

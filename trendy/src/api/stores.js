@@ -1,7 +1,5 @@
 import { API_ENDPOINTS } from './config';
 import { apiRequest } from './client';
-import { clearAuthSession } from './auth';
-
 
 const FIELD_LABELS = {
   user_name: 'اسم مدير المتجر',
@@ -10,7 +8,7 @@ const FIELD_LABELS = {
   name: 'اسم المتجر',
   store_email: 'إيميل المتجر',
   password: 'كلمة المرور',
-  phone: 'رقم الهاتف',
+  phone: 'رقم هاتف المتجر',
   entity_type: 'نوع الكيان',
   type: 'نوع المتجر',
   zone_id: 'المنطقة',
@@ -25,14 +23,8 @@ const FIELD_LABELS = {
   batch_number: 'رقم الدفعة',
   selling_price: 'سعر البيع',
   unit_cost: 'سعر التكلفة',
-  base_price: 'السعر',
-  category_id: 'التصنيف',
-  sku: 'رمز SKU',
-  total_quantity: 'الكمية',
-  start_at: 'تاريخ البداية',
-  end_at: 'تاريخ النهاية',
-  job_title: 'المسمى الوظيفي',
   role_id: 'الدور الوظيفي',
+  job_title: 'المسمى الوظيفي',
   status: 'حالة الطلب',
   reason: 'سبب الإلغاء',
   cancellation_reason: 'سبب الإلغاء',
@@ -40,13 +32,6 @@ const FIELD_LABELS = {
 };
 
 const isLocalStoreType = (type) => type === 'محلي' || type === 'local';
-
-function normalizeJoinStoreType(type) {
-  const value = String(type ?? '').trim();
-  if (value === 'محلي' || value === 'local') return 'local';
-  if (value === 'الكتروني' || value === 'إلكتروني' || value === 'electronic') return 'electronic';
-  return value;
-}
 
 /**
  * تحويل بيانات النموذج إلى FormData مطابق لـ StoreJoinRequest في Laravel
@@ -62,7 +47,7 @@ export function buildStoreJoinFormData(form, logoFile) {
   fd.append('password', form.password);
   fd.append('phone', form.storePhone.trim());
   fd.append('entity_type', form.entityType);
-  fd.append('type', normalizeJoinStoreType(form.storeType));
+  fd.append('type', form.storeType);
 
   if (form.entityType === 'company' && form.commercialReg?.trim()) {
     fd.append('commercial_register_number', form.commercialReg.trim());
@@ -76,10 +61,8 @@ export function buildStoreJoinFormData(form, logoFile) {
     fd.append('notes', form.notes.trim());
   }
 
-  if (form.zoneId) {
+  if (isLocalStoreType(form.storeType)) {
     fd.append('zone_id', String(Number(form.zoneId)));
-  }
-  if (form.googleMapUrl) {
     fd.append('google_map_url', form.googleMapUrl.trim());
   }
 
@@ -93,11 +76,8 @@ export function buildStoreJoinFormData(form, logoFile) {
 /**
  * POST /api/stores/join
  * إرسال طلب انضمام — يُرسل رمز التحقق (OTP) إلى إيميل المتجر
- * مسار عام: لا يُرسل توكن ولا كوكيز جلسة قديمة
  */
 export async function submitStoreJoinRequest(form, logoFile) {
-  clearAuthSession();
-
   const body = buildStoreJoinFormData(form, logoFile);
   return apiRequest(API_ENDPOINTS.storesJoin, {
     method: 'POST',
@@ -119,27 +99,12 @@ export async function fetchZones() {
 
 const translateValidationMessage = (message, field) => {
   const label = FIELD_LABELS[field] || field;
-  if (/exists/i.test(message) && field === 'role_id') {
-    return 'الدور الوظيفي غير صالح. حدّث الصفحة أو سجّل الخروج والدخول مرة أخرى.';
-  }
-  if (/selected role id is invalid/i.test(message)) {
-    return 'الدور الوظيفي غير صالح. حدّث الصفحة أو سجّل الخروج والدخول مرة أخرى.';
-  }
   if (/required/i.test(message)) return `${label} مطلوب`;
   if (/required_if/i.test(message)) return `${label} مطلوب`;
   if (/email/i.test(message)) return `${label} غير صالح`;
   if (/min/i.test(message) && field === 'password') return 'كلمة المرور يجب أن تكون 8 أحرف على الأقل';
   if (/max/i.test(message) && field === 'notes') return 'الملاحظات يجب ألا تتجاوز 2000 حرف';
-  if (/unique/i.test(message) && field === 'store_email') {
-    return 'إيميل المتجر مستخدم مسبقاً أو يوجد طلب انضمام قيد المراجعة بهذا الإيميل.';
-  }
   if (/unique/i.test(message)) return `${label} مستخدم مسبقاً`;
-  if (/after_or_equal|after or equal.*now/i.test(message)) {
-    return `${label} يجب أن يكون اليوم أو تاريخاً لاحقاً`;
-  }
-  if (/after.*start_at|after:start_at/i.test(message) && field === 'end_at') {
-    return 'تاريخ النهاية يجب أن يكون بعد تاريخ البداية';
-  }
   if (/size/i.test(message) && field === 'otp') return 'رمز التحقق يجب أن يكون 6 أرقام';
   if (/exists/i.test(message) && field === 'store_email') return 'لا يوجد طلب انضمام بهذا الإيميل';
   if (/in:/i.test(message) && field === 'type') return 'نوع المتجر غير صالح';
@@ -175,24 +140,8 @@ export function buildStoreUpdateFormData(formData, logoFile) {
     fd.append('description', formData.description?.trim() || '');
   }
   if (formData.phone?.trim()) fd.append('phone', formData.phone.trim());
-  if (formData.type) fd.append('type', formData.type);
-
-  if (formData.merchantData && typeof formData.merchantData === 'object') {
-    if (formData.merchantData.tax_number !== undefined) {
-      fd.append('merchant_data[tax_number]', formData.merchantData.tax_number?.trim() || '');
-    }
-    if (formData.merchantData.commercial_register !== undefined) {
-      fd.append('merchant_data[commercial_register]', formData.merchantData.commercial_register?.trim() || '');
-    }
-  }
-
-  if (formData.zoneId) {
-    fd.append('zone_id', String(Number(formData.zoneId)));
-  }
-  if (formData.googleMapUrl !== undefined) {
-    fd.append('google_map_url', formData.googleMapUrl?.trim() || '');
-  }
-
+  if (formData.email?.trim()) fd.append('store_email', formData.email.trim());
+  if (formData.zoneId) fd.append('zone_id', String(Number(formData.zoneId)));
   if (logoFile instanceof File) fd.append('logo', logoFile);
 
   return fd;
@@ -224,151 +173,13 @@ export function resolveStoreEmail(store, user = null) {
   return '';
 }
 
-export const STORE_STATUS_LABELS = {
-  active: 'نشط',
-  inactive: 'معطل',
-  deactivated: 'معطل',
-  pending: 'قيد المراجعة',
-};
-
-export function isStoreActiveStatus(statusRaw) {
-  return statusRaw === 'active';
-}
-
-/**
- * توحيد حالة المتجر (active | inactive | pending)
- */
-export function normalizeStoreStatus(raw) {
-  if (raw == null || raw === '') return 'inactive';
-  if (typeof raw === 'boolean') return raw ? 'active' : 'inactive';
-  if (typeof raw === 'number') return raw > 0 ? 'active' : 'inactive';
-
-  const normalized = String(raw).trim().toLowerCase();
-  if (normalized === 'active' || normalized === 'نشط') return 'active';
-  if (
-    normalized === 'inactive'
-    || normalized === 'deactivated'
-    || normalized === 'غير نشط'
-    || normalized === 'معطل'
-  ) {
-    return 'inactive';
-  }
-  if (normalized === 'pending' || normalized === 'قيد المراجعة') return 'pending';
-
-  return normalized;
-}
-
-/**
- * استخراج حالة المتجر من الجلسة أو owned_stores عند غيابها في استجابة الـ API
- */
-export function resolveStoreStatus(store, user = null, storeId = null) {
-  const id = storeId ?? store?.id;
-  let status = store?.status ?? store?.store_status;
-
-  if ((status == null || status === '') && user && id != null) {
-    const owned = user.owned_stores || user.ownedStores || [];
-    const match = owned.find((entry) => Number(entry?.id) === Number(id));
-    if (match?.status != null && match.status !== '') status = match.status;
-  }
-
-  if ((status == null || status === '') && user?.store && Number(user.store.id) === Number(id)) {
-    status = user.store.status;
-  }
-
-  if ((status == null || status === '') && user?.store_status) {
-    status = user.store_status;
-  }
-
-  return normalizeStoreStatus(status);
-}
-
-export function getStoreStatusLabel(statusRaw) {
-  return STORE_STATUS_LABELS[statusRaw] ?? statusRaw ?? '—';
-}
-
-export function normalizeStoreTypeLabel(type) {
-  const value = String(type ?? '').trim().toLowerCase();
-  if (!value) return '—';
-  if (value === 'local' || value === 'محلي') return 'محلي';
-  if (value === 'electronic' || value === 'الكتروني' || value === 'إلكتروني') return 'إلكتروني';
-  return String(type).trim();
-}
-
-export function normalizeEntityTypeLabel(entityType) {
-  const value = String(entityType ?? '').trim().toLowerCase();
-  if (!value) return '—';
-  if (value === 'company') return 'شركة';
-  if (value === 'individual') return 'فرد';
-  return String(entityType).trim();
-}
-
-/**
- * استخراج موقع/منطقة المتجر — مع fallback لقائمة المناطق عند غياب الاسم في الاستجابة
- */
-export function resolveStoreLocation(store, zones = []) {
-  const candidates = [
-    store?.location,
-    store?.address,
-    store?.full_address,
-    store?.zone?.name,
-    store?.zone?.title,
-    store?.zone_name,
-  ];
-
-  for (const value of candidates) {
-    if (value != null && String(value).trim()) {
-      return String(value).trim();
-    }
-  }
-
-  const zoneId = store?.zone_id ?? store?.zone?.id;
-  if (zoneId != null && Array.isArray(zones) && zones.length > 0) {
-    const zone = zones.find((entry) => Number(entry?.id) === Number(zoneId));
-    const name = zone?.name ?? zone?.title;
-    if (name) return String(name).trim();
-  }
-
-  return '';
-}
-
 /**
  * دمج بيانات المتجر من API مع الجلسة دون فقدان الحقول الناقصة في الاستجابة
  */
 export function mergeStoreProfile(apiStore, sessionStore, user = null) {
-  const id = apiStore?.id ?? sessionStore?.id;
-  const apiStatus = apiStore?.status;
-  const hasApiStatus = apiStatus != null && String(apiStatus).trim() !== '';
-  const merged = {
-    ...sessionStore,
-    ...apiStore,
-    status: hasApiStatus ? apiStatus : sessionStore?.status,
-    zone_id: apiStore?.zone_id ?? sessionStore?.zone_id,
-    zone_name: apiStore?.zone_name ?? sessionStore?.zone_name ?? apiStore?.zone?.name ?? sessionStore?.zone?.name,
-    zone: apiStore?.zone ?? sessionStore?.zone,
-    google_map_url: apiStore?.google_map_url ?? sessionStore?.google_map_url,
-    store_code: apiStore?.store_code ?? sessionStore?.store_code ?? apiStore?.code ?? sessionStore?.code,
-    entity_type: apiStore?.entity_type ?? sessionStore?.entity_type,
-    commercial_register_number:
-      apiStore?.commercial_register_number ?? sessionStore?.commercial_register_number,
-    notes: apiStore?.notes ?? sessionStore?.notes,
-    plan_id: apiStore?.plan_id ?? sessionStore?.plan_id,
-    subscription_starts_at:
-      apiStore?.subscription_starts_at ??
-      apiStore?.plan_starts_at ??
-      sessionStore?.subscription_starts_at ??
-      sessionStore?.plan_starts_at,
-    subscription_ends_at:
-      apiStore?.subscription_ends_at ??
-      apiStore?.plan_expires_at ??
-      sessionStore?.subscription_ends_at ??
-      sessionStore?.plan_expires_at,
-    plan: apiStore?.plan ?? sessionStore?.plan,
-  };
-  const status = resolveStoreStatus(merged, hasApiStatus ? null : user, id);
-
+  const base = { ...sessionStore, ...apiStore };
   return {
-    ...merged,
-    status,
+    ...base,
     store_email: resolveStoreEmail(apiStore, user) || resolveStoreEmail(sessionStore, user),
     email: resolveStoreEmail(apiStore, user) || resolveStoreEmail(sessionStore, user),
   };
@@ -380,35 +191,6 @@ export function mergeStoreProfile(apiStore, sessionStore, user = null) {
 export async function fetchStore(storeId) {
   const res = await apiRequest(API_ENDPOINTS.storeShow(storeId));
   return res?.data ?? res;
-}
-
-/**
- * GET /api/my-store — ملف المتجر للمدير/الموظف (status الحقيقي حتى لو معطّل)
- */
-export async function fetchManagedStoreProfile(storeId = null) {
-  const query = storeId ? `?store_id=${encodeURIComponent(String(storeId))}` : '';
-  const res = await apiRequest(`${API_ENDPOINTS.myStoreProfile}${query}`);
-  return res?.data ?? res;
-}
-
-/**
- * جلب ملف المتجر — يفضّل /my-store ثم المسار العام للزبائن
- */
-export async function fetchStoreProfile(storeId, sessionStore = null, user = null) {
-  try {
-    const apiStore = await fetchManagedStoreProfile(storeId);
-    return mergeStoreProfile(apiStore, sessionStore, user);
-  } catch (managedErr) {
-    try {
-      const apiStore = await fetchStore(storeId);
-      return mergeStoreProfile(apiStore, sessionStore, user);
-    } catch (publicErr) {
-      if ((managedErr?.status === 404 || publicErr?.status === 404) && sessionStore) {
-        return mergeStoreProfile(sessionStore, sessionStore, user);
-      }
-      throw managedErr;
-    }
-  }
 }
 
 /**
@@ -424,81 +206,9 @@ export async function fetchStoreRatings(storeId) {
   };
 }
 
-<<<<<<< HEAD
-function isTechnicalErrorMessage(message) {
-  if (!message || typeof message !== 'string') return false;
-  return /SQLSTATE|(?:^|\s)SQL:|Connection:\s*mysql|Host:\s*127\.0\.0\.1|Database:|PDOException|QueryException|Illuminate\\Database|vendor[/\\]laravel|App\\(?:Http|Models)|actively refused|ECONNREFUSED|could not (?:find driver|connect)|Access denied for user|Unknown column|Table .* doesn't exist|must be of type|Call to undefined|Undefined array key|stack trace/i.test(
-    message,
-  );
-}
-
-function getFriendlyDatabaseError(message, fallback) {
-  if (
-    /SQLSTATE\[HY000\]\s*\[2002\]|actively refused|Connection refused|ECONNREFUSED|No connection could be made/i.test(
-      message,
-    )
-  ) {
-    return 'تعذّر الاتصال بقاعدة البيانات. تأكد من تشغيل خادم MySQL ثم أعد المحاولة.';
-  }
-  if (/SQLSTATE|Connection:\s*mysql|Illuminate\\Database|QueryException|PDOException/i.test(message)) {
-    return fallback || 'تعذّر تنفيذ الطلب حالياً بسبب مشكلة في قاعدة البيانات. حاول مرة أخرى لاحقاً.';
-  }
-  return null;
-=======
-const LOGIN_CREDENTIALS_ERROR =
-  'تحقق من رقم كود المتجر او البريد الالكتروني او كلمة المرور واعد المحاولة مجددا';
-
-const LOGIN_CREDENTIAL_PATTERNS = [
-  /selected store code is invalid/i,
-  /credentials do not match/i,
-  /invalid credentials/i,
-  /these credentials/i,
-  /wrong password/i,
-  /incorrect password/i,
-  /authentication failed/i,
-];
-
-function isLoginCredentialFailure(error) {
-  const message = String(error?.message ?? '');
-  if (LOGIN_CREDENTIAL_PATTERNS.some((pattern) => pattern.test(message))) {
-    return true;
-  }
-
-  if (error?.status === 401 && !/bearer token/i.test(message)) {
-    return true;
-  }
-
-  if (!error?.errors || typeof error.errors !== 'object') {
-    return false;
-  }
-
-  const loginFields = ['store_code', 'email', 'password'];
-  return Object.entries(error.errors).some(([field, messages]) => {
-    if (!loginFields.includes(field)) return false;
-    const msg = Array.isArray(messages) ? messages.join(' ') : String(messages);
-    if (/required/i.test(msg)) return false;
-    return (
-      LOGIN_CREDENTIAL_PATTERNS.some((pattern) => pattern.test(msg))
-      || (field === 'store_code' && /invalid|exists|selected/i.test(msg))
-      || ((field === 'email' || field === 'password') && /invalid|incorrect|match|failed/i.test(msg))
-    );
-  });
-}
-
-export function getLoginErrorMessage(error) {
-  if (error?.isNetworkError) {
-    return getApiErrorMessage(error);
-  }
-  if (isLoginCredentialFailure(error)) {
-    return LOGIN_CREDENTIALS_ERROR;
-  }
-  return getApiErrorMessage(error, LOGIN_CREDENTIALS_ERROR);
->>>>>>> 2074f1194b39a27c719d48042e4b5c813e9908b8
-}
-
 export function getApiErrorMessage(error, fallback = 'تعذّر إرسال الطلب، حاول مرة أخرى') {
   if (error?.isNetworkError) {
-    return 'تعذّر الاتصال بالخادم. تأكد من تشغيل الباكند على المنفذ 8000 ثم حدّث الصفحة.';
+    return 'تعذّر الاتصال بالخادم. شغّل الباكند (php artisan serve) وتأكد أن VITE_API_BASE_URL=http://localhost:8000/api في ملف .env';
   }
   if (error?.errors && typeof error.errors === 'object') {
     const entries = Object.entries(error.errors);
@@ -511,25 +221,10 @@ export function getApiErrorMessage(error, fallback = 'تعذّر إرسال ال
   if (error?.message) {
     const msg = error.message.replace(/^\./, '').trim();
     if (error?.isUnauthorized || /unauthenticated/i.test(msg) || /bearer token/i.test(msg)) {
-      if (error?.isPublicRequest) {
-        return 'تعذّر إرسال طلب الانضمام. حدّث الصفحة وأعد المحاولة.';
-      }
       return 'انتهت جلستك. يرجى تسجيل الدخول مرة أخرى.';
     }
-    if (error?.status === 403 || /insufficient permissions|forbidden|does not have the right roles/i.test(msg)) {
-      if (/wallet|charge|recharge|withdraw|محفظة|شحن|سحب/i.test(msg)) {
-        return 'شحن المحفظة متاح لمدير المتجر فقط. سجّل الخروج ثم ادخل بحساب المدير (ليس حساب الموظف).';
-      }
-      if (/employee|موظف/i.test(msg)) {
-        return 'إدارة الموظفين متاحة لمدير المتجر فقط. سجّل الدخول بحساب المدير.';
-      }
-      return 'ليس لديك صلاحية لتنفيذ هذا الإجراء. يتطلب حساب مدير المتجر.';
-    }
-    if (/store_inactive_subscription|يجب الاشتراك في خطة أولاً/i.test(msg)) {
-      return 'يجب الاشتراك في خطة نشطة قبل إضافة المنتجات.';
-    }
-    if (/name.*unique|اسم المنتج موجود/i.test(msg)) {
-      return 'اسم المنتج موجود مسبقاً في متجرك. اختر اسماً آخر.';
+    if (error?.status === 403 || /insufficient permissions/i.test(msg)) {
+      return 'شحن المحفظة متاح لمدير المتجر فقط. سجّل الخروج ثم ادخل بحساب المدير (ليس حساب الموظف).';
     }
     if (/no such paymentmethod/i.test(msg)) {
       return 'طريقة الدفع غير صالحة. استخدم بطاقة بنكية عبر Stripe (ليس سداد).';
@@ -540,28 +235,17 @@ export function getApiErrorMessage(error, fallback = 'تعذّر إرسال ال
     if (/Unknown column ['"]?sku['"]?/i.test(msg) || /column not found.*sku/i.test(msg)) {
       return 'تعذّر حفظ المنتج: قاعدة البيانات تحتاج تحديث. شغّل php artisan migrate على الباكند ثم أعد المحاولة.';
     }
-    if (/selected role id is invalid|role_id.*invalid/i.test(msg)) {
-      return 'الدور الوظيفي غير صالح. سجّل الخروج ثم ادخل مرة أخرى، أو حدّث الصفحة.';
-    }
     if (/sku.*unique|unique.*sku/i.test(msg) || /sku مستخدم/i.test(msg)) {
       return 'رمز SKU مستخدم مسبقاً. اختر رمزاً آخر.';
     }
     if (/OrderController::show/i.test(msg) || /must be of type int, string given/i.test(msg)) {
       return 'تعذّر تحميل المحادثات. حاول مرة أخرى.';
     }
-    if (/undefined relationship.*Rating/i.test(msg) || /Call to undefined relationship \[user\] on model \[App\\Models\\Rating\]/i.test(msg)) {
-      return 'تعذّر تحميل بيانات المنتج بسبب خطأ في الخادم. حاول مرة أخرى لاحقاً.';
-    }
     if (/undefined method/i.test(msg) || /App\\Models/i.test(msg)) {
-      return 'تعذّر تنفيذ الطلب حالياً بسبب مشكلة في الخادم. حاول مرة أخرى بعد قليل.';
+      return 'تعذّر تحميل المحادثات بسبب خطأ في الخادم. حاول مرة أخرى لاحقاً.';
     }
     if (/App\\Http\\Controllers/i.test(msg) || /vendor\\laravel/i.test(msg)) {
-      return 'تعذّر تنفيذ الطلب حالياً بسبب مشكلة في الخادم. حاول مرة أخرى بعد قليل.';
-    }
-    const databaseError = getFriendlyDatabaseError(msg, fallback);
-    if (databaseError) return databaseError;
-    if (isTechnicalErrorMessage(msg)) {
-      return fallback;
+      return 'حدث خطأ في الخادم. حاول مرة أخرى لاحقاً.';
     }
     return msg;
   }

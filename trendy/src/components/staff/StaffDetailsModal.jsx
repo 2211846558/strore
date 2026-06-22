@@ -1,8 +1,8 @@
 import React from 'react';
-import { X, Edit2 } from 'lucide-react';
+import { X } from 'lucide-react';
 import './StaffDetailsModal.css';
 
-const StaffDetailsModal = ({ isOpen, onClose, member, loading, onEdit }) => {
+const StaffDetailsModal = ({ isOpen, onClose, member, loading }) => {
   if (!isOpen) return null;
 
   return (
@@ -65,17 +65,7 @@ const StaffDetailsModal = ({ isOpen, onClose, member, loading, onEdit }) => {
         )}
 
         <div className="modal-footer">
-          {typeof onEdit === 'function' && member && !loading && (
-            <button
-              className="save-button staff-details-edit-btn"
-              onClick={() => onEdit(member)}
-              type="button"
-            >
-              <Edit2 size={16} />
-              تعديل
-            </button>
-          )}
-          <button className="cancel-button" onClick={onClose} type="button">
+          <button className="save-button" onClick={onClose} type="button">
             إغلاق
           </button>
         </div>

@@ -1,31 +1,33 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Plus, Power, CheckCircle2, Eye, Trash2 } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Search, Plus, Edit2, Power, CheckCircle2, Eye } from 'lucide-react';
 import StaffModal from '../components/staff/StaffModal';
 import StaffDetailsModal from '../components/staff/StaffDetailsModal';
 import RoleFilterDropdown from '../components/staff/RoleFilterDropdown';
 import {
+  fetchAllEmployees,
   fetchEmployee,
+  createEmployee,
+  updateEmployee,
+  toggleEmployee,
   buildEmployeePayload,
   buildEmployeeUpdatePayload,
   buildRoleOptions,
+  EMPLOYEE_ROLE_OPTIONS,
 } from '../api/employees';
 import { getApiErrorMessage } from '../api/stores';
-import {
-  useEmployees,
-  useCreateEmployee,
-  useUpdateEmployee,
-  useToggleEmployee,
-  useDeleteEmployee,
-} from '../api/hooks/useEmployees';
-import { useStore, useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/AuthContext';
 import './Staff.css';
 
 const Staff = () => {
-  const { storeId } = useStore();
-  const { user } = useAuth();
+  const { storeId } = useAuth();
+  const [staff, setStaff] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
+  const [loading, setLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [togglingId, setTogglingId] = useState(null);
+  const [error, setError] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingStaff, setEditingStaff] = useState(null);
   const [detailsModal, setDetailsModal] = useState({ open: false, member: null, loading: false });
@@ -36,21 +38,9 @@ const Staff = () => {
     setTimeout(() => setToast(null), 2800);
   };
 
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 400);
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
-
-  const filters = useMemo(
-    () => ({ storeId, search: debouncedSearch, role: roleFilter, maxPages: 3, user }),
-    [storeId, debouncedSearch, roleFilter, user],
-  );
-
-  const { data: staff = [], isLoading: loading, error } = useEmployees(filters);
-
   const formRoleOptions = useMemo(
-    () => buildRoleOptions(staff, user),
-    [staff, user],
+    () => (buildRoleOptions(staff).length ? buildRoleOptions(staff) : EMPLOYEE_ROLE_OPTIONS),
+    [staff],
   );
 
   const roleOptions = useMemo(
@@ -64,58 +54,75 @@ const Staff = () => {
     [formRoleOptions],
   );
 
-  const createMutation = useCreateEmployee();
-  const updateMutation = useUpdateEmployee();
-  const toggleMutation = useToggleEmployee();
-  const deleteMutation = useDeleteEmployee();
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 400);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
-  const isSaving = createMutation.isPending || updateMutation.isPending;
+  const loadStaff = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const employees = await fetchAllEmployees({
+        storeId,
+        search: debouncedSearch,
+        role: roleFilter,
+      });
+      setStaff(employees);
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'تعذّر تحميل قائمة الموظفين'));
+      setStaff([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [storeId, debouncedSearch, roleFilter]);
+
+  useEffect(() => {
+    loadStaff();
+  }, [loadStaff]);
 
   const handleSave = async (formData) => {
-    if (editingStaff) {
-      const payload = buildEmployeeUpdatePayload(formData, {
-        storeId,
-        roleOptions: formRoleOptions,
-        user,
-      });
-      await updateMutation.mutateAsync({ id: editingStaff.id, ...payload });
-      showToast('تم حفظ التغييرات بنجاح');
-    } else {
-      const payload = buildEmployeePayload(formData, {
-        storeId,
-        roleOptions: formRoleOptions,
-        user,
-      });
-      await createMutation.mutateAsync(payload);
-      showToast('تم إضافة الموظف بنجاح');
+    setIsSaving(true);
+    try {
+      if (editingStaff) {
+        const payload = buildEmployeeUpdatePayload(formData, {
+          storeId,
+          roleOptions: formRoleOptions,
+        });
+        await updateEmployee(editingStaff.id, payload);
+        showToast('تم حفظ التغييرات بنجاح');
+      } else {
+        const payload = buildEmployeePayload(formData, {
+          storeId,
+          roleOptions: formRoleOptions,
+        });
+        await createEmployee(payload);
+        showToast('تم إضافة الموظف بنجاح');
+      }
+      setIsModalOpen(false);
+      setEditingStaff(null);
+      await loadStaff();
+    } catch (err) {
+      throw err;
+    } finally {
+      setIsSaving(false);
     }
-    setIsModalOpen(false);
-    setEditingStaff(null);
   };
 
   const handleToggleActive = async (member) => {
-    if (member.roleSlug === 'store_manager') return;
+    setTogglingId(member.id);
     try {
-      await toggleMutation.mutateAsync(member.id);
+      await toggleEmployee(member.id);
       showToast(
         member.active
           ? `تم تعطيل حساب «${member.name}»`
           : `تم تفعيل حساب «${member.name}»`
       );
+      await loadStaff();
     } catch (err) {
       showToast(getApiErrorMessage(err, 'تعذّر تغيير حالة الموظف'));
-    }
-  };
-
-  const handleDeleteStaff = async (member) => {
-    if (!window.confirm(`هل أنت متأكد من رغبتك في حذف الموظف «${member.name}» نهائياً؟`)) {
-      return;
-    }
-    try {
-      await deleteMutation.mutateAsync(member.id);
-      showToast(`تم حذف الموظف «${member.name}» بنجاح`);
-    } catch (err) {
-      showToast(getApiErrorMessage(err, 'تعذّر حذف الموظف'));
+    } finally {
+      setTogglingId(null);
     }
   };
 
@@ -138,11 +145,6 @@ const Staff = () => {
       showToast(getApiErrorMessage(err, 'تعذّر تحميل تفاصيل الموظف'));
       setDetailsModal({ open: false, member: null, loading: false });
     }
-  };
-
-  const handleEditFromDetail = (member) => {
-    setDetailsModal({ open: false, member: null, loading: false });
-    openEdit(member);
   };
 
   return (
@@ -178,7 +180,7 @@ const Staff = () => {
         </button>
       </div>
 
-      {error && <div className="staff-error">{error?.message || 'تعذّر تحميل قائمة الموظفين'}</div>}
+      {error && <div className="staff-error">{error}</div>}
 
       <div className="staff-table-wrapper">
         <table className="staff-table">
@@ -202,62 +204,55 @@ const Staff = () => {
                 </td>
               </tr>
             ) : staff.length > 0 ? (
-              staff.map((member) => {
-                const memberBusy =
-                  (toggleMutation.isPending && toggleMutation.variables === member.id) ||
-                  (deleteMutation.isPending && deleteMutation.variables === member.id);
-
-                return (
-                  <tr key={member.id}>
-                    <td className="staff-name">{member.name}</td>
-                    <td>{member.email}</td>
-                    <td>{member.phone}</td>
-                    <td>
-                      <span className="role-badge">{member.role}</span>
-                    </td>
-                    <td>{member.joinDate}</td>
-                    <td>{member.lastLogin}</td>
-                    <td>
-                      <span className={`status-badge ${member.active ? 'active' : 'inactive'}`}>
-                        {member.status}
-                      </span>
-                    </td>
-                    <td>
-                      <div className="action-buttons">
-                        <button
-                          type="button"
-                          className="action-btn view-btn"
-                          onClick={() => openDetails(member)}
-                          title="عرض التفاصيل"
-                          aria-label="عرض التفاصيل"
-                        >
-                          <Eye size={16} />
-                        </button>
-                        <button
-                          type="button"
-                          className={`action-btn toggle-btn ${member.active ? 'active' : 'inactive'}`}
-                          onClick={() => handleToggleActive(member)}
-                          disabled={memberBusy || member.roleSlug === 'store_manager'}
-                          title={member.active ? 'تعطيل' : 'تفعيل'}
-                          aria-label={member.active ? 'تعطيل' : 'تفعيل'}
-                        >
-                          <Power size={16} />
-                        </button>
-                        <button
-                          type="button"
-                          className="action-btn delete-btn"
-                          onClick={() => handleDeleteStaff(member)}
-                          disabled={memberBusy}
-                          title="حذف"
-                          aria-label="حذف"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })
+              staff.map((member) => (
+                <tr key={member.id}>
+                  <td className="staff-name">{member.name}</td>
+                  <td>{member.email}</td>
+                  <td>{member.phone}</td>
+                  <td>
+                    <span className="role-badge">{member.role}</span>
+                  </td>
+                  <td>{member.joinDate}</td>
+                  <td>{member.lastLogin}</td>
+                  <td>
+                    <span className={`status-badge ${member.active ? 'active' : 'inactive'}`}>
+                      {member.status}
+                    </span>
+                  </td>
+                  <td>
+                    <div className="action-buttons">
+                      <button
+                        type="button"
+                        className="action-btn view-btn"
+                        onClick={() => openDetails(member)}
+                        title="عرض التفاصيل"
+                        aria-label="عرض التفاصيل"
+                      >
+                        <Eye size={16} />
+                      </button>
+                      <button
+                        type="button"
+                        className="action-btn edit-btn"
+                        onClick={() => openEdit(member)}
+                        title="تعديل"
+                        aria-label="تعديل"
+                      >
+                        <Edit2 size={16} />
+                      </button>
+                      <button
+                        type="button"
+                        className={`action-btn toggle-btn ${member.active ? 'active' : 'inactive'}`}
+                        onClick={() => handleToggleActive(member)}
+                        disabled={togglingId === member.id}
+                        title={member.active ? 'تعطيل' : 'تفعيل'}
+                        aria-label={member.active ? 'تعطيل' : 'تفعيل'}
+                      >
+                        <Power size={16} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))
             ) : (
               <tr>
                 <td colSpan="8" className="no-results-cell">
@@ -278,7 +273,6 @@ const Staff = () => {
         onSave={handleSave}
         member={editingStaff}
         roles={formRoleOptions}
-        existingStaff={staff}
         isSaving={isSaving}
       />
 
@@ -287,7 +281,6 @@ const Staff = () => {
         onClose={() => setDetailsModal({ open: false, member: null, loading: false })}
         member={detailsModal.member}
         loading={detailsModal.loading}
-        onEdit={handleEditFromDetail}
       />
 
       {toast && (

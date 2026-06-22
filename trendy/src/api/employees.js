@@ -1,106 +1,25 @@
 import { apiRequest } from './client';
 import { API_ENDPOINTS } from './config';
 
-const ROLE_ID_CACHE_KEY = 'trendy_role_id_map';
+function extractList(res) {
+  const payload = res?.data ?? res;
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.data)) return payload.data;
+  return [];
+}
 
-const ROLE_SEED_ORDER = [
-  'super_admin',
-  'stores_admin',
-  'accountant',
-  'operations_admin',
-  'store_manager',
-  'store_staff',
-];
-
-/** معرّفات seed نظيف — وليس 1855+ */
-const STANDARD_ROLE_IDS = {
-  super_admin: 1,
-  stores_admin: 2,
-  accountant: 3,
-  operations_admin: 4,
-  store_manager: 5,
-  store_staff: 6,
+/**
+ * أرقام الأدوار في جدول roles — ترتيب افتراضي حسب api.md
+ * يمكن تجاوزها من .env إذا اختلفت عندك في قاعدة البيانات
+ */
+export const DEFAULT_ROLE_IDS = {
+  super_admin: Number(import.meta.env.VITE_ROLE_SUPER_ADMIN_ID) || 1,
+  stores_admin: Number(import.meta.env.VITE_ROLE_STORES_ADMIN_ID) || 2,
+  accountant: Number(import.meta.env.VITE_ROLE_ACCOUNTANT_ID) || 3,
+  operations_admin: Number(import.meta.env.VITE_ROLE_OPERATIONS_ADMIN_ID) || 4,
+  store_manager: Number(import.meta.env.VITE_ROLE_STORE_MANAGER_ID) || 5,
+  store_staff: Number(import.meta.env.VITE_ROLE_STORE_STAFF_ID) || 6,
 };
-
-function readEnvRoleId(slug) {
-  const envMap = {
-    super_admin: import.meta.env.VITE_ROLE_SUPER_ADMIN_ID,
-    stores_admin: import.meta.env.VITE_ROLE_STORES_ADMIN_ID,
-    accountant: import.meta.env.VITE_ROLE_ACCOUNTANT_ID,
-    operations_admin: import.meta.env.VITE_ROLE_OPERATIONS_ADMIN_ID,
-    store_manager: import.meta.env.VITE_ROLE_STORE_MANAGER_ID,
-    store_staff: import.meta.env.VITE_ROLE_STORE_STAFF_ID,
-  };
-  const value = Number(envMap[slug]);
-  return !Number.isNaN(value) && value > 0 ? value : null;
-}
-
-function readCachedRoleIds() {
-  try {
-    const raw = localStorage.getItem(ROLE_ID_CACHE_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
-}
-
-function writeCachedRoleIds(map) {
-  localStorage.setItem(ROLE_ID_CACHE_KEY, JSON.stringify(map));
-}
-
-export function extractRoleIdsFromUser(user) {
-  const map = {};
-  const roles = user?.roles;
-  if (!Array.isArray(roles)) return map;
-
-  for (const role of roles) {
-    if (typeof role === 'object' && role?.id != null && role?.name) {
-      map[String(role.name)] = Number(role.id);
-    }
-  }
-  return map;
-}
-
-export function syncRoleIdCacheFromUser(user) {
-  const extracted = extractRoleIdsFromUser(user);
-  if (Object.keys(extracted).length === 0) return;
-  writeCachedRoleIds({ ...readCachedRoleIds(), ...extracted });
-}
-
-function inferRoleIdsFromKnown(known) {
-  const result = { ...known };
-  for (const [slug, id] of Object.entries(known)) {
-    const idx = ROLE_SEED_ORDER.indexOf(slug);
-    if (idx === -1 || !id) continue;
-    for (const targetSlug of ROLE_SEED_ORDER) {
-      if (result[targetSlug]) continue;
-      const targetIdx = ROLE_SEED_ORDER.indexOf(targetSlug);
-      if (targetIdx === -1) continue;
-      const inferred = Number(id) + (targetIdx - idx);
-      if (inferred > 0) result[targetSlug] = inferred;
-    }
-  }
-  return result;
-}
-
-export function getResolvedRoleIds(user = null) {
-  const cached = readCachedRoleIds();
-  const fromUser = user ? extractRoleIdsFromUser(user) : {};
-  const merged = { ...STANDARD_ROLE_IDS };
-
-  for (const slug of ROLE_SEED_ORDER) {
-    const id =
-      fromUser[slug] ??
-      cached[slug] ??
-      readEnvRoleId(slug) ??
-      STANDARD_ROLE_IDS[slug];
-    if (id) merged[slug] = id;
-  }
-
-  return inferRoleIdsFromKnown(merged);
-}
-
-export const DEFAULT_ROLE_IDS = STANDARD_ROLE_IDS;
 
 /** أدوار الموظفين — slug في الـ API → تسمية عربية في الواجهة */
 export const EMPLOYEE_ROLE_MAP = {
@@ -112,8 +31,16 @@ export const EMPLOYEE_ROLE_MAP = {
   super_admin: 'مدير النظام',
 };
 
+function resolveRoleIdFromForm(roleValue) {
+  const { roleId } = parseRoleSelection(roleValue);
+  if (roleId) return roleId;
+  const numeric = Number(roleValue);
+  if (!Number.isNaN(numeric) && numeric > 0) return numeric;
+  return DEFAULT_ROLE_IDS[roleValue] ?? null;
+}
+
 /** يفك قيمة الاختيار "roleId__label" أو role_id فقط */
-export function parseRoleSelection(roleValue, user = null) {
+export function parseRoleSelection(roleValue) {
   const raw = String(roleValue ?? '');
   if (raw.includes('__')) {
     const sep = raw.indexOf('__');
@@ -126,8 +53,7 @@ export function parseRoleSelection(roleValue, user = null) {
   if (!Number.isNaN(numeric) && numeric > 0) {
     return { roleId: numeric, jobTitle: '' };
   }
-  const roleIds = getResolvedRoleIds(user);
-  const slugId = roleIds[raw];
+  const slugId = DEFAULT_ROLE_IDS[raw];
   return { roleId: slugId ?? null, jobTitle: '' };
 }
 
@@ -137,25 +63,35 @@ export function formatRoleSelection(roleId, jobTitle) {
 }
 
 /** خيارات الأدوار في النماذج والفلترة */
-export function getEmployeeRoleOptions(user = null) {
-  const roleIds = getResolvedRoleIds(user);
-  return [
-    {
-      value: formatRoleSelection(roleIds.store_staff, 'موظف متجر'),
-      slug: 'store_staff',
-      label: 'موظف متجر',
-    },
-    {
-      value: formatRoleSelection(roleIds.store_manager, 'مدير متجر'),
-      slug: 'store_manager',
-      label: 'مدير متجر',
-    },
-  ];
-}
+export const EMPLOYEE_ROLE_OPTIONS = [
+  {
+    value: formatRoleSelection(DEFAULT_ROLE_IDS.operations_admin, 'مسؤول عمليات'),
+    slug: 'operations_admin',
+    label: 'مسؤول عمليات',
+  },
+  {
+    value: formatRoleSelection(DEFAULT_ROLE_IDS.accountant, 'محاسب'),
+    slug: 'accountant',
+    label: 'محاسب',
+  },
+  {
+    value: formatRoleSelection(DEFAULT_ROLE_IDS.store_staff, 'موظف دعم فني'),
+    slug: 'store_staff',
+    label: 'موظف دعم فني',
+  },
+  {
+    value: formatRoleSelection(DEFAULT_ROLE_IDS.store_manager, 'مدير متجر'),
+    slug: 'store_manager',
+    label: 'مدير متجر',
+  },
+  {
+    value: formatRoleSelection(DEFAULT_ROLE_IDS.store_staff, 'موظف متجر'),
+    slug: 'store_staff_store',
+    label: 'موظف متجر',
+  },
+];
 
-export const EMPLOYEE_ROLE_OPTIONS = getEmployeeRoleOptions();
-
-function resolveRoleId(row, user = null) {
+function resolveRoleId(row) {
   if (row.role_id != null) return Number(row.role_id);
   if (row.role?.id != null) return Number(row.role.id);
   const roles = row.roles;
@@ -167,8 +103,7 @@ function resolveRoleId(row, user = null) {
     }
   }
   const slug = resolveRoleSlug(row);
-  const roleIds = getResolvedRoleIds(user);
-  return slug ? roleIds[slug] ?? null : null;
+  return slug ? DEFAULT_ROLE_IDS[slug] ?? null : null;
 }
 
 function resolveRoleSlug(row) {
@@ -233,13 +168,10 @@ function resolveActive(row) {
   return true;
 }
 
-export function mapEmployee(row, user = null) {
+export function mapEmployee(row) {
   const roleSlug = resolveRoleSlug(row);
-  const roleId = resolveRoleId(row, user);
-  let active = resolveActive(row);
-  if (roleSlug === 'store_manager') {
-    active = true;
-  }
+  const roleId = resolveRoleId(row);
+  const active = resolveActive(row);
 
   return {
     id: row.id,
@@ -259,19 +191,29 @@ export function mapEmployee(row, user = null) {
   };
 }
 
-export function buildRoleOptions(_employees = [], user = null) {
-  return getEmployeeRoleOptions(user);
+/** دمج أدوار مكتشفة من الـ API مع الخيارات الافتراضية */
+export function buildRoleOptions(employees = []) {
+  const options = new Map();
+
+  EMPLOYEE_ROLE_OPTIONS.forEach((opt) => {
+    options.set(`${opt.value}-${opt.label}`, opt);
+  });
+
+  employees.forEach((emp) => {
+    if (emp.roleId) {
+      options.set(`${emp.roleId}-${emp.role}`, {
+        value: formatRoleSelection(emp.roleId, emp.role),
+        slug: emp.roleSlug,
+        label: emp.role,
+      });
+    }
+  });
+
+  return Array.from(options.values());
 }
 
-function extractList(res) {
-  const payload = res?.data ?? res;
-  if (Array.isArray(payload)) return payload;
-  if (Array.isArray(payload?.data)) return payload.data;
-  return [];
-}
-
-export function buildEmployeePayload(form, { storeId, roleOptions, user } = {}) {
-  const { roleId } = parseRoleSelection(form.role, user);
+export function buildEmployeePayload(form, { storeId, roleOptions } = {}) {
+  const { roleId } = parseRoleSelection(form.role);
   const jobTitle = resolveJobTitle(form, roleOptions);
 
   const body = {
@@ -294,47 +236,6 @@ export function buildEmployeeUpdatePayload(form, options = {}) {
   return body;
 }
 
-function normalizePhone(value) {
-  return String(value ?? '').replace(/\D/g, '');
-}
-
-/**
- * تحقق من مدخلات الموظف قبل الإرسال — يمنع أرقام وهمية ويتكرار البيانات ضمن القائمة المحمّلة
- */
-export function validateEmployeeForm(form, { existingEmployees = [], editingId = null } = {}) {
-  const phone = form.phone?.trim() ?? '';
-  const email = form.email?.trim().toLowerCase() ?? '';
-  const digits = normalizePhone(phone);
-
-  if (digits.length < 8) {
-    return 'رقم الهاتف قصير جداً. أدخل رقماً صالحاً (8 أرقام على الأقل).';
-  }
-  if (/^(\d)\1+$/.test(digits)) {
-    return 'رقم الهاتف غير صالح. لا يمكن استخدام أرقام متكررة مثل 0000000.';
-  }
-
-  const duplicatePhone = existingEmployees.find(
-    (member) =>
-      member.id !== editingId && normalizePhone(member.phone) === digits,
-  );
-  if (duplicatePhone) {
-    return `رقم الهاتف مستخدم مسبقاً للموظف «${duplicatePhone.name}».`;
-  }
-
-  if (email) {
-    const duplicateEmail = existingEmployees.find(
-      (member) =>
-        member.id !== editingId &&
-        String(member.email ?? '').trim().toLowerCase() === email,
-    );
-    if (duplicateEmail) {
-      return `البريد الإلكتروني مستخدم مسبقاً للموظف «${duplicateEmail.name}».`;
-    }
-  }
-
-  return '';
-}
-
 /**
  * GET /employees — قائمة الموظفين مع البحث والفلترة
  */
@@ -344,7 +245,6 @@ export async function fetchEmployees({
   role,
   perPage = 50,
   page = 1,
-  user = null,
 } = {}) {
   const query = new URLSearchParams({
     per_page: String(perPage),
@@ -353,25 +253,19 @@ export async function fetchEmployees({
   if (storeId) query.set('store_id', String(storeId));
   if (search?.trim()) query.set('search', search.trim());
   if (role && role !== 'all') {
-    const roleOptions = getEmployeeRoleOptions(user);
-    const opt = roleOptions.find((o) => String(o.value) === String(role));
-    if (opt) {
-      query.set('role', opt.slug);
-    } else {
-      query.set('role', role);
-    }
+    const { roleId } = parseRoleSelection(role);
+    if (roleId) query.set('role_id', String(roleId));
   }
 
   const res = await apiRequest(`${API_ENDPOINTS.employees}?${query}`);
   return {
-    employees: extractList(res).map((row) => mapEmployee(row, user)),
+    employees: extractList(res).map(mapEmployee),
     meta: res?.meta ?? null,
   };
 }
 
 export async function fetchAllEmployees(filters = {}) {
   const perPage = filters.perPage ?? 100;
-  const maxPages = filters.maxPages ?? null;
   const all = [];
   let page = 1;
   let lastPage = 1;
@@ -381,7 +275,7 @@ export async function fetchAllEmployees(filters = {}) {
     all.push(...result.employees);
     lastPage = Number(result.meta?.last_page ?? 1);
     page += 1;
-  } while (page <= lastPage && (maxPages === null || page <= maxPages));
+  } while (page <= lastPage);
 
   return all;
 }
@@ -422,14 +316,4 @@ export async function updateEmployee(id, payload) {
 export async function toggleEmployee(id) {
   const res = await apiRequest(API_ENDPOINTS.employeeToggle(id), { method: 'POST' });
   return mapEmployee(res?.data ?? res);
-}
-
-/**
- * DELETE /employees/{id} — حذف موظف
- */
-export async function deleteEmployee(id) {
-  const res = await apiRequest(API_ENDPOINTS.employee(id), {
-    method: 'DELETE',
-  });
-  return res;
 }

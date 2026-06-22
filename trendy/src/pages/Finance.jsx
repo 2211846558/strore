@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Search,
   Eye,
@@ -6,7 +6,7 @@ import {
   Download,
   DollarSign,
   TrendingUp,
-  CircleDollarSign,
+  ArrowUpRight,
   CreditCard,
   Landmark,
   CheckCircle2,
@@ -16,24 +16,19 @@ import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import WalletModal from '../components/finance/WalletModal';
 import TransactionDetailModal from '../components/finance/TransactionDetailModal';
-import { useWalletBalance } from '../api/hooks/useWallet';
-import { useAuth, useStore } from '../context/AuthContext';
-import { userCanViewStoreWalletBalance } from '../api/auth';
+import { fetchCustodyLogs } from '../api/custody';
+import { useWallet } from '../context/WalletContext';
+import { fetchCustodySummary } from '../api/custody';
 import {
+  fetchAllTransactions,
   fetchTransactionDetails,
-  resolveStoreNetRevenue,
-  resolveStoreNetProfit,
+  fetchProfitOverview,
+  fetchMonthlyRevenueChart,
   exportFinanceReport,
   filterTransactionsByType,
   FINANCE_TYPE_OPTIONS,
+  FINANCE_STATUS_OPTIONS,
 } from '../api/finance';
-import {
-  useTransactions,
-  useRevenueOverview,
-  useProfitOverview,
-  useMonthlyRevenueChart,
-} from '../api/hooks/useFinance';
-import { useCustodySummary, useCustodyLogs } from '../api/hooks/useCustody';
 import { getApiErrorMessage } from '../api/stores';
 import './Finance.css';
 
@@ -44,16 +39,20 @@ const formatMoney = (value) =>
   });
 
 const Finance = () => {
-  const { user } = useAuth();
-  const { storeId } = useStore();
-  const canViewBalance = userCanViewStoreWalletBalance(user);
-  const { data: walletData } = useWalletBalance({ enabled: canViewBalance });
-  const walletBalance = walletData?.balance ?? 0;
+  const { balance: walletBalance } = useWallet();
+  const [transactions, setTransactions] = useState([]);
+  const [chartData, setChartData] = useState([]);
+  const [profitOverview, setProfitOverview] = useState(null);
+  const [custodySummary, setCustodySummary] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
+  const [loading, setLoading] = useState(true);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [error, setError] = useState('');
   const [isWalletOpen, setIsWalletOpen] = useState(false);
+  const [custodyLogs, setCustodyLogs] = useState([]);
   const [selectedTransaction, setSelectedTransaction] = useState(null);
   const [toast, setToast] = useState(null);
 
@@ -69,33 +68,47 @@ const Finance = () => {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  const txFilters = useMemo(
-    () => ({
-      search: debouncedSearch,
-      perPage: 100,
-      maxPages: 3,
-    }),
-    [debouncedSearch],
-  );
+  const loadFinanceData = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const [txResult, profit, chart, custody, logs] = await Promise.all([
+        fetchAllTransactions({
+          search: debouncedSearch,
+          status: statusFilter !== 'all' ? statusFilter : undefined,
+          perPage: 100,
+        }),
+        fetchProfitOverview(),
+        fetchMonthlyRevenueChart(5),
+        fetchCustodySummary().catch(() => null),
+        fetchCustodyLogs({ perPage: 20 }).catch(() => ({ data: [] })),
+      ]);
 
-  const { data: txResult, isLoading: txLoading, error: txError } = useTransactions(txFilters);
-  const { data: revenue, isLoading: revLoading } = useRevenueOverview();
-  const { data: profit, isLoading: profitLoading } = useProfitOverview();
-  const { data: custodySummary, isLoading: custodySumLoading } = useCustodySummary({ storeId });
-  const { data: custodyLogsRes, isLoading: custodyLogLoading } = useCustodyLogs({ storeId, perPage: 20 });
-  const { data: chartData, isLoading: chartLoading } = useMonthlyRevenueChart(5);
+      setTransactions(txResult.transactions);
+      setProfitOverview(profit);
+      setChartData(chart);
+      setCustodySummary(custody);
+      setCustodyLogs(logs?.data ?? []);
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'تعذّر تحميل البيانات المالية'));
+      setTransactions([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [debouncedSearch, statusFilter]);
 
-  const loading = txLoading || revLoading || profitLoading || custodySumLoading || custodyLogLoading;
-
-  const transactions = txResult?.transactions ?? [];
-  const custodyLogs = custodyLogsRes?.data ?? [];
+  useEffect(() => {
+    loadFinanceData();
+  }, [loadFinanceData]);
 
   const filteredTransactions = filterTransactionsByType(transactions, typeFilter);
 
   const totalTransactions = transactions.length;
   const successfulTransactions = transactions.filter((t) => t.status === 'ناجح').length;
-  const netRevenue = resolveStoreNetRevenue(revenue);
-  const netProfit = resolveStoreNetProfit(profit);
+  const totalRevenue = Number(
+    profitOverview?.net_profit ?? profitOverview?.total_revenue ?? 0,
+  );
+  const platformFee = transactions.reduce((sum, t) => sum + Number(t.fee || 0), 0);
   const currentBalance = walletBalance;
 
   const handleViewTransaction = async (transaction) => {
@@ -115,6 +128,7 @@ const Finance = () => {
     try {
       const apiRes = await exportFinanceReport({
         search: debouncedSearch,
+        status: statusFilter !== 'all' ? statusFilter : undefined,
       });
       if (apiRes?.message) {
         showToast(apiRes.message);
@@ -148,32 +162,30 @@ const Finance = () => {
         </div>
       </header>
 
-      <div className={`stats-grid finance-stats${canViewBalance ? '' : ' finance-stats--staff'}`}>
-        {canViewBalance && (
-          <div className="stat-card">
-            <div className="stat-header">
-              <span className="stat-label">الرصيد الحالي</span>
-              <DollarSign size={20} className="stat-icon blue" />
-            </div>
-            <span className="stat-value blue">{formatMoney(currentBalance)} د.ل</span>
-            <span className="stat-sub">رصيد المتجر</span>
+      <div className="stats-grid finance-stats">
+        <div className="stat-card">
+          <div className="stat-header">
+            <span className="stat-label">الرصيد الحالي</span>
+            <DollarSign size={20} className="stat-icon blue" />
           </div>
-        )}
+          <span className="stat-value blue">{formatMoney(currentBalance)} د.ل</span>
+          <span className="stat-sub">رصيد المتجر</span>
+        </div>
         <div className="stat-card">
           <div className="stat-header">
             <span className="stat-label">صافي الإيرادات</span>
             <TrendingUp size={20} className="stat-icon green" />
           </div>
-          <span className="stat-value green">{formatMoney(netRevenue)} د.ل</span>
-          <span className="stat-sub">إجمالي مبيعات المتجر</span>
+          <span className="stat-value green">{formatMoney(totalRevenue)} د.ل</span>
+          <span className="stat-sub">من أرباح المتجر</span>
         </div>
         <div className="stat-card">
           <div className="stat-header">
-            <span className="stat-label">صافي الأرباح</span>
-            <CircleDollarSign size={20} className="stat-icon purple" />
+            <span className="stat-label">عمولة المنصة</span>
+            <ArrowUpRight size={20} className="stat-icon orange" />
           </div>
-          <span className="stat-value purple">{formatMoney(netProfit)} د.ل</span>
-          <span className="stat-sub">بعد خصم تكلفة البضاعة</span>
+          <span className="stat-value orange">{formatMoney(platformFee)} د.ل</span>
+          <span className="stat-sub">مجموع الرسوم</span>
         </div>
         <div className="stat-card">
           <div className="stat-header">
@@ -183,13 +195,7 @@ const Finance = () => {
           <span className="stat-value orange">
             {formatMoney(custodySummary?.total_custody_owed ?? 0)} د.ل
           </span>
-          <span className="stat-sub">
-            {custodySummary?.status_text || '—'}
-            {custodySummary?.status === 'pending_settlement' &&
-            Number(custodySummary?.number_of_orders) > 0
-              ? ` · ${custodySummary.number_of_orders} طلب`
-              : ''}
-          </span>
+          <span className="stat-sub">{custodySummary?.status_text || '—'}</span>
         </div>
         <div className="stat-card">
           <div className="stat-header">
@@ -207,11 +213,11 @@ const Finance = () => {
           <p className="chart-subtitle">تطور الإيرادات خلال الأشهر الماضية</p>
         </div>
         <div className="chart-container">
-          {chartLoading ? (
+          {loading ? (
             <p className="finance-loading-chart">جاري تحميل الرسم البياني...</p>
           ) : (
             <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={chartData ?? []} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+              <LineChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#242240" />
                 <XAxis dataKey="month" tick={{ fontSize: 13, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 13, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
@@ -253,6 +259,15 @@ const Finance = () => {
 
         <div className="finance-controls">
           <div className="filter-dropdown">
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+              {FINANCE_STATUS_OPTIONS.map((s) => (
+                <option key={s.value} value={s.value}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="filter-dropdown">
             <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
               {FINANCE_TYPE_OPTIONS.map((t) => (
                 <option key={t.value} value={t.value}>
@@ -273,7 +288,7 @@ const Finance = () => {
           </div>
         </div>
 
-        {txError && <p className="finance-error">{txError?.message || 'تعذّر تحميل البيانات المالية'}</p>}
+        {error && <p className="finance-error">{error}</p>}
 
         <div className="transaction-table-wrapper">
           <table className="transaction-table">
@@ -354,52 +369,38 @@ const Finance = () => {
         </div>
       </div>
 
-      <div className="transactions-section custody-logs-section">
-        <div className="transactions-header">
-          <div className="transactions-title-group">
-            <h3 className="section-title">سجل العهدة</h3>
-            <p className="section-subtitle">آخر حركات العهدة المالية للمتجر</p>
+      {custodyLogs.length > 0 && (
+        <div className="transactions-section custody-logs-section">
+          <div className="transactions-header">
+            <div className="transactions-title-group">
+              <h3 className="section-title">سجل العهدة</h3>
+              <p className="section-subtitle">آخر حركات العهدة المالية للمتجر</p>
+            </div>
+          </div>
+          <div className="transaction-table-wrapper">
+            <table className="transaction-table">
+              <thead>
+                <tr>
+                  <th>التاريخ</th>
+                  <th>النوع</th>
+                  <th>المبلغ</th>
+                  <th>الوصف</th>
+                </tr>
+              </thead>
+              <tbody>
+                {custodyLogs.map((log) => (
+                  <tr key={log.id}>
+                    <td>{log.created_at?.slice(0, 10) ?? '—'}</td>
+                    <td>{log.type ?? log.action ?? '—'}</td>
+                    <td>{formatMoney(log.amount ?? 0)} د.ل</td>
+                    <td>{log.description ?? log.note ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
-        <div className="transaction-table-wrapper">
-          <table className="transaction-table">
-            <thead>
-              <tr>
-                <th>التاريخ</th>
-                <th>الإجراء</th>
-                <th>المبلغ</th>
-                <th>الرصيد بعد الحركة</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan="4" className="no-results-cell">
-                    جاري تحميل سجل العهدة...
-                  </td>
-                </tr>
-              ) : custodyLogs.length > 0 ? (
-                custodyLogs.map((log) => (
-                  <tr key={log.id}>
-                    <td>{log.date ? String(log.date).slice(0, 16).replace('T', ' ') : '—'}</td>
-                    <td>{log.action ?? '—'}</td>
-                    <td className={`amount-cell ${log.amount >= 0 ? 'positive' : 'negative'}`}>
-                      {log.amount_formatted ?? formatMoney(log.amount)} د.ل
-                    </td>
-                    <td>{formatMoney(log.balance_after)} د.ل</td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan="4" className="no-results-cell">
-                    لا توجد حركات عهدة مسجلة حالياً.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      )}
 
       <WalletModal
         isOpen={isWalletOpen}

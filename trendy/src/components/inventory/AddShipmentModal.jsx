@@ -1,25 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { X, AlertTriangle } from 'lucide-react';
-import ConfirmDialog from '../common/ConfirmDialog';
-import {
-  fetchShipmentCatalog,
-  fetchEnrichedProductVariants,
-  suggestBatchNumber,
-} from '../../api/inventory';
+import { fetchShipmentCatalog, suggestBatchNumber } from '../../api/inventory';
+import { fetchProductVariants } from '../../api/products';
 import { getApiErrorMessage } from '../../api/stores';
-import {
-  isValidDecimalInput,
-  isValidIntegerInput,
-  preventWheelChange,
-} from '../../utils/numericInput';
-import { ARCHIVE_SHIPMENT_CONFIRM } from './shipmentStatusConfirm';
 import './AddShipmentModal.css';
 
 const AddShipmentModal = ({
   isOpen,
   onClose,
   onSave,
-  onArchive,
   initialData = null,
   storeId,
   isSaving = false,
@@ -36,15 +25,11 @@ const AddShipmentModal = ({
   const [quantities, setQuantities] = useState({}); // variantId -> quantity
   const [loadingVariants, setLoadingVariants] = useState(false);
   const [error, setError] = useState('');
-  const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
-  const [isArchiving, setIsArchiving] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
 
     setError('');
-    setShowArchiveConfirm(false);
-    setIsArchiving(false);
     if (initialData) {
       setSelectedProductId(initialData.productId ? String(initialData.productId) : '');
       setPurchasePrice(initialData.costPrice !== undefined && initialData.costPrice !== null ? String(initialData.costPrice) : '');
@@ -91,26 +76,9 @@ const AddShipmentModal = ({
 
     setLoadingVariants(true);
     setError('');
-    fetchEnrichedProductVariants(selectedProductId, { storeId })
-      .then(({ variants }) => {
-        const enrichedVariants = variants.map((variant) => {
-          const fromInitial =
-            initialData && Array.isArray(initialData.items)
-              ? initialData.items.find(
-                  (item) => String(item.variantId) === String(variant.id),
-                )
-              : null;
-          const initialLabel = fromInitial?.variantLabel;
-          if (
-            initialLabel &&
-            initialLabel !== '—' &&
-            !/^تنوع #\d+$/.test(String(initialLabel).trim())
-          ) {
-            return { ...variant, label: initialLabel };
-          }
-          return variant;
-        });
-        setVariantsList(enrichedVariants);
+    fetchProductVariants(selectedProductId)
+      .then((variants) => {
+        setVariantsList(variants);
         // Pre-fill quantities
         const initialQtys = {};
         variants.forEach((v) => {
@@ -127,15 +95,15 @@ const AddShipmentModal = ({
         setQuantities({});
       })
       .finally(() => setLoadingVariants(false));
-  }, [selectedProductId, initialData, storeId]);
+  }, [selectedProductId, initialData]);
 
   const selectedProduct = catalog.find((p) => String(p.id) === String(selectedProductId));
 
   const handleQuantityChange = (variantId, val) => {
-    if (!isValidIntegerInput(val)) return;
+    const num = val === '' ? '' : Math.max(0, parseInt(val, 10) || 0);
     setQuantities((prev) => ({
       ...prev,
-      [variantId]: val,
+      [variantId]: num,
     }));
   };
 
@@ -153,32 +121,6 @@ const AddShipmentModal = ({
     purchasePrice !== '' &&
     sellingPrice !== '' &&
     Number(sellingPrice) < Number(purchasePrice);
-
-  const canArchive =
-    isEditMode &&
-    initialData?.statusRaw !== 'finished' &&
-    initialData?.statusRaw !== 'cancelled' &&
-    typeof onArchive === 'function';
-
-  const handleArchive = () => {
-    if (!initialData || !canArchive) return;
-    setShowArchiveConfirm(true);
-  };
-
-  const handleConfirmArchive = async () => {
-    if (!initialData || !canArchive) return;
-    setError('');
-    setIsArchiving(true);
-    try {
-      await onArchive(initialData);
-      setShowArchiveConfirm(false);
-      onClose();
-    } catch (err) {
-      setError(getApiErrorMessage(err, 'تعذّر أرشفة الشحنة.'));
-    } finally {
-      setIsArchiving(false);
-    }
-  };
 
   const handleSubmit = async () => {
     if (!batchNumber.trim()) {
@@ -234,7 +176,6 @@ const AddShipmentModal = ({
     setError('');
     try {
       const payload = {
-        productId: Number(selectedProductId),
         batchNumber: batchNumber.trim(),
         supplierName: supplierName.trim(),
         costPrice: Number(purchasePrice),
@@ -251,7 +192,6 @@ const AddShipmentModal = ({
   if (!isOpen) return null;
 
   return (
-    <>
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content add-shipment-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
@@ -263,16 +203,6 @@ const AddShipmentModal = ({
 
         <div className="shipment-form">
           {error && <p className="form-error">{error}</p>}
-
-          {isEditMode && initialData?.status && (
-            <div className="shipment-status-banner">
-              <span>حالة الشحنة الحالية:</span>
-              <strong>{initialData.status}</strong>
-              {initialData.dynamicStatus && (
-                <span className="status-hint">({initialData.dynamicStatus})</span>
-              )}
-            </div>
-          )}
 
           {/* الحقول الرئيسية */}
           <div className="form-row">
@@ -326,14 +256,11 @@ const AddShipmentModal = ({
                 سعر الشراء <span className="required-mark">*</span>
               </label>
               <input
-                type="text"
-                inputMode="decimal"
+                type="number"
+                min="0"
+                step="0.01"
                 value={purchasePrice}
-                onChange={(e) => {
-                  const raw = e.target.value;
-                  if (isValidDecimalInput(raw)) setPurchasePrice(raw);
-                }}
-                onWheel={preventWheelChange}
+                onChange={(e) => setPurchasePrice(e.target.value)}
                 placeholder="ينطبق على جميع التنوعات"
               />
             </div>
@@ -342,14 +269,11 @@ const AddShipmentModal = ({
                 سعر البيع <span className="required-mark">*</span>
               </label>
               <input
-                type="text"
-                inputMode="decimal"
+                type="number"
+                min="0"
+                step="0.01"
                 value={sellingPrice}
-                onChange={(e) => {
-                  const raw = e.target.value;
-                  if (isValidDecimalInput(raw)) setSellingPrice(raw);
-                }}
-                onWheel={preventWheelChange}
+                onChange={(e) => setSellingPrice(e.target.value)}
                 placeholder="ينطبق على جميع التنوعات"
               />
             </div>
@@ -387,11 +311,10 @@ const AddShipmentModal = ({
                           <td className="current-qty">{v.quantity ?? 0} قطعة</td>
                           <td className="input-qty">
                             <input
-                              type="text"
-                              inputMode="numeric"
+                              type="number"
+                              min="0"
                               value={quantities[v.id] ?? ''}
                               onChange={(e) => handleQuantityChange(v.id, e.target.value)}
-                              onWheel={preventWheelChange}
                               placeholder="0"
                             />
                           </td>
@@ -433,16 +356,6 @@ const AddShipmentModal = ({
         </div>
 
         <div className="modal-footer">
-          {canArchive && (
-            <button
-              className="archive-button"
-              onClick={handleArchive}
-              type="button"
-              disabled={isSaving}
-            >
-              أرشفة الشحنة
-            </button>
-          )}
           <button className="cancel-button" onClick={onClose} type="button" disabled={isSaving}>
             إلغاء
           </button>
@@ -457,17 +370,6 @@ const AddShipmentModal = ({
         </div>
       </div>
     </div>
-
-    <ConfirmDialog
-      isOpen={showArchiveConfirm}
-      onClose={() => !isArchiving && setShowArchiveConfirm(false)}
-      onConfirm={handleConfirmArchive}
-      title={ARCHIVE_SHIPMENT_CONFIRM.title}
-      message={ARCHIVE_SHIPMENT_CONFIRM.message}
-      confirmText={ARCHIVE_SHIPMENT_CONFIRM.confirmText}
-      isLoading={isArchiving}
-    />
-    </>
   );
 };
 

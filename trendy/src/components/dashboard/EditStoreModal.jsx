@@ -9,15 +9,12 @@ const EditStoreModal = ({ isOpen, onClose, store, onSave, saving = false }) => {
   const [zones, setZones] = useState([]);
   const [zonesLoading, setZonesLoading] = useState(false);
   const fileInputRef = useRef(null);
-  const wasOpenRef = useRef(false);
-  const ignoreOverlayClickRef = useRef(false);
 
   useEffect(() => {
-    if (isOpen && !wasOpenRef.current) {
+    if (isOpen) {
       setFormData({ ...store });
       setLogoFile(null);
     }
-    wasOpenRef.current = isOpen;
   }, [isOpen, store]);
 
   useEffect(() => {
@@ -36,17 +33,6 @@ const EditStoreModal = ({ isOpen, onClose, store, onSave, saving = false }) => {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleMerchantDataChange = (e) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      merchantData: {
-        ...(prev.merchantData || {}),
-        [name]: value,
-      },
-    }));
-  };
-
   const handleImageChange = (e) => {
     const file = e.target.files?.[0];
     if (!file || !file.type.startsWith('image/')) return;
@@ -57,24 +43,6 @@ const EditStoreModal = ({ isOpen, onClose, store, onSave, saving = false }) => {
       setFormData((prev) => ({ ...prev, image: reader.result }));
     };
     reader.readAsDataURL(file);
-    e.target.value = '';
-  };
-
-  const handleOverlayMouseDown = (e) => {
-    if (e.target !== e.currentTarget) return;
-    if (ignoreOverlayClickRef.current) return;
-    onClose();
-  };
-
-  const openFilePicker = () => {
-    ignoreOverlayClickRef.current = true;
-    const releaseOverlayGuard = () => {
-      window.setTimeout(() => {
-        ignoreOverlayClickRef.current = false;
-      }, 300);
-    };
-    window.addEventListener('focus', releaseOverlayGuard, { once: true });
-    fileInputRef.current?.click();
   };
 
   const handleSubmit = async (e) => {
@@ -83,10 +51,8 @@ const EditStoreModal = ({ isOpen, onClose, store, onSave, saving = false }) => {
     if (ok !== false) onClose();
   };
 
-
-
   return (
-    <div className="modal-overlay" onMouseDown={handleOverlayMouseDown}>
+    <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content edit-store-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <div className="modal-title-group">
@@ -121,7 +87,7 @@ const EditStoreModal = ({ isOpen, onClose, store, onSave, saving = false }) => {
             <button
               type="button"
               className="upload-image-btn"
-              onClick={openFilePicker}
+              onClick={() => fileInputRef.current?.click()}
             >
               <Upload size={18} />
               {formData.image ? 'تغيير صورة المتجر' : 'رفع صورة المتجر'}
@@ -130,7 +96,7 @@ const EditStoreModal = ({ isOpen, onClose, store, onSave, saving = false }) => {
 
           <div className="form-group">
             <label htmlFor="name">اسم المتجر</label>
-            <input type="text" id="name" name="name" value={formData.name} onChange={handleChange} className="form-input" required />
+            <input type="text" id="name" name="name" value={formData.name} onChange={handleChange} className="form-input" />
           </div>
 
           <div className="form-group">
@@ -140,92 +106,33 @@ const EditStoreModal = ({ isOpen, onClose, store, onSave, saving = false }) => {
 
           <div className="form-row">
             <div className="form-group">
-              <label htmlFor="type">نوع المتجر</label>
-              <select
-                id="type"
-                name="type"
-                value={formData.type || ''}
-                onChange={handleChange}
-                className="form-input form-select"
-                required
-              >
-                <option value="local">محلي</option>
-                <option value="electronic">إلكتروني</option>
-              </select>
+              <label htmlFor="email">البريد الإلكتروني</label>
+              <input type="email" id="email" name="email" value={formData.email} onChange={handleChange} className="form-input" />
             </div>
             <div className="form-group">
               <label htmlFor="phone">رقم الهاتف</label>
-              <input type="tel" id="phone" name="phone" value={formData.phone} onChange={handleChange} className="form-input text-left" dir="ltr" required />
+              <input type="tel" id="phone" name="phone" value={formData.phone} onChange={handleChange} className="form-input text-left" dir="ltr" />
             </div>
           </div>
 
-          <div className="form-row">
-            <div className="form-group">
-              <label htmlFor="zoneId">المنطقة</label>
-              <select
-                id="zoneId"
-                name="zoneId"
-                value={formData.zoneId ?? ''}
-                onChange={handleChange}
-                className="form-input form-select"
-                required
-                disabled={zonesLoading}
-              >
-                <option value="">{zonesLoading ? 'جاري تحميل المناطق...' : 'اختر المنطقة'}</option>
-                {zones.map((zone) => (
-                  <option key={zone.id} value={zone.id}>
-                    {zone.name ?? zone.title ?? `منطقة ${zone.id}`}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="form-group">
-              <label htmlFor="googleMapUrl">
-                رابط خريطة Google
-                {formData.type === 'local' && <span className="required-mark"> *</span>}
-              </label>
-              <input
-                type="text"
-                id="googleMapUrl"
-                name="googleMapUrl"
-                value={formData.googleMapUrl || ''}
-                onChange={handleChange}
-                className="form-input"
-                placeholder="https://maps.google.com/..."
-                required={formData.type === 'local'}
-              />
-            </div>
-          </div>
-
-          <div className="merchant-data-section">
-            <h3 className="section-title">بيانات التاجر</h3>
-            
-            <div className="form-row">
-              <div className="form-group">
-                <label htmlFor="tax_number">الرقم الضريبي</label>
-                <input
-                  type="text"
-                  id="tax_number"
-                  name="tax_number"
-                  value={formData.merchantData?.tax_number || ''}
-                  onChange={handleMerchantDataChange}
-                  className="form-input"
-                  placeholder="أدخل الرقم الضريبي للمتجر"
-                />
-              </div>
-              <div className="form-group">
-                <label htmlFor="commercial_register">رقم السجل التجاري</label>
-                <input
-                  type="text"
-                  id="commercial_register"
-                  name="commercial_register"
-                  value={formData.merchantData?.commercial_register || ''}
-                  onChange={handleMerchantDataChange}
-                  className="form-input"
-                  placeholder="أدخل رقم السجل التجاري"
-                />
-              </div>
-            </div>
+          <div className="form-group">
+            <label htmlFor="zoneId">المنطقة</label>
+            <select
+              id="zoneId"
+              name="zoneId"
+              value={formData.zoneId ?? ''}
+              onChange={handleChange}
+              className="form-input form-select"
+              required
+              disabled={zonesLoading}
+            >
+              <option value="">{zonesLoading ? 'جاري تحميل المناطق...' : 'اختر المنطقة'}</option>
+              {zones.map((zone) => (
+                <option key={zone.id} value={zone.id}>
+                  {zone.name ?? zone.title ?? `منطقة ${zone.id}`}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="modal-footer">

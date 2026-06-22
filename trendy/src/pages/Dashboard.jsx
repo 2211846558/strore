@@ -1,34 +1,32 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import StatCard from '../components/dashboard/StatCard';
 import StoreCard from '../components/dashboard/StoreCard';
 import EditStoreModal from '../components/dashboard/EditStoreModal';
-import StoreDetailsModal from '../components/dashboard/StoreDetailsModal';
 import ChartsSection from '../components/dashboard/ChartsSection';
 import { Edit, Package, ShoppingCart, DollarSign, TrendingUp, Users } from 'lucide-react';
 import ChatBadge from '../components/chat/ChatBadge';
 import SupportBadge from '../components/chat/SupportBadge';
-import { useAuth, useStore, useAuthActions } from '../context/AuthContext';
-import { userCanEditStoreProfile } from '../api/auth';
+import { useAuth } from '../context/AuthContext';
 import {
   updateStore,
   buildStoreUpdateFormData,
   getApiErrorMessage,
-  fetchStoreProfile,
+  fetchStore,
   fetchStoreRatings,
-  fetchZones,
   mergeStoreProfile,
   resolveStoreEmail,
-  resolveStoreStatus,
-  resolveStoreLocation,
-  normalizeStoreTypeLabel,
-  normalizeEntityTypeLabel,
-  getStoreStatusLabel,
 } from '../api/stores';
-import { useDashboard } from '../api/hooks/useDashboard';
+import { fetchDashboardStats, fetchStoreMonthlyRevenueChart } from '../api/dashboard';
 import { getStoreLogoCandidates, resolveStoreLogoUrl } from '../api/media';
 import './Dashboard.css';
 
-const mapStoreToForm = (store, ratingAverage = null, user = null, zones = []) => {
+const STORE_STATUS_LABELS = {
+  active: 'نشط',
+  inactive: 'غير نشط',
+  pending: 'قيد المراجعة',
+};
+
+const mapStoreToForm = (store, ratingAverage = null, user = null) => {
   const rawLogo = store?.logo || '';
   const id = store?.id;
   const imageCandidates = getStoreLogoCandidates(rawLogo, id);
@@ -37,8 +35,7 @@ const mapStoreToForm = (store, ratingAverage = null, user = null, zones = []) =>
       ? Number(ratingAverage).toFixed(1)
       : '—';
 
-  const statusRaw = resolveStoreStatus(store, user, id);
-  const location = resolveStoreLocation(store, zones);
+  const statusRaw = String(store?.status ?? 'inactive').toLowerCase();
 
   return {
     id,
@@ -47,23 +44,10 @@ const mapStoreToForm = (store, ratingAverage = null, user = null, zones = []) =>
     phone: store?.phone || '',
     email: resolveStoreEmail(store, user),
     zoneId: String(store?.zone_id ?? store?.zone?.id ?? ''),
-    location: location || '—',
-    type: store?.type || 'local',
-    typeLabel: normalizeStoreTypeLabel(store?.type),
-    storeCode: store?.store_code ?? store?.code ?? '',
-    entityType: store?.entity_type ?? '',
-    entityTypeLabel: normalizeEntityTypeLabel(store?.entity_type),
-    commercialRegisterNumber:
-      store?.commercial_register_number ?? store?.merchant_data?.commercial_register ?? '',
-    notes: store?.notes ?? '',
-    googleMapUrl: store?.google_map_url || '',
-    merchantData: {
-      tax_number: store?.merchant_data?.tax_number || '',
-      commercial_register: store?.merchant_data?.commercial_register || '',
-    },
+    location: store?.zone?.name ?? store?.zone_name ?? '',
     rating,
     statusRaw,
-    statusLabel: getStoreStatusLabel(statusRaw),
+    statusLabel: STORE_STATUS_LABELS[statusRaw] ?? store?.status ?? '—',
     image: resolveStoreLogoUrl(rawLogo, id) || '',
     imageCandidates,
   };
@@ -76,74 +60,62 @@ const formatMoney = (value) =>
   });
 
 const Dashboard = () => {
-  const { user } = useAuth();
-  const { store, storeId } = useStore();
-  const { updateStoreInSession } = useAuthActions();
+  const { user, store, storeId, updateStoreInSession } = useAuth();
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [storeData, setStoreData] = useState(() => mapStoreToForm(store, null, user));
-  const [zones, setZones] = useState([]);
-  const [profileStore, setProfileStore] = useState(null);
-  const [profileRating, setProfileRating] = useState(null);
   const [toast, setToast] = useState(null);
   const [saving, setSaving] = useState(false);
-  const storeRef = useRef(store);
-  const userRef = useRef(user);
-  storeRef.current = store;
-  userRef.current = user;
+  const [statsLoading, setStatsLoading] = useState(true);
+  const [statsError, setStatsError] = useState('');
+  const [stats, setStats] = useState(null);
+  const [monthlyRevenue, setMonthlyRevenue] = useState([]);
 
-  const {
-    data: dashData,
-    isLoading: statsLoading,
-    error: statsError,
-  } = useDashboard(storeId);
-  const stats = dashData?.stats ?? null;
-  const monthlyRevenue = dashData?.monthlyRevenue ?? [];
-
-  const loadStoreProfile = useCallback(async (cancelled) => {
+  const loadStoreProfile = useCallback(async () => {
     if (!storeId) return;
-    const sessionStore = storeRef.current;
-    const currentUser = userRef.current;
     try {
-      const [storeDetails, zonesList] = await Promise.all([
-        fetchStoreProfile(storeId, sessionStore, currentUser),
-        fetchZones().catch(() => []),
+      const [storeDetails, ratings] = await Promise.all([
+        fetchStore(storeId),
+        fetchStoreRatings(storeId),
       ]);
-
-      let ratingAverage = null;
-      try {
-        const ratings = await fetchStoreRatings(storeId);
-        ratingAverage = ratings.average;
-      } catch {
-        // المتجر المعطّل لا يُرجع من مسار التقييمات العام
-      }
-
-      if (cancelled?.current) return;
-      setZones(Array.isArray(zonesList) ? zonesList : []);
-      setProfileStore(storeDetails);
-      setProfileRating(ratingAverage);
-      setStoreData(mapStoreToForm(storeDetails, ratingAverage, currentUser, zonesList));
-      updateStoreInSession(storeDetails);
+      const merged = mergeStoreProfile(storeDetails, store, user);
+      setStoreData(mapStoreToForm(merged, ratings.average, user));
     } catch {
-      if (cancelled?.current) return;
-      if (sessionStore) {
-        setProfileStore(sessionStore);
-        setProfileRating(null);
-        setStoreData(mapStoreToForm(sessionStore, null, currentUser, []));
-      }
+      if (store) setStoreData(mapStoreToForm(store, null, user));
     }
-  }, [storeId, updateStoreInSession]);
+  }, [storeId, store, user]);
 
   useEffect(() => {
-    const cancelled = { current: false };
-    loadStoreProfile(cancelled);
-    return () => { cancelled.current = true; };
+    loadStoreProfile();
   }, [loadStoreProfile]);
 
+  const loadDashboardData = useCallback(async () => {
+    setStatsLoading(true);
+    setStatsError('');
+    try {
+      const [dashboardStats, chart] = await Promise.all([
+        fetchDashboardStats({ storeId }),
+        fetchStoreMonthlyRevenueChart(5),
+      ]);
+      setStats(dashboardStats);
+      setMonthlyRevenue(chart);
+    } catch (err) {
+      if (err?.status === 401 || err?.isUnauthorized) {
+        setStatsError('');
+        setStats(null);
+        setMonthlyRevenue([]);
+        return;
+      }
+      setStatsError(getApiErrorMessage(err, 'تعذّر تحميل إحصائيات لوحة التحكم'));
+      setStats(null);
+      setMonthlyRevenue([]);
+    } finally {
+      setStatsLoading(false);
+    }
+  }, [storeId]);
+
   useEffect(() => {
-    if (!profileStore || zones.length === 0) return;
-    setStoreData(mapStoreToForm(profileStore, profileRating, userRef.current, zones));
-  }, [zones, profileStore, profileRating]);
+    loadDashboardData();
+  }, [loadDashboardData]);
 
   const showToast = (message) => {
     setToast(message);
@@ -165,19 +137,14 @@ const Dashboard = () => {
         name: formData.name,
         description: formData.description,
         phone: formData.phone,
-        type: formData.type,
-        merchant_data: formData.merchantData,
-        zone_id: formData.zoneId ? Number(formData.zoneId) : null,
-        google_map_url: formData.googleMapUrl ? formData.googleMapUrl : null,
+        zone_id: formData.zoneId ? Number(formData.zoneId) : undefined,
+        store_email: formData.email,
         ...(logoFile ? { logo: formData.image } : {}),
       };
       updateStoreInSession({
         ...mergeStoreProfile(updated, store, user),
-        type: updated.type,
-        merchant_data: updated.merchant_data,
-        zone_id: updated.zone_id,
-        google_map_url: updated.google_map_url,
-        zone_name: zones.find((zone) => Number(zone.id) === Number(formData.zoneId))?.name ?? storeData.location,
+        store_email: formData.email || resolveStoreEmail(updated, user),
+        zone_id: formData.zoneId ? Number(formData.zoneId) : undefined,
       });
       await loadStoreProfile();
       showToast('تم تحديث بيانات المتجر بنجاح');
@@ -192,18 +159,15 @@ const Dashboard = () => {
 
   const growthValue =
     stats?.salesGrowth != null ? `${stats.salesGrowth}%` : statsLoading ? '...' : '—';
-  const canEditStore = userCanEditStoreProfile(user);
 
   return (
     <div className="dashboard-page">
       <header className="page-header">
         <div className="header-actions">
-          {canEditStore && (
-            <button className="edit-store-btn" onClick={() => setIsEditModalOpen(true)}>
-              <Edit size={16} />
-              تعديل بيانات المتجر
-            </button>
-          )}
+          <button className="edit-store-btn" onClick={() => setIsEditModalOpen(true)}>
+            <Edit size={16} />
+            تعديل بيانات المتجر
+          </button>
           <ChatBadge />
           <SupportBadge />
         </div>
@@ -214,10 +178,10 @@ const Dashboard = () => {
       </header>
 
       <div className="dashboard-grid store-section">
-        <StoreCard store={storeData} onViewDetails={() => setIsDetailsModalOpen(true)} />
+        <StoreCard store={storeData} />
       </div>
 
-      {statsError && <div className="dashboard-error">{statsError.message || 'تعذّر تحميل الإحصائيات'}</div>}
+      {statsError && <div className="dashboard-error">{statsError}</div>}
 
       <ChartsSection data={monthlyRevenue} loading={statsLoading} />
 
@@ -264,20 +228,12 @@ const Dashboard = () => {
         />
       </div>
 
-      {canEditStore && (
-        <EditStoreModal
-          isOpen={isEditModalOpen}
-          onClose={() => setIsEditModalOpen(false)}
-          store={storeData}
-          onSave={handleSaveStoreData}
-          saving={saving}
-        />
-      )}
-
-      <StoreDetailsModal
-        isOpen={isDetailsModalOpen}
-        onClose={() => setIsDetailsModalOpen(false)}
+      <EditStoreModal
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
         store={storeData}
+        onSave={handleSaveStoreData}
+        saving={saving}
       />
 
       {toast && (

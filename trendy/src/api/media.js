@@ -4,7 +4,7 @@
  */
 export function getBackendOrigin() {
   const apiBase = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') || '';
-  if (apiBase.startsWith('http://') || apiBase.startsWith('https://')) {
+  if (apiBase) {
     return apiBase.replace(/\/api\/?$/, '') || apiBase;
   }
   return typeof window !== 'undefined' ? window.location.origin : '';
@@ -28,17 +28,6 @@ export function resolveMediaUrl(url) {
   try {
     const parsed = new URL(trimmed);
     const apiOrigin = new URL(origin || window.location.origin);
-
-    if (import.meta.env.DEV) {
-      const storagePath = parsed.pathname.match(/\/storage\/.*$/)?.[0];
-      if (
-        storagePath &&
-        (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') &&
-        parsed.port === '8000'
-      ) {
-        return storagePath;
-      }
-    }
 
     if (
       (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') &&
@@ -80,22 +69,11 @@ export function getProductImageCandidates(url, productId) {
       const correctPath = `/storage/products/${productId}/${filename}`;
       const absolute = `${origin}${correctPath}`;
       const proxied = correctPath;
-      const ordered = import.meta.env.DEV
-        ? [proxied, absolute, resolved, url]
-        : [absolute, proxied, resolved, url];
-      return [...new Set(ordered.filter(Boolean))];
+      return [...new Set([absolute, proxied, resolved, url].filter(Boolean))];
     }
   }
 
-  if (resolved) {
-    if (import.meta.env.DEV) {
-      const storagePath = resolved.match(/\/storage\/.*$/)?.[0];
-      if (storagePath) {
-        return [...new Set([storagePath, resolved, url].filter(Boolean))];
-      }
-    }
-    return [resolved];
-  }
+  if (resolved) return [resolved];
   return [url];
 }
 

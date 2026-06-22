@@ -1,7 +1,6 @@
 import { apiRequest } from './client';
 import { API_ENDPOINTS } from './config';
 import { extractListFromResponse } from './finance';
-
 import {
   fetchCurrentUser,
   getStoredUser,
@@ -11,8 +10,29 @@ import {
   userCanChargeStoreWallet,
 } from './auth';
 
+function pickWalletBalance(walletPayload, storePayload) {
+  const store = storePayload?.data ?? storePayload ?? {};
+  const wallet = walletPayload?.data ?? walletPayload ?? {};
+  const candidates = [
+    wallet.balance,
+    wallet.store_balance,
+    wallet.store_wallet_balance,
+    store.wallet_balance,
+    store.wallet?.balance,
+    store.store_wallet_balance,
+  ];
+
+  for (const value of candidates) {
+    if (value == null || value === '') continue;
+    const num = Number(value);
+    if (!Number.isNaN(num)) return num;
+  }
+
+  return 0;
+}
+
 /**
- * GET /api/wallet/balance
+ * GET /api/wallet/balance — مع دمج رصيد محفظة المتجر إن وُجد
  */
 export async function getWalletBalance() {
   const res = await apiRequest(API_ENDPOINTS.walletBalance);
@@ -20,13 +40,19 @@ export async function getWalletBalance() {
 }
 
 export async function getStoreWalletBalance({ storeId } = {}) {
-  const res = await getWalletBalance().catch(() => ({}));
-  const data = res?.data ?? res ?? {};
-  const balance = Number(data.balance ?? data.store_balance ?? data.store_wallet_balance ?? 0);
+  const [walletRes, storeRes] = await Promise.all([
+    getWalletBalance().catch(() => ({})),
+    storeId
+      ? apiRequest(API_ENDPOINTS.storeShow(storeId)).catch(() => null)
+      : Promise.resolve(null),
+  ]);
+
+  const balance = pickWalletBalance(walletRes, storeRes);
+  const base = walletRes?.data ?? walletRes ?? {};
 
   return {
-    ...data,
-    balance: Number.isNaN(balance) ? 0 : balance,
+    ...base,
+    balance,
   };
 }
 

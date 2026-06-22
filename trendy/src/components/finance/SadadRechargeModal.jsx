@@ -12,12 +12,28 @@ import {
   isStripeConfigured,
   STRIPE_PUBLISHABLE_KEY,
   translateStripeError,
-  getStripeCardNumberOptions,
-  getStripeSplitFieldStyle,
 } from '../../api/stripe';
 import { isValidDecimalInput, preventWheelChange } from '../../utils/numericInput';
-import { StripeModalElements } from '../../providers/StripeProvider';
 import './SadadRechargeModal.css';
+
+const getStripeFieldStyle = () => ({
+  style: {
+    base: {
+      fontSize: '16px',
+      color: '#e8e6f5',
+      fontFamily: '"Tajawal", system-ui, sans-serif',
+      iconColor: '#8b3dff',
+      lineHeight: '24px',
+      '::placeholder': {
+        color: '#7b7898',
+      },
+    },
+    invalid: {
+      color: '#ef4444',
+      iconColor: '#ef4444',
+    },
+  },
+});
 
 const WalletRechargeForm = ({ onClose, onConfirm }) => {
   const stripe = useStripe();
@@ -26,11 +42,11 @@ const WalletRechargeForm = ({ onClose, onConfirm }) => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [cardFields, setCardFields] = useState({ number: false, expiry: false, cvc: false });
+  const [readyCount, setReadyCount] = useState(0);
 
-  const stripeNumberOptions = useMemo(() => getStripeCardNumberOptions(), []);
-  const stripeFieldOptions = useMemo(() => getStripeSplitFieldStyle(), []);
+  const stripeFieldOptions = useMemo(() => getStripeFieldStyle(), []);
   const cardComplete = cardFields.number && cardFields.expiry && cardFields.cvc;
-  const stripeReady = Boolean(stripe && elements);
+  const cardReady = readyCount >= 3;
 
   const handleFieldChange = (field) => (event) => {
     setCardFields((prev) => ({ ...prev, [field]: event.complete }));
@@ -91,43 +107,42 @@ const WalletRechargeForm = ({ onClose, onConfirm }) => {
       </label>
 
       <div className="sadad-stripe-fields">
-        {!stripeReady ? (
-          <p className="sadad-hint">جاري تهيئة بوابة الدفع...</p>
-        ) : (
-          <>
-            <div className="sadad-stripe-field">
-              <span className="sadad-stripe-label">رقم البطاقة</span>
-              <div className="sadad-stripe-input">
-                <CardNumberElement
-                  options={stripeNumberOptions}
-                  onChange={handleFieldChange('number')}
-                />
-              </div>
-            </div>
+        <div className="sadad-stripe-field">
+          <span className="sadad-stripe-label">رقم البطاقة</span>
+          <div className="sadad-stripe-input">
+            <CardNumberElement
+              options={stripeFieldOptions}
+              onReady={() => setReadyCount((c) => c + 1)}
+              onChange={handleFieldChange('number')}
+            />
+          </div>
+        </div>
 
-            <div className="sadad-stripe-row">
-              <div className="sadad-stripe-field">
-                <span className="sadad-stripe-label">تاريخ الانتهاء</span>
-                <div className="sadad-stripe-input">
-                  <CardExpiryElement
-                    options={stripeFieldOptions}
-                    onChange={handleFieldChange('expiry')}
-                  />
-                </div>
-              </div>
-              <div className="sadad-stripe-field">
-                <span className="sadad-stripe-label">CVV</span>
-                <div className="sadad-stripe-input">
-                  <CardCvcElement
-                    options={stripeFieldOptions}
-                    onChange={handleFieldChange('cvc')}
-                  />
-                </div>
-              </div>
+        <div className="sadad-stripe-row">
+          <div className="sadad-stripe-field">
+            <span className="sadad-stripe-label">تاريخ الانتهاء</span>
+            <div className="sadad-stripe-input">
+              <CardExpiryElement
+                options={stripeFieldOptions}
+                onReady={() => setReadyCount((c) => c + 1)}
+                onChange={handleFieldChange('expiry')}
+              />
             </div>
-          </>
-        )}
+          </div>
+          <div className="sadad-stripe-field">
+            <span className="sadad-stripe-label">CVV</span>
+            <div className="sadad-stripe-input">
+              <CardCvcElement
+                options={stripeFieldOptions}
+                onReady={() => setReadyCount((c) => c + 1)}
+                onChange={handleFieldChange('cvc')}
+              />
+            </div>
+          </div>
+        </div>
       </div>
+
+      {!cardReady && <p className="sadad-hint">جاري تحميل حقول البطاقة...</p>}
 
       <p className="sadad-secure-note">
         <ShieldCheck size={14} />
@@ -153,7 +168,7 @@ const WalletRechargeForm = ({ onClose, onConfirm }) => {
       <button
         type="submit"
         className="sadad-submit"
-        disabled={loading || !stripeReady || !cardComplete}
+        disabled={loading || !stripe || !cardReady || !cardComplete}
       >
         {loading ? 'جاري الشحن...' : 'شحن المحفظة'}
       </button>
@@ -190,9 +205,7 @@ const SadadRechargeModal = ({ isOpen, onClose, onConfirm }) => {
             )}
           </div>
         ) : (
-          <StripeModalElements mountKey="wallet-recharge">
-            <WalletRechargeForm onClose={onClose} onConfirm={onConfirm} />
-          </StripeModalElements>
+          <WalletRechargeForm onClose={onClose} onConfirm={onConfirm} />
         )}
       </div>
     </div>

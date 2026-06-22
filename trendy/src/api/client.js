@@ -12,7 +12,6 @@ export async function apiRequest(path, { method = 'GET', body, headers = {}, aut
 
   const config = {
     method,
-    credentials: auth ? 'same-origin' : 'omit',
     headers: {
       Accept: 'application/json',
       ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
@@ -48,7 +47,6 @@ export async function apiRequest(path, { method = 'GET', body, headers = {}, aut
     error.errors = data?.errors || null;
     error.data = data;
     error.isUnauthorized = response.status === 401;
-    error.isPublicRequest = !auth;
 
     if (error.isUnauthorized && auth && token) {
       notifyUnauthorized();

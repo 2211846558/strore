@@ -1,13 +1,7 @@
 .trendy-brand-image {
   display: block;
-  width: 130px;
-  max-width: 100%;
+  width: 88px;
   height: auto;
   object-fit: contain;
-  margin: 0 auto 4px;
-  background: transparent;
-}
-
-[data-theme='dark'] .trendy-brand-image {
-  mix-blend-mode: screen;
+  margin: 0 auto 8px;
 }

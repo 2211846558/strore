@@ -3,7 +3,6 @@ import { API_ENDPOINTS } from './config';
 import { fetchAllOrders } from './orders';
 import { getStoredUser } from './auth';
 
-
 /** معرّفات مستخدمي المتجر الحالي (المدير) لتمييز رسائل المتجر عن الزبون */
 function getCurrentUserId() {
   const user = getStoredUser();
@@ -181,12 +180,11 @@ export async function fetchChats({ storeId } = {}) {
     const res = await apiRequest(API_ENDPOINTS.ordersChat);
     return extractList(res).map((row) => mapChat(row));
   } catch (err) {
-    if (isChatListRouteError(err)) {
-      const orders = await fetchAllOrders({ storeId });
-      return orders.map(mapOrderToChat);
-    }
-    return [];
+    if (!isChatListRouteError(err)) throw err;
   }
+
+  const orders = await fetchAllOrders({ storeId });
+  return orders.map(mapOrderToChat);
 }
 
 /**

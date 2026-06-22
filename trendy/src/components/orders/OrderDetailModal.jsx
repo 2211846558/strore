@@ -21,23 +21,14 @@ const OrderDetailModal = ({ isOpen, onClose, order, loading = false }) => {
           <div className="order-detail-body">
             <div className="order-detail-row two-cols">
               <div className="order-detail-field">
-                <span className="order-detail-label">الموظف</span>
-                <strong>{order.staffName}</strong>
+                <span className="order-detail-label">اسم العميل</span>
+                <strong>{order.customerName}</strong>
               </div>
-              {!order.isPos && order.buyerName && order.buyerName !== '—' && (
-                <div className="order-detail-field">
-                  <span className="order-detail-label">الزبون</span>
-                  <strong>{order.buyerName}</strong>
-                </div>
-              )}
-            </div>
-
-            {!order.isPos && order.phone && order.phone !== '—' && (
               <div className="order-detail-field">
-                <span className="order-detail-label">رقم هاتف الزبون</span>
+                <span className="order-detail-label">رقم الهاتف</span>
                 <strong>{order.phone}</strong>
               </div>
-            )}
+            </div>
 
             <div className="order-detail-field">
               <span className="order-detail-label">عنوان التوصيل</span>
@@ -49,35 +40,15 @@ const OrderDetailModal = ({ isOpen, onClose, order, loading = false }) => {
               <strong>{order.status}</strong>
             </div>
 
-            {!order.isPos && (
-              <div className="order-detail-field">
-                <span className="order-detail-label">السائق</span>
-                <strong>
-                  {order.hasDriver
-                    ? order.driverName
-                    : ['تم الشحن', 'قيد التوصيل'].includes(order.status)
-                      ? 'في انتظار سائق متاح'
-                      : '—'}
-                </strong>
-              </div>
-            )}
-
             <div className="order-detail-field">
               <span className="order-detail-label">المنتجات</span>
               <div className="order-products-list">
-                {order.products?.length ? (
-                  order.products.map((p, idx) => (
-                    <div key={idx} className="order-product-item">
-                      <span>{p.name}</span>
-                      <span>
-                        {p.quantity > 1 ? `× ${p.quantity}` : ''}
-                        {p.price > 0 ? ` — ${p.price} د.ل` : ''}
-                      </span>
-                    </div>
-                  ))
-                ) : (
-                  <div className="order-product-item muted">لا توجد منتجات في هذا الطلب.</div>
-                )}
+                {order.products.map((p, idx) => (
+                  <div key={idx} className="order-product-item">
+                    {p.name}
+                    {p.quantity > 1 ? ` × ${p.quantity}` : ''}
+                  </div>
+                ))}
               </div>
             </div>
 

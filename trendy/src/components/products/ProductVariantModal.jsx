@@ -6,14 +6,13 @@ import {
   createProductVariant,
   deleteProductVariant,
 } from '../../api/products';
-import { fetchInventory } from '../../api/inventory';
 import { getApiErrorMessage } from '../../api/stores';
 import './ProductVariantModal.css';
 
 /* ─── مُعرِّف فريد للتركيبة المحددة في صف معين ─── */
 function buildSelectionKey(selections, attributes) {
   return attributes
-    .map((attr) => `${attr.id}:${selections[attr.id] ?? selections[String(attr.id)] ?? ''}`)
+    .map((attr) => `${attr.id}:${selections[attr.id] ?? ''}`)
     .sort()
     .join('|');
 }
@@ -90,7 +89,7 @@ function SavedRow({ variant, attributes, onDelete, disabled }) {
         );
         const localValue = localAv?.value ?? localAv?.name;
 
-        const valId = variant.selections?.[attr.id] ?? variant.selections?.[String(attr.id)];
+        const valId = variant.selections?.[attr.id];
         const valObj = attr.values.find((v) => String(v.id) === String(valId));
         const catalogValue = valObj?.value;
 
@@ -168,26 +167,9 @@ const ProductVariantModal = ({ isOpen, onClose, product, storeId, onVariantAdded
     setRowErrors({});
     setPendingRows([makeEmptyRow()]);
 
-    fetchAttributes()
-      .then(async (attrs) => {
-        const filtered = attrs.filter((a) => a.values?.length > 0);
-        setAttributes(filtered);
-
-        const inventoryResult = await fetchInventory({ perPage: 200 }).catch(() => ({ items: [] }));
-        const inventoryByVariantId = Object.fromEntries(
-          (inventoryResult.items ?? []).map((row) => [
-            String(row.variantId ?? row.id),
-            row,
-          ]),
-        );
-
-        const variants = await fetchProductVariants(product.id, {
-          catalogAttributes: filtered,
-          inventoryByVariantId,
-        });
-        return { variants };
-      })
-      .then(({ variants }) => {
+    Promise.all([fetchAttributes(), fetchProductVariants(product.id)])
+      .then(([attrs, variants]) => {
+        setAttributes(attrs.filter((a) => a.values?.length > 0));
         setSavedVariants(variants);
       })
       .catch((err) => {
@@ -232,14 +214,8 @@ const ProductVariantModal = ({ isOpen, onClose, product, storeId, onVariantAdded
     const usedKeys = new Set(savedVariants.map((v) => v.selectionKey));
 
     pendingRows.forEach((row) => {
-      const hasAnySelection = attributes.some(
-        (attr) => row.selections[attr.id] || row.selections[String(attr.id)],
-      );
-      if (!hasAnySelection) return;
-
-      const missing = attributes.filter(
-        (attr) => !row.selections[attr.id] && !row.selections[String(attr.id)],
-      );
+      // تحقق من اختيار جميع الخصائص
+      const missing = attributes.filter((attr) => !row.selections[attr.id]);
       if (missing.length) {
         errors[row.id] = `اختر قيمة لـ: ${missing.map((a) => a.name).join('، ')}`;
         return;
@@ -259,12 +235,7 @@ const ProductVariantModal = ({ isOpen, onClose, product, storeId, onVariantAdded
 
   /* ─── حفظ جميع الصفوف دفعة واحدة ─── */
   const handleSaveAll = async () => {
-    const rowsToSave = pendingRows.filter((row) =>
-      attributes.every(
-        (attr) => row.selections[attr.id] || row.selections[String(attr.id)],
-      ),
-    );
-    if (!rowsToSave.length) return;
+    if (!pendingRows.length) return;
 
     const errors = validateRows();
     setRowErrors(errors);
@@ -277,22 +248,14 @@ const ProductVariantModal = ({ isOpen, onClose, product, storeId, onVariantAdded
     const succeeded = [];
 
     await Promise.all(
-      rowsToSave.map(async (row) => {
-        const selections = Object.fromEntries(
-          attributes.map((attr) => [
-            attr.id,
-            row.selections[attr.id] ?? row.selections[String(attr.id)],
-          ]),
-        );
-        const attributeValueIds = attributes.map((attr) => Number(selections[attr.id]));
+      pendingRows.map(async (row) => {
+        const attributeValueIds = attributes.map((attr) => Number(row.selections[attr.id]));
         try {
           const created = await createProductVariant(product.id, {
             storeId,
             attributeValueIds,
-            catalogAttributes: attributes,
-            selections,
           });
-          succeeded.push({ rowId: row.id, variant: created });
+          succeeded.push(created);
         } catch (err) {
           newErrors[row.id] = getApiErrorMessage(err, 'تعذّر حفظ التنوع.');
         }
@@ -302,40 +265,20 @@ const ProductVariantModal = ({ isOpen, onClose, product, storeId, onVariantAdded
     setRowErrors(newErrors);
 
     if (succeeded.length) {
-      const succeededIds = new Set(succeeded.map((entry) => entry.rowId));
-      const createdVariants = succeeded.map((entry) => entry.variant);
-
-      setSavedVariants((prev) => {
-        const merged = [...prev];
-        createdVariants.forEach((variant) => {
-          const index = merged.findIndex((item) => item.id === variant.id);
-          if (index >= 0) merged[index] = variant;
-          else merged.push(variant);
-        });
-        return merged;
-      });
-
+      // إعادة جلب التنوعات المحدّثة
       try {
-        const inventoryResult = await fetchInventory({ perPage: 200 }).catch(() => ({ items: [] }));
-        const inventoryByVariantId = Object.fromEntries(
-          (inventoryResult.items ?? []).map((row) => [
-            String(row.variantId ?? row.id),
-            row,
-          ]),
-        );
-        const fresh = await fetchProductVariants(product.id, {
-          catalogAttributes: attributes,
-          inventoryByVariantId,
-        });
+        const fresh = await fetchProductVariants(product.id);
         setSavedVariants(fresh);
       } catch {
-        /* نُبقي التحديث المحلي */
+        /* ignore */
       }
-
-      setPendingRows((prev) => prev.filter((r) => !succeededIds.has(r.id) || newErrors[r.id]));
-      createdVariants.forEach((v) => onVariantAdded?.(v));
+      // إزالة الصفوف التي نجح حفظها
+      const failedIds = new Set(Object.keys(newErrors));
+      setPendingRows((prev) => prev.filter((r) => failedIds.has(r.id)));
+      succeeded.forEach((v) => onVariantAdded?.(v));
 
       if (!Object.keys(newErrors).length) {
+        // إضافة صف فارغ جديد للاستمرار بالإضافة
         setPendingRows([makeEmptyRow()]);
       }
     }
@@ -363,9 +306,7 @@ const ProductVariantModal = ({ isOpen, onClose, product, storeId, onVariantAdded
       pendingRows.length > 0 &&
       attributes.length > 0 &&
       pendingRows.some((r) =>
-        attributes.every(
-          (attr) => r.selections[attr.id] || r.selections[String(attr.id)],
-        ),
+        attributes.every((attr) => r.selections[attr.id]),
       ),
     [isSaving, pendingRows, attributes],
   );
@@ -402,8 +343,6 @@ const ProductVariantModal = ({ isOpen, onClose, product, storeId, onVariantAdded
         <div className="variant-modal-body">
           {loading ? (
             <p className="variant-loading">جاري تحميل التنوعات والخصائص...</p>
-          ) : globalError ? (
-            <p className="form-error vm-global-error">{globalError}</p>
           ) : attributes.length === 0 ? (
             <p className="variant-empty">
               لا توجد خصائص متاحة بقيم. أضف خصائص (لون، مقاس، ...) من لوحة الإدارة أولاً.

@@ -1,22 +1,21 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
-import { Search, Plus, CheckCircle2, Eye } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Search, Plus, CheckCircle2, Archive, RefreshCw, Edit2 } from 'lucide-react';
 
 import ProductModal from '../components/products/ProductModal';
 import ProductVariantModal from '../components/products/ProductVariantModal';
 import ArchiveConfirmModal from '../components/products/ArchiveConfirmModal';
 import ProductDetailModal from '../components/products/ProductDetailModal';
-import { getApiErrorMessage } from '../api/stores';
-import { fetchManagedProductDetails } from '../api/products';
 import {
-  useProducts,
-  useCategories,
-  useCreateProduct,
-  useUpdateProduct,
-  useArchiveProduct,
-  useRestoreProduct,
-} from '../api/hooks/useProducts';
-import { useStore } from '../context/AuthContext';
+  fetchCategories,
+  fetchStoreProducts,
+  fetchProductDetails,
+  createProduct,
+  updateProduct,
+  archiveProduct,
+  restoreProduct,
+} from '../api/products';
+import { getApiErrorMessage } from '../api/stores';
+import { useAuth } from '../context/AuthContext';
 import './Products.css';
 
 const STATUS_OPTIONS = [
@@ -25,11 +24,10 @@ const STATUS_OPTIONS = [
   { value: 'archived', label: 'مؤرشف' },
 ];
 
-const PRODUCTS_KEY = 'products';
-
 const Products = () => {
-  const { storeId } = useStore();
-  const queryClient = useQueryClient();
+  const { storeId } = useAuth();
+  const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
@@ -38,8 +36,13 @@ const Products = () => {
   const [editingProduct, setEditingProduct] = useState(null);
   const [archiveTarget, setArchiveTarget] = useState(null);
   const [toast, setToast] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [loadingEdit, setLoadingEdit] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isArchiving, setIsArchiving] = useState(false);
   const [variantProduct, setVariantProduct] = useState(null);
   const [detailProduct, setDetailProduct] = useState(null);
+  const [error, setError] = useState('');
 
   const showToast = (message) => {
     setToast(message);
@@ -51,62 +54,90 @@ const Products = () => {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  const filters = useMemo(
-    () => ({ storeId, name: debouncedSearch, categoryId: categoryFilter, status: statusFilter }),
-    [storeId, debouncedSearch, categoryFilter, statusFilter],
-  );
+  useEffect(() => {
+    fetchCategories()
+      .then(setCategories)
+      .catch(() => setCategories([]));
+  }, []);
 
-  const { data: products = [], isLoading: loading, error } = useProducts(filters);
-  const { data: categories = [] } = useCategories();
-  const createMutation = useCreateProduct();
-  const updateMutation = useUpdateProduct();
-  const archiveMutation = useArchiveProduct();
-  const restoreMutation = useRestoreProduct();
+  const loadProducts = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const list = await fetchStoreProducts({
+        storeId,
+        name: debouncedSearch,
+        categoryId: categoryFilter,
+        status: statusFilter,
+      });
+      setProducts(list);
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'تعذّر تحميل المنتجات'));
+      setProducts([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [storeId, debouncedSearch, categoryFilter, statusFilter]);
+
+  useEffect(() => {
+    loadProducts();
+  }, [loadProducts]);
 
   const handleSave = async (formData) => {
-    if (!storeId) {
-      throw new Error('لم يتم تحديد المتجر. يرجى تسجيل الدخول مرة أخرى.');
-    }
-    const payload = {
-      storeId,
-      name: formData.name,
-      sku: formData.sku,
-      description: formData.description,
-      price: formData.price,
-      categoryId: formData.categoryId,
-      stock: formData.stock,
-      imageFiles: formData.imageFiles,
-      deletedImages: formData.deletedImageIds,
-    };
+    setIsSaving(true);
+    try {
+      const payload = {
+        storeId,
+        name: formData.name,
+        sku: formData.sku,
+        description: formData.description,
+        price: formData.price,
+        categoryId: formData.categoryId,
+        stock: formData.stock,
+        imageFiles: formData.imageFiles,
+      };
 
-    if (editingProduct) {
-      const updated = await updateMutation.mutateAsync({ id: editingProduct.id, ...payload });
-      const imageChanged = formData.imageFiles?.length || formData.deletedImageIds?.length;
-      showToast(imageChanged ? 'تم تحديث المنتج وتعديل الصور' : 'تم تحديث المنتج');
-      return updated;
-    }
+      if (editingProduct) {
+        const updated = await updateProduct(editingProduct.id, payload);
+        setProducts((prev) =>
+          prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p)),
+        );
+        showToast(
+          formData.imageFiles?.length
+            ? 'تم تحديث المنتج وإضافة الصور'
+            : 'تم تحديث المنتج',
+        );
+        await loadProducts();
+        return updated;
+      }
 
-    await createMutation.mutateAsync(payload);
-    setSearchQuery('');
-    setDebouncedSearch('');
-    setCategoryFilter('all');
-    setStatusFilter('all');
-    showToast('تم إضافة المنتج بنجاح');
+      const created = await createProduct(payload);
+      setProducts((prev) => [created, ...prev]);
+      showToast('تم إضافة المنتج بنجاح');
+      await loadProducts();
+      return created;
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleArchiveToggle = async (product) => {
-    const isArchived = product.status === 'مؤرشف';
+    setIsArchiving(true);
     try {
+      const isArchived = product.status === 'مؤرشف';
       if (isArchived) {
-        await restoreMutation.mutateAsync(product.id);
+        await restoreProduct(product.id);
         showToast('تم إلغاء أرشفة المنتج');
       } else {
-        await archiveMutation.mutateAsync(product.id);
+        await archiveProduct(product.id);
         showToast('تم أرشفة المنتج');
       }
       setArchiveTarget(null);
+      await loadProducts();
     } catch (err) {
       showToast(getApiErrorMessage(err, 'تعذّر تنفيذ العملية'));
+    } finally {
+      setIsArchiving(false);
     }
   };
 
@@ -123,23 +154,19 @@ const Products = () => {
     setVariantProduct(product);
   };
 
-  const openDetails = (product) => {
-    setDetailProduct(product);
-  };
-
-  const openEditFromDetails = async (details) => {
-    setDetailProduct(null);
-    try {
-      const full = await fetchManagedProductDetails(details.id);
-      setEditingProduct(full);
-    } catch {
-      setEditingProduct(details);
-    }
+  const openEdit = async (product) => {
+    setLoadingEdit(true);
     setIsModalOpen(true);
+    try {
+      const details = await fetchProductDetails(product.id);
+      setEditingProduct(details);
+    } catch (err) {
+      setIsModalOpen(false);
+      showToast(getApiErrorMessage(err, 'تعذّر تحميل بيانات المنتج'));
+    } finally {
+      setLoadingEdit(false);
+    }
   };
-
-  const isSaving = createMutation.isPending || updateMutation.isPending;
-  const isArchiving = archiveMutation.isPending || restoreMutation.isPending;
 
   return (
     <div className="products-page">
@@ -189,7 +216,7 @@ const Products = () => {
         </div>
       </div>
 
-      {error && <p className="products-error">{error?.message || 'تعذّر تحميل المنتجات'}</p>}
+      {error && <p className="products-error">{error}</p>}
 
       <div className="products-table-wrapper">
         <table className="products-table">
@@ -214,7 +241,12 @@ const Products = () => {
                 return (
                   <tr key={product.id} className={isArchived ? 'row-archived' : ''}>
                      <td className="td-product-name">
-                       <div className="product-name-cell">
+                       <div 
+                         className="product-name-cell clickable-name-cell"
+                         onClick={() => setDetailProduct(product)}
+                         style={{ cursor: 'pointer' }}
+                         title="عرض التفاصيل وسجل الشحنات"
+                       >
                          <img
                            className="product-thumb"
                            src={product.image}
@@ -249,14 +281,6 @@ const Products = () => {
                     </td>
                     <td className="td-actions">
                       <div className="row-actions">
-                        <button
-                          type="button"
-                          className="action-btn view-btn"
-                          onClick={() => openDetails(product)}
-                          title="عرض التفاصيل"
-                        >
-                          <Eye size={16} />
-                        </button>
                         {!isArchived && (
                           <button
                             type="button"
@@ -267,6 +291,14 @@ const Products = () => {
                             تنوع
                           </button>
                         )}
+                        <button
+                          type="button"
+                          className="row-btn btn-edit"
+                          onClick={() => openEdit(product)}
+                          title="تعديل"
+                        >
+                          تعديل
+                        </button>
                         <button
                           type="button"
                           className={`row-btn ${isArchived ? 'btn-restore' : 'btn-archive'}`}
@@ -290,7 +322,7 @@ const Products = () => {
       </div>
 
       <ProductModal
-        isOpen={isModalOpen}
+        isOpen={isModalOpen && !loadingEdit}
         onClose={() => {
           setIsModalOpen(false);
           setEditingProduct(null);
@@ -313,7 +345,7 @@ const Products = () => {
         storeId={storeId}
         onVariantAdded={() => {
           showToast('تم إضافة التنوع بنجاح');
-          queryClient.invalidateQueries({ queryKey: [PRODUCTS_KEY] });
+          loadProducts();
         }}
       />
 
@@ -330,7 +362,6 @@ const Products = () => {
         onClose={() => setDetailProduct(null)}
         product={detailProduct}
         storeId={storeId}
-        onEdit={openEditFromDetails}
       />
 
       {toast && (

@@ -1,21 +1,9 @@
 import { apiRequest } from './client';
 import { API_ENDPOINTS } from './config';
-import { getStoredUser, resolveManagedStoreId } from './auth';
 import {
   getProductImageCandidates,
   productPlaceholderImage,
 } from './media';
-
-
-function resolveProductStoreId(storeId) {
-  return resolveManagedStoreId(getStoredUser(), storeId);
-}
-
-function normalizeProductPrice(price) {
-  const num = Number(price);
-  if (Number.isNaN(num) || num < 0) return 0;
-  return num;
-}
 
 function mapImageEntry(img, productId) {
   const raw = typeof img === 'string' ? img : img?.url;
@@ -27,15 +15,13 @@ function mapImageEntry(img, productId) {
   };
 }
 
-export function productImageFields(item) {
+function productImageFields(item) {
   const rawList =
     Array.isArray(item.images) && item.images.length
       ? item.images
       : item.thumbnail
         ? [{ url: item.thumbnail }]
-        : item.image
-          ? [{ url: item.image }]
-          : [];
+        : [];
 
   const images = rawList.map((img) => mapImageEntry(img, item.id));
   const primary = images[0];
@@ -171,38 +157,41 @@ export function buildColorDotsFromAttributes(attributes = []) {
  * POST /api/my-store/products/{productId}/variants
  * body: { attribute_value_ids: number[] }
  */
-export async function createProductVariant(
-  productId,
-  { storeId, attributeValueIds, catalogAttributes = [], selections = null },
-) {
+export async function createProductVariant(productId, { storeId, attributeValueIds }) {
   const body = {
     attribute_value_ids: attributeValueIds,
   };
-  const resolvedStoreId = resolveProductStoreId(storeId);
-  if (resolvedStoreId) body.store_id = resolvedStoreId;
+  if (storeId) body.store_id = storeId;
 
   const res = await apiRequest(API_ENDPOINTS.myStoreProductVariants(productId), {
     method: 'POST',
     body,
   });
-  const created = res?.data ?? res;
+  return res?.data ?? res;
+}
 
-  const mapped = mapProductVariant(
-    { ...created, attribute_value_ids: attributeValueIds },
-    catalogAttributes,
-    { selections: selections ?? undefined },
+/**
+ * قائمة المنتجات تُرجع thumbnail فقط — نُكمل الصور من تفاصيل كل منتج.
+ */
+async function enrichProductsWithImages(products) {
+  if (!products.length) return products;
+
+  return Promise.all(
+    products.map(async (product) => {
+      if (product.status === 'مؤرشف') return product;
+      try {
+        const details = await fetchProductDetails(product.id);
+        return {
+          ...product,
+          images: details.images,
+          image: details.image,
+          imageCandidates: details.imageCandidates,
+        };
+      } catch {
+        return product;
+      }
+    }),
   );
-
-  if (created?.id && selections) {
-    persistVariantSelections(productId, created.id, {
-      selections,
-      attributeValueIds,
-      label: mapped.label,
-      catalogAttributes,
-    });
-  }
-
-  return mapped;
 }
 
 /**
@@ -217,461 +206,38 @@ export async function fetchStoreProducts({
   perPage = 50,
 } = {}) {
   const query = new URLSearchParams({ per_page: String(perPage) });
-  const resolvedStoreId = resolveProductStoreId(storeId);
-  if (resolvedStoreId) query.set('store_id', String(resolvedStoreId));
+  if (storeId) query.set('store_id', String(storeId));
   if (name?.trim()) query.set('name', name.trim());
   if (categoryId && categoryId !== 'all') query.set('category_id', String(categoryId));
   if (status && status !== 'all') query.set('status', status);
 
   const res = await apiRequest(`${API_ENDPOINTS.myStoreProducts}?${query}`);
   const list = extractList(res).map(mapProductFromList);
-  return list;
+  return enrichProductsWithImages(list);
 }
 
 /**
- * GET /api/v1/products/{id} — [5.3] تفاصيل المنتج الكاملة
+ * GET /api/products/{id} — تفاصيل المنتج للتعديل
  */
 export async function fetchProductDetails(id) {
   const res = await apiRequest(API_ENDPOINTS.product(id));
-  return mapProductFromDetails(unwrapApiEntity(res));
+  const item = res?.data ?? res;
+  return mapProductFromDetails(item);
 }
 
-/**
- * تفاصيل المنتج لإدارة المتجر — GET /products/{id} مع fallback لـ /my-store/products/{id}
- * (المنتجات المؤرشفة تُعيد 404 من المسار العام)
- */
-export async function fetchManagedProductDetails(id) {
-  try {
-    return await fetchProductDetails(id);
-  } catch {
-    const res = await apiRequest(API_ENDPOINTS.myStoreProduct(id));
-    return mapProductFromDetails(unwrapApiEntity(res));
-  }
-}
-
-export function unwrapApiEntity(res) {
-  const payload = res?.data ?? res;
-  if (payload?.id != null) return payload;
-  if (payload?.data?.id != null) return payload.data;
-  return payload;
-}
-
-const COLOR_ATTR_RE = /لون|color/i;
-const SIZE_ATTR_RE = /مقاس|size/i;
-
-function readAttrValue(av) {
-  if (typeof av === 'string') return av;
-  return av?.value ?? av?.name ?? av?.label ?? av?.attribute_value?.value ?? null;
-}
-
-function readAttrName(av) {
-  return String(av?.attribute?.name ?? av?.attribute_name ?? '').trim();
-}
-
-/**
- * استخراج اللون والمقاس من قيم الخصائص — GET /products/{id} → variants[].attribute_values
- */
-export function parseVariantColorSize(attrValues, catalogAttributes = []) {
-  const list = Array.isArray(attrValues) ? attrValues : [];
-  let color = null;
-  let size = null;
-  const extras = [];
-
-  for (const av of list) {
-    const value = String(readAttrValue(av) ?? '').trim();
-    if (!value) continue;
-    const attrName = readAttrName(av);
-
-    if (COLOR_ATTR_RE.test(attrName)) color = value;
-    else if (SIZE_ATTR_RE.test(attrName)) size = value;
-    else extras.push(value);
-  }
-
-  if (!color && !size && list.length) {
-    const values = list.map(readAttrValue).filter(Boolean);
-    if (values.length === 1) {
-      color = values[0];
-      size = 'واحد';
-    } else if (values.length >= 2) {
-      [color, size] = values;
-    }
-  } else if (color && !size) {
-    size = 'واحد';
-  }
-
-  const label =
-    [color, size && size !== 'واحد' ? size : null].filter(Boolean).join(' / ') ||
-    extras.join(' / ');
-
-  return {
-    color: color ?? '—',
-    size: size ?? '—',
-    label,
-  };
-}
-
-/**
- * تحليل نص الخصائص من GET /inventory — مثال: "أحمر / M"
- */
-export function parseAttributesString(attrStr, catalogAttributes = []) {
-  const text = String(attrStr ?? '').trim();
-  if (!text || text === '—') {
-    return { color: '—', size: '—', label: '' };
-  }
-
-  const parts = text
-    .split('/')
-    .map((part) => part.trim())
-    .filter(Boolean);
-
-  let color = null;
-  let size = null;
-
-  for (const part of parts) {
-    for (const attr of catalogAttributes) {
-      const values = attr.values ?? [];
-      if (!values.some((entry) => entry.value === part)) continue;
-      if (COLOR_ATTR_RE.test(String(attr.name ?? ''))) color = part;
-      else if (SIZE_ATTR_RE.test(String(attr.name ?? ''))) size = part;
-    }
-  }
-
-  if (!color && !size) {
-    if (parts.length === 1) {
-      color = parts[0];
-      size = 'واحد';
-    } else if (parts.length >= 2) {
-      [color, size] = parts;
-    }
-  } else if (color && !size) {
-    size = 'واحد';
-  }
-
-  return {
-    color: color ?? '—',
-    size: size ?? '—',
-    label: parts.join(' / '),
-  };
-}
-
-export function buildVariantFallbackLabel(variant) {
-  return `تنوع #${variant.id}`;
-}
-
-export function buildVariantLabelFromSelections(selections, catalogAttributes = []) {
-  const attributeValues = [];
-  for (const attr of catalogAttributes) {
-    const valueId = selections?.[attr.id] ?? selections?.[String(attr.id)];
-    if (!valueId) continue;
-    const match = (attr.values ?? []).find((entry) => String(entry.id) === String(valueId));
-    if (match) {
-      attributeValues.push({
-        id: match.id,
-        value: match.value,
-        attribute_id: attr.id,
-        attribute: { id: attr.id, name: attr.name },
-      });
-    }
-  }
-  const { label } = parseVariantColorSize(attributeValues, catalogAttributes);
-  return label || null;
-}
-
-export function getCachedVariantLabel(productId, variantId, catalogAttributes = []) {
-  const productEntry = productId ? readVariantSelectionsCache(productId)[String(variantId)] : null;
-  if (productEntry?.label) return productEntry.label;
-  if (productEntry?.selections) {
-    return buildVariantLabelFromSelections(productEntry.selections, catalogAttributes);
-  }
-
-  const globalEntry = readGlobalVariantLabels()[String(variantId)];
-  if (globalEntry?.label) return globalEntry.label;
-  if (globalEntry?.selections) {
-    return buildVariantLabelFromSelections(globalEntry.selections, catalogAttributes);
-  }
-
-  const anyEntry = findSelectionsInAnyProductCache(variantId);
-  if (anyEntry?.label) return anyEntry.label;
-  if (anyEntry?.selections) {
-    return buildVariantLabelFromSelections(anyEntry.selections, catalogAttributes);
-  }
-
-  return null;
-}
-
-export function extractProductVariants(raw) {
-  const variantsRaw = raw?.variants ?? raw?.product_variants ?? [];
-  return Array.isArray(variantsRaw) ? variantsRaw : [];
-}
-
-const GLOBAL_VARIANT_LABELS_KEY = 'trendy_variant_labels';
-
-function variantSelectionsStorageKey(productId) {
-  return `trendy_variant_sel_${productId}`;
-}
-
-function readVariantSelectionsCache(productId) {
-  try {
-    const raw = localStorage.getItem(variantSelectionsStorageKey(productId));
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
-}
-
-function readGlobalVariantLabels() {
-  try {
-    const raw = localStorage.getItem(GLOBAL_VARIANT_LABELS_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
-}
-
-function writeGlobalVariantLabel(variantId, { productId, selections, attributeValueIds, label }) {
-  if (!variantId) return;
-  const global = readGlobalVariantLabels();
-  global[String(variantId)] = {
-    productId: productId ?? global[String(variantId)]?.productId ?? null,
-    selections: selections ?? global[String(variantId)]?.selections ?? null,
-    attributeValueIds:
-      attributeValueIds ?? global[String(variantId)]?.attributeValueIds ?? null,
-    label: label ?? global[String(variantId)]?.label ?? null,
-  };
-  localStorage.setItem(GLOBAL_VARIANT_LABELS_KEY, JSON.stringify(global));
-}
-
-function findSelectionsInAnyProductCache(variantId) {
-  for (let index = 0; index < localStorage.length; index += 1) {
-    const key = localStorage.key(index);
-    if (!key?.startsWith('trendy_variant_sel_')) continue;
-    try {
-      const cache = JSON.parse(localStorage.getItem(key) || '{}');
-      const entry = cache[String(variantId)];
-      if (entry?.selections) {
-        return {
-          productId: key.replace('trendy_variant_sel_', ''),
-          ...entry,
-        };
-      }
-    } catch {
-      // تجاهل
-    }
-  }
-  return null;
-}
-
-export function persistVariantSelections(
-  productId,
-  variantId,
-  { selections, attributeValueIds, label, catalogAttributes = [] },
-) {
-  if (!productId || !variantId || !selections) return;
-  const resolvedLabel =
-    label ?? buildVariantLabelFromSelections(selections, catalogAttributes) ?? null;
-  const cache = readVariantSelectionsCache(productId);
-  cache[String(variantId)] = {
-    selections,
-    attributeValueIds: attributeValueIds ?? Object.values(selections).map(Number),
-    label: resolvedLabel,
-  };
-  localStorage.setItem(variantSelectionsStorageKey(productId), JSON.stringify(cache));
-  writeGlobalVariantLabel(variantId, {
-    productId,
-    selections,
-    attributeValueIds,
-    label: resolvedLabel,
-  });
-}
-
-function removeVariantSelectionsCache(productId, variantId) {
-  const cache = readVariantSelectionsCache(productId);
-  delete cache[String(variantId)];
-  localStorage.setItem(variantSelectionsStorageKey(productId), JSON.stringify(cache));
-}
-
-function collectVariantAttributeValueIds(variant) {
-  const direct =
-    variant.attribute_value_ids ??
-    variant.attributeValueIds ??
-    (Array.isArray(variant.attribute_values)
-      ? variant.attribute_values.map((av) => av.id)
-      : null);
-
-  if (Array.isArray(direct) && direct.length) return direct;
-
-  const pivotIds = [];
-  if (variant.pivot?.attribute_value_id) pivotIds.push(variant.pivot.attribute_value_id);
-  if (Array.isArray(variant.pivot?.attribute_value_ids)) {
-    pivotIds.push(...variant.pivot.attribute_value_ids);
-  }
-  return pivotIds;
-}
-
-function resolveVariantAttributeValues(variant, catalogAttributes = []) {
-  const nested =
-    (Array.isArray(variant.attribute_values) && variant.attribute_values) ||
-    (Array.isArray(variant.attributes) && variant.attributes) ||
-    (Array.isArray(variant.attributeValues) && variant.attributeValues) ||
-    (Array.isArray(variant.values) && variant.values) ||
-    [];
-
-  if (nested.length) return nested;
-
-  const ids = collectVariantAttributeValueIds(variant);
-  if (!ids.length || !catalogAttributes.length) return [];
-
-  const values = [];
-  for (const valueId of ids) {
-    for (const attr of catalogAttributes) {
-      const match = (attr.values ?? []).find((entry) => String(entry.id) === String(valueId));
-      if (match) {
-        values.push({
-          id: match.id,
-          value: match.value,
-          attribute_id: attr.id,
-          attribute: { id: attr.id, name: attr.name },
-        });
-        break;
-      }
-    }
-  }
-  return values;
-}
-
-function buildVariantSelections(attrValues, selectionOverride = null) {
-  if (selectionOverride && Object.keys(selectionOverride).length) {
-    return { ...selectionOverride };
-  }
-
-  const selections = {};
-  attrValues.forEach((av) => {
-    const attrId = av.attribute_id ?? av.attribute?.id ?? av.pivot?.attribute_id;
-    if (attrId != null) selections[attrId] = av.id;
-  });
-  return selections;
-}
-
-function buildSelectionsFromAttributeText(attrText, catalogAttributes = []) {
-  const parts = String(attrText ?? '')
-    .split('/')
-    .map((part) => part.trim())
-    .filter(Boolean);
-
-  if (!parts.length) return { selections: {}, attributeValues: [] };
-
-  const selections = {};
-  const attributeValues = [];
-
-  for (const part of parts) {
-    for (const attr of catalogAttributes) {
-      if (selections[attr.id] != null) continue;
-      const match = (attr.values ?? []).find((entry) => entry.value === part);
-      if (match) {
-        selections[attr.id] = match.id;
-        attributeValues.push({
-          id: match.id,
-          value: match.value,
-          attribute_id: attr.id,
-          attribute: { id: attr.id, name: attr.name },
-        });
-        break;
-      }
-    }
-  }
-
-  return { selections, attributeValues };
-}
-
-export function mapProductVariant(variant, catalogAttributes = [], options = {}) {
-  let attrValues = resolveVariantAttributeValues(variant, catalogAttributes);
-  let selections = buildVariantSelections(attrValues, options.selections);
-
-  if (!Object.keys(selections).length && options.attributeText) {
-    const parsed = buildSelectionsFromAttributeText(options.attributeText, catalogAttributes);
-    selections = parsed.selections;
-    attrValues = parsed.attributeValues;
-  }
-
-  if (!Object.keys(selections).length && options.cachedLabel) {
-    const parsed = buildSelectionsFromAttributeText(options.cachedLabel, catalogAttributes);
-    if (Object.keys(parsed.selections).length) {
-      selections = parsed.selections;
-      attrValues = parsed.attributeValues;
-    }
-  }
-
-  let { label } = parseVariantColorSize(attrValues, catalogAttributes);
-
-  if ((!label || label === '—') && options.cachedLabel) {
-    label = options.cachedLabel;
-  }
-
-  if ((!label || label === '—') && options.attributeText) {
-    label = parseAttributesString(options.attributeText, catalogAttributes).label || options.attributeText;
-  }
-
-  const inventory = variant.inventory_summary ?? variant.current_inventory ?? {};
-
-  return {
-    id: variant.id,
-    label: label && label !== '—' ? label : buildVariantFallbackLabel(variant),
-    attributeValueIds: attrValues.map((av) => av.id),
-    attributeValues: attrValues,
-    selections,
-    selectionKey: Object.entries(selections)
-      .map(([attrId, valueId]) => `${attrId}:${valueId}`)
-      .sort()
-      .join('|'),
-    price: variant.selling_price ?? variant.price ?? inventory.selling_price ?? '',
-    quantity: variant.total_quantity ?? variant.quantity ?? inventory.total_quantity ?? 0,
-    currentShipment: variant.current_shipment_id ?? inventory.current_shipment_id ?? '',
-  };
-}
-
-function buildProductFormData({ storeId, name, sku, description, price, categoryId, stock, imageFiles, deletedImages }) {
+function buildProductFormData({ storeId, name, sku, description, price, categoryId, stock, imageFiles }) {
   const fd = new FormData();
-  const resolvedStoreId = resolveProductStoreId(storeId);
-  if (!resolvedStoreId) {
-    throw new Error('لم يتم تحديد المتجر. يرجى تسجيل الدخول مرة أخرى.');
-  }
-  fd.append('store_id', String(resolvedStoreId));
-  fd.append('name', String(name).trim());
-  if (sku) fd.append('sku', String(sku).trim());
+  if (storeId) fd.append('store_id', String(storeId));
+  fd.append('name', name);
+  if (sku) fd.append('sku', sku);
   if (description) fd.append('description', description);
-  fd.append('base_price', String(normalizeProductPrice(price)));
+  fd.append('base_price', String(price));
   fd.append('category_id', String(categoryId));
   if (stock !== '' && stock != null) fd.append('total_quantity', String(stock));
   if (imageFiles?.length) {
     imageFiles.forEach((file, index) => fd.append(`images[${index}]`, file));
   }
-  if (deletedImages?.length) {
-    deletedImages.forEach((id) => {
-      fd.append('deleted_images[]', String(id));
-    });
-  }
   return fd;
-}
-
-function extractCreatedProduct(res) {
-  const item = unwrapApiEntity(res);
-  if (!item?.id) {
-    throw new Error('تعذّر إنشاء المنتج: لم يُرجع الخادم معرف المنتج. تحقق من رسالة الخطأ أو أعد المحاولة.');
-  }
-  return mapProductFromDetails(item);
-}
-
-async function verifyCreatedProduct(productId) {
-  try {
-    const verified = await fetchProductDetails(productId);
-    if (verified?.id) return verified;
-  } catch {
-    // fallback below
-  }
-
-  throw new Error(
-    'تم إرسال الطلب لكن تعذّر التأكد من حفظ المنتج في الخادم. تحقق من قائمة المنتجات أو أعد المحاولة.',
-  );
 }
 
 /**
@@ -683,8 +249,8 @@ export async function createProduct(payload) {
     method: 'POST',
     body: fd,
   });
-  const created = extractCreatedProduct(res);
-  return verifyCreatedProduct(created.id);
+  const item = res?.data ?? res;
+  return mapProductFromDetails(item);
 }
 
 /**
@@ -721,102 +287,56 @@ export async function restoreProduct(id) {
 }
 
 /**
- * GET /api/products/{productId} — استخراج التنوعات من تفاصيل المنتج [5.3]
- * GET قد يُرجع variants بدون attribute_values — نُكمل من الكتالوج والتخزين المحلي
+ * GET /api/products/{productId} — استخراج التنوعات المحفوظة من تفاصيل المنتج
+ * يُعيد مصفوفة من التنوعات مع قيم الخصائص والسعر والكمية
  */
-async function fetchMyStoreVariantMap(productId) {
-  try {
-    const res = await apiRequest(API_ENDPOINTS.myStoreProduct(productId));
-    const item = unwrapApiEntity(res);
-    const variants = extractProductVariants(item);
-    return Object.fromEntries(variants.map((variant) => [String(variant.id), variant]));
-  } catch {
-    return {};
-  }
-}
-
-function mergeVariantSources(publicVariant, storeVariant) {
-  if (!storeVariant) return publicVariant;
-
-  const hasPublicAttrs =
-    (publicVariant.attribute_values?.length ?? 0) > 0 ||
-    (publicVariant.attributes?.length ?? 0) > 0;
-  const hasStoreAttrs =
-    (storeVariant.attribute_values?.length ?? 0) > 0 ||
-    (storeVariant.attributes?.length ?? 0) > 0;
-
-  return {
-    ...publicVariant,
-    ...storeVariant,
-    attribute_values: hasStoreAttrs
-      ? storeVariant.attribute_values ?? storeVariant.attributes
-      : publicVariant.attribute_values ?? publicVariant.attributes,
-    attribute_value_ids:
-      storeVariant.attribute_value_ids ??
-      storeVariant.attributeValueIds ??
-      publicVariant.attribute_value_ids ??
-      publicVariant.attributeValueIds,
-    total_quantity:
-      publicVariant.total_quantity ??
-      storeVariant.total_quantity ??
-      storeVariant.quantity,
-  };
-}
-
-export async function fetchProductVariants(
-  productId,
-  { catalogAttributes = [], inventoryByVariantId = {} } = {},
-) {
-  const [res, myStoreVariantMap] = await Promise.all([
-    apiRequest(API_ENDPOINTS.product(productId)),
-    fetchMyStoreVariantMap(productId),
-  ]);
-  const item = unwrapApiEntity(res);
-  const rawVariants = extractProductVariants(item);
-  const cache = readVariantSelectionsCache(productId);
+export async function fetchProductVariants(productId) {
+  const res = await apiRequest(`${API_ENDPOINTS.product(productId)}/variants`);
+  const item = res?.data ?? res;
+  const rawVariants = Array.isArray(item)
+    ? item
+    : Array.isArray(item?.variants)
+      ? item.variants
+      : Array.isArray(item?.data)
+        ? item.data
+        : [];
 
   return rawVariants.map((v) => {
-    const mergedVariant = mergeVariantSources(v, myStoreVariantMap[String(v.id)]);
-    const cached = cache[String(v.id)] ?? findSelectionsInAnyProductCache(v.id);
-    const globalLabel = readGlobalVariantLabels()[String(v.id)]?.label ?? null;
-    const inventoryRow = inventoryByVariantId[String(v.id)];
-    const inventoryAttrText =
-      inventoryRow?.attributes && inventoryRow.attributes !== '—'
-        ? inventoryRow.attributes
-        : null;
-    const inventoryAttrValues = inventoryRow?.attributeValues;
-    const attributeText =
-      inventoryAttrText ||
-      (Array.isArray(inventoryAttrValues)
-        ? inventoryAttrValues
-            .map((entry) => entry?.value ?? entry?.name ?? entry)
-            .filter(Boolean)
-            .join(' / ')
-        : typeof inventoryAttrValues === 'string'
-          ? inventoryAttrValues
-          : null);
-
-    const cachedLabel =
-      cached?.label ??
-      globalLabel ??
-      (productId && v.id ? getCachedVariantLabel(productId, v.id, catalogAttributes) : null);
-
-    const mapped = mapProductVariant(mergedVariant, catalogAttributes, {
-      selections: cached?.selections,
-      attributeText,
-      cachedLabel,
+    const attrValues = Array.isArray(v.attribute_values)
+      ? v.attribute_values
+      : Array.isArray(v.attributes)
+        ? v.attributes
+        : Array.isArray(v.attributeValues)
+          ? v.attributeValues
+          : Array.isArray(v.values)
+            ? v.values
+            : [];
+    const label = attrValues.map((av) => av.value ?? av.name ?? String(av.id)).join(' / ');
+    // قد يُعيد الـ API inventory_summary أو current_shipment
+    const inventory = v.inventory_summary ?? v.current_inventory ?? {};
+    const selections = {};
+    attrValues.forEach((av) => {
+      const attrId = av.attribute_id ?? av.attribute?.id ?? av.pivot?.attribute_id;
+      if (attrId) {
+        selections[attrId] = av.id;
+      }
     });
 
-    if (!cached?.selections && Object.keys(mapped.selections).length) {
-      persistVariantSelections(productId, v.id, {
-        selections: mapped.selections,
-        attributeValueIds: mapped.attributeValueIds,
-        label: mapped.label,
-        catalogAttributes,
-      });
-    }
-
-    return mapped;
+    return {
+      id: v.id,
+      label: label || `تنوع #${v.id}`,
+      attributeValueIds: attrValues.map((av) => av.id),
+      attributeValues: attrValues,
+      selections,
+      // خريطة attributeId → valueId للتحقق من التكرار
+      selectionKey: attrValues
+        .map((av) => `${av.attribute_id ?? av.attribute?.id ?? av.pivot?.attribute_id ?? '?'}:${av.id}`)
+        .sort()
+        .join('|'),
+      price: v.selling_price ?? v.price ?? inventory.selling_price ?? '',
+      quantity: v.total_quantity ?? v.quantity ?? inventory.total_quantity ?? '',
+      currentShipment: v.current_shipment_id ?? inventory.current_shipment_id ?? '',
+    };
   });
 }
 
@@ -826,7 +346,6 @@ export async function fetchProductVariants(
 export async function deleteProductVariant(productId, variantId) {
   const url = `${API_ENDPOINTS.myStoreProductVariants(productId)}/${variantId}`;
   await apiRequest(url, { method: 'DELETE' });
-  removeVariantSelectionsCache(productId, variantId);
 }
 
 /**

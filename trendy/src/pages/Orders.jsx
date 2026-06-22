@@ -1,44 +1,38 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Search, Eye, X, CheckCircle2 } from 'lucide-react';
 import OrderDropdown from '../components/orders/OrderDropdown';
 import OrderDetailModal from '../components/orders/OrderDetailModal';
 import {
+  fetchAllOrders,
   fetchOrder,
+  updateOrderStatus,
+  cancelOrder,
+  prepareOrder,
+  confirmOrderDelivery,
   canCancelOrderStatus,
   canPrepareOrder,
+  canConfirmDelivery,
 } from '../api/orders';
 import { getApiErrorMessage } from '../api/stores';
-import {
-  useOrders,
-  useCancelOrder,
-  usePrepareOrder,
-} from '../api/hooks/useOrders';
-import { useStore } from '../context/AuthContext';
+import { useAuth } from '../context/AuthContext';
 import {
   STATUS_FILTER_OPTIONS,
+  ORDER_STATUSES,
   getStatusBadgeClass,
 } from '../data/ordersData';
 import './Orders.css';
 
-function formatOrderProductsLabel(products = []) {
-  const list = Array.isArray(products) ? products.filter((p) => p?.name && p.name !== '—') : [];
-  if (!list.length) return 'لا توجد منتجات';
-
-  const names = list.map((p) => {
-    const qty = Number(p.quantity ?? 1);
-    return qty > 1 ? `${p.name} ×${qty}` : p.name;
-  });
-
-  if (names.length === 1) return names[0];
-  if (names.length === 2) return names.join('، ');
-  return `${names.slice(0, 2).join('، ')} +${names.length - 2} أخرى`;
-}
-
 const Orders = () => {
-  const { storeId } = useStore();
+  const { storeId } = useAuth();
+  const [orders, setOrders] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [loading, setLoading] = useState(true);
+  const [updatingId, setUpdatingId] = useState(null);
+  const [cancellingId, setCancellingId] = useState(null);
+  const [actionId, setActionId] = useState(null);
+  const [error, setError] = useState('');
   const [detailModal, setDetailModal] = useState({ open: false, order: null, loading: false });
   const [toast, setToast] = useState(null);
 
@@ -52,27 +46,42 @@ const Orders = () => {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  const filters = useMemo(
-    () => ({
-      storeId,
-      search: debouncedSearch,
-      status: statusFilter === 'تجهيز الطلب' ? 'all' : statusFilter,
-      excludePos: false,
-    }),
-    [storeId, debouncedSearch, statusFilter],
-  );
-
-  const { data: rawOrders = [], isLoading: loading, error } = useOrders(filters);
-
-  const orders = useMemo(() => {
-    if (statusFilter === 'تجهيز الطلب') {
-      return rawOrders.filter((order) => !order.isPos && canPrepareOrder(order));
+  const loadOrders = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const list = await fetchAllOrders({
+        storeId,
+        search: debouncedSearch,
+        status: statusFilter,
+      });
+      setOrders(list);
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'تعذّر تحميل الطلبات'));
+      setOrders([]);
+    } finally {
+      setLoading(false);
     }
-    return rawOrders;
-  }, [rawOrders, statusFilter]);
+  }, [storeId, debouncedSearch, statusFilter]);
 
-  const cancelMutation = useCancelOrder();
-  const prepareMutation = usePrepareOrder();
+  useEffect(() => {
+    loadOrders();
+  }, [loadOrders]);
+
+  const handleStatusChange = async (order, newStatus) => {
+    if (!order || order.status === newStatus) return;
+
+    setUpdatingId(order.orderId);
+    try {
+      await updateOrderStatus(order.orderId, newStatus);
+      showToast(`تم تحديث حالة الطلب ${order.id} إلى «${newStatus}»`);
+      await loadOrders();
+    } catch (err) {
+      showToast(getApiErrorMessage(err, 'تعذّر تحديث حالة الطلب'));
+    } finally {
+      setUpdatingId(null);
+    }
+  };
 
   const handleCancel = async (order) => {
     if (!order || !canCancelOrderStatus(order.status)) return;
@@ -83,21 +92,43 @@ const Orders = () => {
     const reason = window.prompt('سبب الإلغاء:', 'إلغاء من المتجر');
     if (reason === null) return;
 
+    setCancellingId(order.orderId);
     try {
-      await cancelMutation.mutateAsync({ id: order.orderId, reason });
+      await cancelOrder(order.orderId, reason);
       showToast(`تم إلغاء الطلب ${order.id} بنجاح`);
+      await loadOrders();
     } catch (err) {
       showToast(getApiErrorMessage(err, 'تعذّر إلغاء الطلب'));
+    } finally {
+      setCancellingId(null);
     }
   };
 
   const handlePrepare = async (order) => {
     if (!order || !canPrepareOrder(order)) return;
+    setActionId(order.orderId);
     try {
-      await prepareMutation.mutateAsync(order.orderId);
+      await prepareOrder(order.orderId);
       showToast(`تم تجهيز الطلب ${order.id} بنجاح`);
+      await loadOrders();
     } catch (err) {
       showToast(getApiErrorMessage(err, 'تعذّر تجهيز الطلب'));
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  const handleConfirmDelivery = async (order) => {
+    if (!order || !canConfirmDelivery(order)) return;
+    setActionId(order.orderId);
+    try {
+      await confirmOrderDelivery(order.orderId);
+      showToast(`تم تأكيد تسليم الطلب ${order.id}`);
+      await loadOrders();
+    } catch (err) {
+      showToast(getApiErrorMessage(err, 'تعذّر تأكيد التسليم'));
+    } finally {
+      setActionId(null);
     }
   };
 
@@ -139,7 +170,7 @@ const Orders = () => {
         />
       </div>
 
-      {error && <div className="orders-error">{error?.message || 'تعذّر تحميل الطلبات'}</div>}
+      {error && <div className="orders-error">{error}</div>}
 
       <div className="orders-list">
         {loading ? (
@@ -159,37 +190,23 @@ const Orders = () => {
 
               <div className="order-card-details">
                 <div className="order-detail-item">
-                  <span className="label">{order.isPos ? 'بواسطة الموظف' : 'العميل'}</span>
+                  <span className="label">العميل</span>
                   <span className="value">{order.customerName}</span>
-                  {!order.isPos && (
-                    <span
-                      className="value"
-                      style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}
-                    >
-                      {order.phone}
-                    </span>
-                  )}
+                  <span
+                    className="value"
+                    style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}
+                  >
+                    {order.phone}
+                  </span>
                 </div>
                 <div className="order-detail-item">
-                  <span className="label">المنتج</span>
-                  <span className="value">{formatOrderProductsLabel(order.products)}</span>
+                  <span className="label">المنتجات</span>
+                  <span className="value">{order.products.length} منتج</span>
                 </div>
                 <div className="order-detail-item">
                   <span className="label">الإجمالي</span>
                   <span className="value total">{order.total} د.ل</span>
                 </div>
-                {!order.isPos && (
-                  <div className="order-detail-item">
-                    <span className="label">السائق</span>
-                    <span className="value">
-                      {order.hasDriver
-                        ? order.driverName
-                        : ['تم الشحن', 'قيد التوصيل'].includes(order.status)
-                          ? 'في انتظار سائق'
-                          : '—'}
-                    </span>
-                  </div>
-                )}
               </div>
 
               <div className="order-card-actions">
@@ -202,23 +219,33 @@ const Orders = () => {
                   عرض التفاصيل
                 </button>
 
-                {canPrepareOrder(order) ? (
+                <OrderDropdown
+                  className="compact"
+                  value={order.status}
+                  options={ORDER_STATUSES}
+                  onChange={(status) => handleStatusChange(order, status)}
+                />
+
+                {canPrepareOrder(order) && (
                   <button
                     type="button"
-                    className={`order-status-badge ${getStatusBadgeClass(order.status)} order-btn-prepare`}
+                    className="order-btn-view"
                     onClick={() => handlePrepare(order)}
-                    disabled={prepareMutation.isPending && prepareMutation.variables === order.orderId}
-                    title="تجهيز الطلب وإرساله للسائق"
+                    disabled={actionId === order.orderId}
                   >
-                    {order.status}
+                    تجهيز الطلب
                   </button>
-                ) : (
-                  <span
-                    className={`order-status-badge ${getStatusBadgeClass(order.status)}`}
-                    style={{ padding: '10px 16px', borderRadius: '10px', display: 'inline-flex', alignItems: 'center' }}
+                )}
+
+                {canConfirmDelivery(order) && (
+                  <button
+                    type="button"
+                    className="order-btn-view"
+                    onClick={() => handleConfirmDelivery(order)}
+                    disabled={actionId === order.orderId}
                   >
-                    حالة الطلب: {order.status}
-                  </span>
+                    تأكيد التسليم
+                  </button>
                 )}
 
                 <button
@@ -226,8 +253,7 @@ const Orders = () => {
                   className="order-btn-cancel"
                   onClick={() => handleCancel(order)}
                   disabled={
-                    !canCancelOrderStatus(order.status) ||
-                    (cancelMutation.isPending && cancelMutation.variables?.id === order.orderId)
+                    !canCancelOrderStatus(order.status) || cancellingId === order.orderId
                   }
                 >
                   <X size={16} />

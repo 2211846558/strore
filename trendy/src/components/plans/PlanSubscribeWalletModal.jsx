@@ -7,26 +7,40 @@ import {
   useElements,
   useStripe,
 } from '@stripe/react-stripe-js';
-import { useWalletBalance, useChargeWallet } from '../../api/hooks/useWallet';
-import { useStore } from '../../context/AuthContext';
-import { subscribeToPlan, renewStorePlan, changeStorePlan, previewSubscribeToPlan } from '../../api/plans';
+import { useWallet } from '../../context/WalletContext';
+import { useAuth } from '../../context/AuthContext';
+import { subscribeToPlan, renewStorePlan, changeStorePlan } from '../../api/plans';
 import { getApiErrorMessage } from '../../api/stores';
 import {
   createStripeCardPaymentMethod,
   isStripeConfigured,
   STRIPE_PUBLISHABLE_KEY,
   translateStripeError,
-  getStripeCardNumberOptions,
-  getStripeSplitFieldStyle,
 } from '../../api/stripe';
-import { isValidDecimalInput, preventWheelChange } from '../../utils/numericInput';
-import { StripeModalElements } from '../../providers/StripeProvider';
 import './PlanSubscribeWalletModal.css';
 
+const getStripeFieldStyle = () => ({
+  style: {
+    base: {
+      fontSize: '16px',
+      color: '#131127',
+      fontFamily: '"Tajawal", system-ui, sans-serif',
+      iconColor: '#8b3dff',
+      lineHeight: '24px',
+      '::placeholder': {
+        color: '#7b7898',
+      },
+    },
+    invalid: {
+      color: '#dc2626',
+      iconColor: '#dc2626',
+    },
+  },
+});
+
 const usePlanWalletState = (plan) => {
-  const { data: walletData, refetch: refreshWallet } = useWalletBalance();
-  const { storeId } = useStore();
-  const balance = walletData?.balance ?? 0;
+  const { balance, refreshWallet } = useWallet();
+  const { storeId } = useAuth();
   const planPrice = Number(plan?.price ?? 0);
   const hasEnoughBalance = balance >= planPrice;
   const missingAmount = Math.max(0, planPrice - balance);
@@ -55,7 +69,6 @@ const PlanSubscribeActions = ({
   hasEnoughBalance,
   storeId,
   refreshWallet,
-  loadingPreview = false,
 }) => {
   const [subscribeError, setSubscribeError] = useState('');
   const [subscribeLoading, setSubscribeLoading] = useState(false);
@@ -98,7 +111,7 @@ const PlanSubscribeActions = ({
         type="button"
         className="plan-wallet-btn subscribe"
         onClick={handleSubscribe}
-        disabled={!hasEnoughBalance || subscribeLoading || loadingPreview}
+        disabled={!hasEnoughBalance || subscribeLoading}
       >
         {subscribeLoading
           ? 'جاري المعالجة...'
@@ -108,7 +121,7 @@ const PlanSubscribeActions = ({
               ? 'تأكيد تغيير الخطة'
               : 'تأكيد الاشتراك'}
       </button>
-      <button type="button" className="plan-wallet-btn back" onClick={onClose} disabled={subscribeLoading}>
+      <button type="button" className="plan-wallet-btn back" onClick={onClose}>
         <ArrowRight size={18} />
         العودة للخطط
       </button>
@@ -116,11 +129,11 @@ const PlanSubscribeActions = ({
   );
 };
 
-const PlanSubscribeWalletForm = ({ plan, action = 'subscribe', onClose, onConfirm, onToast, loadingPreview = false }) => {
+const PlanSubscribeWalletForm = ({ plan, action = 'subscribe', onClose, onConfirm, onToast }) => {
   const stripe = useStripe();
   const elements = useElements();
   const { balance, refreshWallet, storeId, hasEnoughBalance, missingAmount } = usePlanWalletState(plan);
-  const chargeMutation = useChargeWallet();
+  const { rechargeViaStripe } = useWallet();
   const [amount, setAmount] = useState('');
   const [rechargeError, setRechargeError] = useState('');
   const [rechargeLoading, setRechargeLoading] = useState(false);
@@ -130,11 +143,11 @@ const PlanSubscribeWalletForm = ({ plan, action = 'subscribe', onClose, onConfir
     expiry: false,
     cvc: false,
   });
+  const [readyCount, setReadyCount] = useState(0);
 
-  const stripeNumberOptions = useMemo(() => getStripeCardNumberOptions(), []);
-  const stripeFieldOptions = useMemo(() => getStripeSplitFieldStyle(), []);
+  const stripeFieldOptions = useMemo(() => getStripeFieldStyle(), []);
   const cardComplete = cardFields.number && cardFields.expiry && cardFields.cvc;
-  const stripeReady = Boolean(stripe && elements);
+  const cardReady = readyCount >= 3;
 
   const handleFieldChange = (field) => (event) => {
     setCardFields((prev) => ({ ...prev, [field]: event.complete }));
@@ -145,15 +158,19 @@ const PlanSubscribeWalletForm = ({ plan, action = 'subscribe', onClose, onConfir
     }
   };
 
+  const handleFieldReady = () => {
+    setReadyCount((count) => count + 1);
+  };
+
   useEffect(() => {
-    const defaultAmount = missingAmount > 0 ? missingAmount : plan?.price;
-    if (defaultAmount != null) {
-      setAmount(String(defaultAmount));
+    if (plan?.price) {
+      setAmount(String(plan.price));
     }
+    setReadyCount(0);
+    setCardFields({ number: false, expiry: false, cvc: false });
     setRechargeError('');
     setRechargeSuccess(false);
-    setCardFields({ number: false, expiry: false, cvc: false });
-  }, [plan?.id, plan?.price, missingAmount]);
+  }, [plan?.id, plan?.price]);
 
   const handleRecharge = async (e) => {
     e.preventDefault();
@@ -174,8 +191,11 @@ const PlanSubscribeWalletForm = ({ plan, action = 'subscribe', onClose, onConfir
     setRechargeLoading(true);
     try {
       const paymentMethod = await createStripeCardPaymentMethod(stripe, cardNumberElement);
-      const charged = await chargeMutation.mutateAsync({ storeId, amount: Number(amount), paymentMethodId: paymentMethod.id });
-      await refreshWallet();
+      const charged = await rechargeViaStripe({
+        paymentMethodId: paymentMethod.id,
+        amount,
+        cardLast4: paymentMethod.card?.last4,
+      });
       cardNumberElement.clear();
       elements.getElement(CardExpiryElement)?.clear();
       elements.getElement(CardCvcElement)?.clear();
@@ -209,46 +229,49 @@ const PlanSubscribeWalletForm = ({ plan, action = 'subscribe', onClose, onConfir
           بيانات البطاقة
         </label>
         <div className="plan-wallet-stripe-fields">
-          {!stripeReady ? (
-            <p className="plan-wallet-stripe-loading">جاري تهيئة بوابة الدفع...</p>
-          ) : (
-            <>
-              <div className="plan-wallet-stripe-field">
-                <label className="plan-wallet-stripe-label">رقم البطاقة</label>
-                <div className="plan-wallet-stripe-card">
-                  <CardNumberElement
-                    options={stripeNumberOptions}
-                    onChange={handleFieldChange('number')}
-                  />
-                </div>
-              </div>
+          <div className="plan-wallet-stripe-field">
+            <label className="plan-wallet-stripe-label">رقم البطاقة</label>
+            <div className="plan-wallet-stripe-card">
+              <CardNumberElement
+                key={`card-number-${plan.id}`}
+                options={stripeFieldOptions}
+                onReady={handleFieldReady}
+                onChange={handleFieldChange('number')}
+              />
+            </div>
+          </div>
 
-              <div className="plan-wallet-stripe-row">
-                <div className="plan-wallet-stripe-field">
-                  <label className="plan-wallet-stripe-label">تاريخ الانتهاء</label>
-                  <div className="plan-wallet-stripe-card">
-                    <CardExpiryElement
-                      options={stripeFieldOptions}
-                      onChange={handleFieldChange('expiry')}
-                    />
-                  </div>
-                  <span className="plan-wallet-stripe-hint">مثال: 12 / 34</span>
-                </div>
-
-                <div className="plan-wallet-stripe-field">
-                  <label className="plan-wallet-stripe-label">رمز الأمان (CVV)</label>
-                  <div className="plan-wallet-stripe-card">
-                    <CardCvcElement
-                      options={stripeFieldOptions}
-                      onChange={handleFieldChange('cvc')}
-                    />
-                  </div>
-                  <span className="plan-wallet-stripe-hint">3 أرقام خلف البطاقة</span>
-                </div>
+          <div className="plan-wallet-stripe-row">
+            <div className="plan-wallet-stripe-field">
+              <label className="plan-wallet-stripe-label">تاريخ الانتهاء</label>
+              <div className="plan-wallet-stripe-card">
+                <CardExpiryElement
+                  key={`card-expiry-${plan.id}`}
+                  options={stripeFieldOptions}
+                  onReady={handleFieldReady}
+                  onChange={handleFieldChange('expiry')}
+                />
               </div>
-            </>
-          )}
+              <span className="plan-wallet-stripe-hint">مثال: 12 / 34</span>
+            </div>
+
+            <div className="plan-wallet-stripe-field">
+              <label className="plan-wallet-stripe-label">رمز الأمان (CVV)</label>
+              <div className="plan-wallet-stripe-card">
+                <CardCvcElement
+                  key={`card-cvc-${plan.id}`}
+                  options={stripeFieldOptions}
+                  onReady={handleFieldReady}
+                  onChange={handleFieldChange('cvc')}
+                />
+              </div>
+              <span className="plan-wallet-stripe-hint">3 أرقام خلف البطاقة</span>
+            </div>
+          </div>
         </div>
+        {!cardReady && (
+          <p className="plan-wallet-stripe-loading">جاري تحميل حقول البطاقة...</p>
+        )}
         <p className="plan-wallet-secure-note">
           <ShieldCheck size={14} />
           بيانات البطاقة تُعالَج مباشرة عبر Stripe ولا تمرّ بخوادمنا
@@ -256,15 +279,12 @@ const PlanSubscribeWalletForm = ({ plan, action = 'subscribe', onClose, onConfir
 
         <label className="plan-wallet-field-label">المبلغ (د.ل)</label>
         <input
-          type="text"
-          inputMode="decimal"
+          type="number"
           placeholder="المبلغ"
           value={amount}
-          onChange={(e) => {
-            const raw = e.target.value;
-            if (isValidDecimalInput(raw)) setAmount(raw);
-          }}
-          onWheel={preventWheelChange}
+          onChange={(e) => setAmount(e.target.value)}
+          min="1"
+          step="0.01"
           dir="ltr"
           className="plan-wallet-input"
           required
@@ -278,7 +298,7 @@ const PlanSubscribeWalletForm = ({ plan, action = 'subscribe', onClose, onConfir
         <button
           type="submit"
           className="plan-wallet-btn recharge"
-          disabled={rechargeLoading || !stripeReady || !cardComplete}
+          disabled={rechargeLoading || !stripe || !cardReady || !cardComplete}
         >
           {rechargeLoading ? 'جاري الشحن...' : 'شحن المحفظة'}
         </button>
@@ -292,19 +312,9 @@ const PlanSubscribeWalletForm = ({ plan, action = 'subscribe', onClose, onConfir
         hasEnoughBalance={hasEnoughBalance}
         storeId={storeId}
         refreshWallet={refreshWallet}
-        loadingPreview={loadingPreview}
       />
     </>
   );
-};
-
-const formatFriendlyDate = (dateStr) => {
-  if (!dateStr) return '';
-  const cleanStr = dateStr.includes('T') ? dateStr : dateStr.replace(' ', 'T');
-  const d = new Date(cleanStr);
-  if (isNaN(d.getTime())) return dateStr;
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()}`;
 };
 
 const PlanSubscribeWalletModal = ({
@@ -315,56 +325,21 @@ const PlanSubscribeWalletModal = ({
   onConfirm,
   onToast,
 }) => {
-  const { refetch: refreshWallet } = useWalletBalance();
+  const { refreshWallet } = useWallet();
   const walletState = usePlanWalletState(plan);
   const stripeReady = isStripeConfigured();
-
-  const [previewDates, setPreviewDates] = useState(null);
-  const [loadingPreview, setLoadingPreview] = useState(false);
-  const [previewError, setPreviewError] = useState('');
 
   useEffect(() => {
     if (!isOpen) return;
     refreshWallet();
   }, [isOpen, plan?.id, refreshWallet]);
 
-  useEffect(() => {
-    if (!isOpen || !plan?.id || !walletState.storeId) {
-      setPreviewDates(null);
-      return;
-    }
-
-    let cancelled = false;
-    setLoadingPreview(true);
-    setPreviewError('');
-    setPreviewDates(null);
-
-    previewSubscribeToPlan({ planId: plan.id, storeId: walletState.storeId })
-      .then((res) => {
-        if (!cancelled) {
-          setPreviewDates(res);
-        }
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setPreviewError(getApiErrorMessage(err, 'تعذر احتساب تاريخ بدء الاشتراك المتوقع'));
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingPreview(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isOpen, plan?.id, walletState.storeId]);
-
   if (!isOpen || !plan) return null;
 
   return (
     <div className="plan-wallet-overlay" onClick={onClose}>
       <div className="plan-wallet-modal" onClick={(e) => e.stopPropagation()}>
-        <button type="button" className="plan-wallet-close" onClick={onClose} aria-label="إغلاق" disabled={loadingPreview}>
+        <button type="button" className="plan-wallet-close" onClick={onClose} aria-label="إغلاق">
           <X size={22} />
         </button>
 
@@ -381,45 +356,6 @@ const PlanSubscribeWalletModal = ({
             <>اشتراك في <strong>{plan.title}</strong> — {plan.price} د.ل</>
           )}
         </p>
-
-        {/* صندوق معاينة تاريخ بدء الاشتراك المتوقع */}
-        <div className="plan-subscription-preview-box">
-          {loadingPreview && (
-            <div className="preview-loading">
-              <span className="spinner"></span>
-              <span>جاري احتساب تاريخ بدء الاشتراك...</span>
-            </div>
-          )}
-          {previewError && (
-            <div className="preview-error">
-              <span>{previewError}</span>
-            </div>
-          )}
-          {previewDates && !loadingPreview && (
-            <div className="preview-dates-content">
-              <div className="preview-dates-row">
-                <div className="date-item">
-                  <span className="date-label">تاريخ البدء المتوقع:</span>
-                  <span className="date-val">{formatFriendlyDate(previewDates.starts_at)}</span>
-                </div>
-                <div className="date-item">
-                  <span className="date-label">تاريخ الانتهاء المتوقع:</span>
-                  <span className="date-val">{formatFriendlyDate(previewDates.ends_at)}</span>
-                </div>
-              </div>
-              
-              {previewDates.status === 'active' ? (
-                <div className="preview-alert active-alert">
-                  <span>سيبدأ هذا الاشتراك فوراً اليوم وسيتم تفعيل متجرك.</span>
-                </div>
-              ) : (
-                <div className="preview-alert scheduled-alert">
-                  <span>سيتم جدولة هذا الاشتراك ويبدأ تلقائياً بعد انتهاء الخطة الحالية في {formatFriendlyDate(previewDates.starts_at)}.</span>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
 
         {!stripeReady && !walletState.hasEnoughBalance ? (
           <div className="plan-wallet-stripe-missing">
@@ -453,24 +389,17 @@ const PlanSubscribeWalletModal = ({
               action={action}
               onClose={onClose}
               onConfirm={onConfirm}
-              hasEnoughBalance={walletState.hasEnoughBalance}
-              storeId={walletState.storeId}
-              refreshWallet={refreshWallet}
-              loadingPreview={loadingPreview}
+              {...walletState}
             />
           </>
         ) : (
-          <StripeModalElements mountKey={`plan-wallet-${plan.id}`}>
-            <PlanSubscribeWalletForm
-              key={plan.id}
-              plan={plan}
-              action={action}
-              onClose={onClose}
-              onConfirm={onConfirm}
-              onToast={onToast}
-              loadingPreview={loadingPreview}
-            />
-          </StripeModalElements>
+          <PlanSubscribeWalletForm
+            plan={plan}
+            action={action}
+            onClose={onClose}
+            onConfirm={onConfirm}
+            onToast={onToast}
+          />
         )}
       </div>
     </div>

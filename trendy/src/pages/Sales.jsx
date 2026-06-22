@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 import {
   ShoppingCart,
   FileText,
@@ -9,30 +8,26 @@ import {
   CheckCircle2,
   RotateCcw,
   ArrowLeftRight,
-  X,
 } from 'lucide-react';
+import { COLOR_DOTS } from '../data/salesProducts';
+import { fetchAttributes, buildColorDotsFromAttributes } from '../api/products';
 import {
+  fetchPosCatalog,
+  fetchPosCart,
+  addToPosCart,
+  removeFromPosCart,
+  checkoutPosCart,
   refundPosItem,
   exchangePosItem,
   fetchPosInvoices,
-  fetchSalesProductVariants,
   getProductStockInfo,
   isProductAvailable,
   getVariantStock,
   resolveVariant,
   getExchangePriceDiff,
 } from '../api/pos';
-import SalesProductThumb from '../components/sales/SalesProductThumb';
-import { fetchOrders } from '../api/orders';
 import { getApiErrorMessage } from '../api/stores';
-import {
-  useSalesProducts,
-  usePosCart,
-  useAddToCart,
-  useRemoveFromCart,
-  useCheckoutCart,
-} from '../api/hooks/usePos';
-import { useAuth, useStore } from '../context/AuthContext';
+import { useAuth } from '../context/AuthContext';
 import VariantModal from '../components/sales/VariantModal';
 import CreateInvoiceModal from '../components/sales/CreateInvoiceModal';
 import RefundModal from '../components/sales/RefundModal';
@@ -43,15 +38,19 @@ const calcInvoiceTotal = (items) =>
   items.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
 const Sales = () => {
-  const { user } = useAuth();
-  const { storeId } = useStore();
-  const queryClient = useQueryClient();
+  const { storeId } = useAuth();
   const [activeTab, setActiveTab] = useState('cart');
+  const [products, setProducts] = useState([]);
+  const [cart, setCart] = useState([]);
+  const [cartTotal, setCartTotal] = useState(0);
   const [invoices, setInvoices] = useState([]);
   const [invoiceSearch, setInvoiceSearch] = useState('');
   const [debouncedInvoiceSearch, setDebouncedInvoiceSearch] = useState('');
+  const [loadingProducts, setLoadingProducts] = useState(true);
+  const [loadingCart, setLoadingCart] = useState(true);
   const [loadingInvoices, setLoadingInvoices] = useState(false);
-  const [isManualSaving, setIsManualSaving] = useState(false);
+  const [colorDots, setColorDots] = useState(COLOR_DOTS);
+  const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [variantOpen, setVariantOpen] = useState(false);
@@ -60,15 +59,6 @@ const Sales = () => {
   const [exchangeTarget, setExchangeTarget] = useState(null);
   const [pendingExchange, setPendingExchange] = useState(null);
   const [toast, setToast] = useState(null);
-  const [loadingVariantProduct, setLoadingVariantProduct] = useState(false);
-
-  const [activeAction, setActiveAction] = useState(null);
-  const [orderSearchQuery, setOrderSearchQuery] = useState('');
-  const [debouncedOrderSearch, setDebouncedOrderSearch] = useState('');
-  const [orderSearchResults, setOrderSearchResults] = useState([]);
-  const [searchingOrders, setSearchingOrders] = useState(false);
-  const [selectedOrder, setSelectedOrder] = useState(null);
-  const [dropdownOpen, setDropdownOpen] = useState(false);
 
   const showToast = (message) => {
     setToast(message);
@@ -81,61 +71,38 @@ const Sales = () => {
   }, [invoiceSearch]);
 
   useEffect(() => {
-    const timer = setTimeout(() => setDebouncedOrderSearch(orderSearchQuery), 400);
-    return () => clearTimeout(timer);
-  }, [orderSearchQuery]);
+    fetchAttributes()
+      .then((attrs) => setColorDots(buildColorDotsFromAttributes(attrs)))
+      .catch(() => {});
+  }, []);
 
-  const loadSearchOrders = useCallback(async (query = '') => {
-    setSearchingOrders(true);
+  const loadProducts = useCallback(async () => {
+    setLoadingProducts(true);
     try {
-      const result = await fetchOrders({
-        storeId,
-        search: query,
-        excludePos: false,
-        perPage: 15,
-      });
-      setOrderSearchResults(result.orders || []);
+      const catalog = await fetchPosCatalog({ storeId });
+      setProducts(catalog);
     } catch (err) {
-      console.error('Error fetching orders for search:', err);
-      setOrderSearchResults([]);
+      setError(getApiErrorMessage(err, 'تعذّر تحميل المنتجات'));
+      setProducts([]);
     } finally {
-      setSearchingOrders(false);
+      setLoadingProducts(false);
     }
   }, [storeId]);
 
-  useEffect(() => {
-    if (activeAction) {
-      loadSearchOrders(debouncedOrderSearch);
+  const loadCart = useCallback(async () => {
+    setLoadingCart(true);
+    try {
+      const result = await fetchPosCart();
+      setCart(result.items);
+      setCartTotal(result.total);
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'تعذّر تحميل السلة'));
+      setCart([]);
+      setCartTotal(0);
+    } finally {
+      setLoadingCart(false);
     }
-  }, [activeAction, debouncedOrderSearch, loadSearchOrders]);
-
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (!event.target.closest('.sales-dropdown-wrapper')) {
-        setDropdownOpen(false);
-      }
-    };
-    if (dropdownOpen) {
-      document.addEventListener('click', handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener('click', handleClickOutside);
-    };
-  }, [dropdownOpen]);
-
-  const {
-    products,
-    storeProducts,
-    isLoading: loadingProducts,
-    isError: productsLoadError,
-    error: productsFetchError,
-  } = useSalesProducts(storeId);
-  const { data: cartData, isLoading: loadingCart } = usePosCart();
-  const addMutation = useAddToCart();
-  const removeMutation = useRemoveFromCart();
-  const checkoutMutation = useCheckoutCart();
-  const cart = cartData?.items ?? [];
-  const cartTotal = cartData?.total ?? 0;
+  }, []);
 
   const loadInvoices = useCallback(async () => {
     setLoadingInvoices(true);
@@ -151,6 +118,11 @@ const Sales = () => {
   }, [debouncedInvoiceSearch]);
 
   useEffect(() => {
+    loadProducts();
+    loadCart();
+  }, [loadProducts, loadCart]);
+
+  useEffect(() => {
     if (activeTab === 'invoices') loadInvoices();
   }, [activeTab, loadInvoices]);
 
@@ -163,42 +135,15 @@ const Sales = () => {
   }, [invoices, invoiceSearch]);
 
   const refreshAll = async () => {
-    queryClient.invalidateQueries({ queryKey: ['salesPosCatalog'] });
-    queryClient.invalidateQueries({ queryKey: ['products'] });
-    queryClient.invalidateQueries({ queryKey: ['posCart'] });
-    if (activeTab === 'invoices') await loadInvoices();
+    await Promise.all([loadProducts(), loadCart(), activeTab === 'invoices' ? loadInvoices() : Promise.resolve()]);
   };
 
-  const isSaving = addMutation.isPending || removeMutation.isPending || checkoutMutation.isPending || isManualSaving || loadingVariantProduct;
-
-  const openProduct = async (product) => {
-    if (product?.variants?.length && !isProductAvailable(product)) {
+  const openProduct = (product) => {
+    if (!isProductAvailable(product)) {
       showToast('هذا المنتج غير متوفر حالياً');
       return;
     }
-
-    let resolved = product;
-    if (!product?.variants?.length) {
-      setLoadingVariantProduct(true);
-      try {
-        const posEntry = await fetchSalesProductVariants(product.id, { storeId });
-        resolved = {
-          ...posEntry,
-          image: product.image,
-          imageCandidates: product.imageCandidates,
-          images: product.images,
-          name: product.name,
-          sku: product.sku,
-        };
-      } catch (err) {
-        showToast(getApiErrorMessage(err, 'تعذّر تحميل تنوعات هذا المنتج'));
-        return;
-      } finally {
-        setLoadingVariantProduct(false);
-      }
-    }
-
-    setSelectedProduct(resolved);
+    setSelectedProduct(product);
     setVariantOpen(true);
   };
 
@@ -214,7 +159,7 @@ const Sales = () => {
     }
 
     if (pendingExchange) {
-      setIsManualSaving(true);
+      setIsSaving(true);
       try {
         await exchangePosItem({
           oldOrderId: pendingExchange.orderId,
@@ -239,59 +184,65 @@ const Sales = () => {
       } catch (err) {
         showToast(getApiErrorMessage(err, 'تعذّر إتمام التبديل'));
       } finally {
-        setIsManualSaving(false);
+        setIsSaving(false);
       }
       return;
     }
 
-    const availableStock = resolved.stockUnknown
-      ? 1
-      : Math.max(
-          Number(resolved.stock ?? 0),
-          Number(getVariantStock(product, color, size) ?? 0),
-        );
-    if (availableStock <= 0) {
+    if (getVariantStock(product, color, size) <= 0) {
       showToast('الكمية غير متوفرة لهذا التنوع');
       return;
     }
 
+    setIsSaving(true);
     try {
-      await addMutation.mutateAsync({ variantId: resolved.id, quantity: 1 });
+      await addToPosCart({ variantId: resolved.id, quantity: 1 });
+      await loadCart();
       showToast(`تمت إضافة «${product.name}» إلى السلة`);
     } catch (err) {
       showToast(getApiErrorMessage(err, 'تعذّر إضافة المنتج للسلة'));
+    } finally {
+      setIsSaving(false);
     }
   };
 
   const removeFromCart = async (cartItemId) => {
+    setIsSaving(true);
     try {
-      await removeMutation.mutateAsync(cartItemId);
+      await removeFromPosCart(cartItemId);
+      await loadCart();
       showToast('تم حذف المنتج من السلة');
     } catch (err) {
       showToast(getApiErrorMessage(err, 'تعذّر حذف المنتج'));
+    } finally {
+      setIsSaving(false);
     }
   };
 
   const handleCreateInvoice = async (customerId) => {
+    setIsSaving(true);
     try {
-      const invoice = await checkoutMutation.mutateAsync({ customerId });
+      const invoice = await checkoutPosCart({ customerId });
+      await loadCart();
       await loadInvoices();
       setActiveTab('invoices');
       showToast(`تم إنشاء الفاتورة ${invoice.id} بنجاح`);
     } catch (err) {
       throw err;
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  const handleRefund = async (chosenQty) => {
+  const handleRefund = async () => {
     if (!refundTarget) return;
     const { line } = refundTarget;
-    setIsManualSaving(true);
+    setIsSaving(true);
     try {
       await refundPosItem({
         orderId: line.orderId,
         variantId: line.variantId,
-        quantity: chosenQty || line.quantity || 1,
+        quantity: line.quantity || 1,
       });
       showToast(`تم استرداد «${line.name}» بنجاح`);
       setRefundTarget(null);
@@ -299,106 +250,29 @@ const Sales = () => {
     } catch (err) {
       showToast(getApiErrorMessage(err, 'تعذّر إتمام الاسترداد'));
     } finally {
-      setIsManualSaving(false);
+      setIsSaving(false);
     }
   };
 
-  const handleExchangeSelect = async (selectedNewVariants, chosenQty) => {
+  const handleExchangeSelect = (newProduct) => {
     if (!exchangeTarget) return;
-    setIsManualSaving(true);
-    try {
-      const qtyAllocations = [];
-      let remainingOld = chosenQty;
-      for (let i = 0; i < selectedNewVariants.length; i++) {
-        const item = selectedNewVariants[i];
-        const isLast = i === selectedNewVariants.length - 1;
-        let oldQtyForThis = 0;
-        if (isLast) {
-          oldQtyForThis = remainingOld;
-        } else {
-          oldQtyForThis = Math.min(item.quantity, remainingOld);
-          remainingOld -= oldQtyForThis;
-        }
-        qtyAllocations.push({ item, oldQtyForThis });
-      }
-
-      await Promise.allSettled(
-        qtyAllocations.map(({ item, oldQtyForThis }) =>
-          exchangePosItem({
-            oldOrderId: exchangeTarget.line.orderId,
-            oldVariantId: exchangeTarget.line.variantId,
-            oldQuantity: oldQtyForThis,
-            newVariantId: item.variant.id,
-            newQuantity: item.quantity,
-          }),
-        ),
-      );
-
-      const oldTotal = exchangeTarget.line.price * chosenQty;
-      const newTotal = selectedNewVariants.reduce((sum, item) => sum + item.price * item.quantity, 0);
-      const diff = newTotal - oldTotal;
-
-      let msg = `تم استبدال المنتجات بنجاح`;
-      if (diff < 0) msg += ` — يُسترد للعميل ${Math.abs(diff)} د.ل`;
-      else if (diff > 0) msg += ` — مبلغ إضافي ${Math.abs(diff)} د.ل`;
-      
-      showToast(msg);
-      setExchangeTarget(null);
-      await refreshAll();
-    } catch (err) {
-      showToast(getApiErrorMessage(err, 'تعذّر إتمام الاستبدال'));
-    } finally {
-      setIsManualSaving(false);
-    }
+    setPendingExchange({
+      orderId: exchangeTarget.line.orderId,
+      variantId: exchangeTarget.line.variantId,
+      oldPrice: exchangeTarget.line.price,
+      quantity: exchangeTarget.line.quantity || 1,
+    });
+    setExchangeTarget(null);
+    setSelectedProduct(products.find((p) => p.id === newProduct.id) ?? newProduct);
+    setVariantOpen(true);
+    showToast('اختر اللون والمقاس للمنتج الجديد');
   };
 
   return (
     <div className="sales-page">
       <div className="sales-header">
-        <div className="sales-header-content">
-          <h1 className="page-title">المبيعات المباشرة</h1>
-          <p className="page-subtitle">إدارة المنتجات المباعة مباشرة من المتجر</p>
-        </div>
-        <div className="sales-header-actions">
-          <button
-            type="button"
-            className={`sales-action-btn refund-btn ${activeAction === 'refund' ? 'active' : ''}`}
-            onClick={() => {
-              if (activeAction === 'refund') {
-                setActiveAction(null);
-                setSelectedOrder(null);
-                setOrderSearchQuery('');
-              } else {
-                setActiveAction('refund');
-                setSelectedOrder(null);
-                setOrderSearchQuery('');
-                setDropdownOpen(true);
-              }
-            }}
-          >
-            <RotateCcw size={16} />
-            عملية استرجاع
-          </button>
-          <button
-            type="button"
-            className={`sales-action-btn exchange-btn ${activeAction === 'exchange' ? 'active' : ''}`}
-            onClick={() => {
-              if (activeAction === 'exchange') {
-                setActiveAction(null);
-                setSelectedOrder(null);
-                setOrderSearchQuery('');
-              } else {
-                setActiveAction('exchange');
-                setSelectedOrder(null);
-                setOrderSearchQuery('');
-                setDropdownOpen(true);
-              }
-            }}
-          >
-            <ArrowLeftRight size={16} />
-            عملية استبدال
-          </button>
-        </div>
+        <h1 className="page-title">المبيعات المباشرة</h1>
+        <p className="page-subtitle">إدارة المنتجات المباعة مباشرة من المتجر</p>
       </div>
 
       <div className="sales-tabs">
@@ -422,210 +296,6 @@ const Sales = () => {
 
       {error && <p className="sales-error">{error}</p>}
 
-      {activeAction && (
-        <div className="sales-action-panel">
-          <div className="sales-action-panel-header">
-            <h3>
-              {activeAction === 'refund' ? (
-                <>
-                  <RotateCcw size={18} />
-                  عملية استرجاع جديدة
-                </>
-              ) : (
-                <>
-                  <ArrowLeftRight size={18} />
-                  عملية استبدال جديدة
-                </>
-              )}
-            </h3>
-            <button
-              type="button"
-              className="sales-action-panel-close"
-              onClick={() => {
-                setActiveAction(null);
-                setSelectedOrder(null);
-                setOrderSearchQuery('');
-              }}
-              aria-label="إغلاق"
-            >
-              <X size={18} />
-            </button>
-          </div>
-
-          <div className="sales-action-panel-body">
-            <div className="sales-order-search-container">
-              <label className="sales-input-label">
-                ابحث عن الطلب (سواء من المبيعات المباشرة أو طلبات الزبائن):
-              </label>
-              <div className="sales-dropdown-wrapper">
-                <div className="sales-search-input-wrapper">
-                  <Search size={18} className="search-icon" />
-                  <input
-                    type="text"
-                    placeholder="ابحث برقم الطلب، اسم العميل، أو الهاتف..."
-                    value={orderSearchQuery}
-                    onChange={(e) => {
-                      setOrderSearchQuery(e.target.value);
-                      setDropdownOpen(true);
-                    }}
-                    onFocus={() => setDropdownOpen(true)}
-                  />
-                  {orderSearchQuery && (
-                    <button
-                      type="button"
-                      className="clear-search-btn"
-                      onClick={() => {
-                        setOrderSearchQuery('');
-                        setDropdownOpen(true);
-                      }}
-                    >
-                      <X size={14} />
-                    </button>
-                  )}
-                </div>
-
-                {dropdownOpen && (
-                  <div className="sales-orders-dropdown-list">
-                    {searchingOrders ? (
-                      <div className="dropdown-message">جاري البحث...</div>
-                    ) : orderSearchResults.length === 0 ? (
-                      <div className="dropdown-message">لا توجد طلبات مطابقة للبحث</div>
-                    ) : (
-                      orderSearchResults.map((order) => (
-                        <div
-                          key={order.orderId}
-                          className="dropdown-item"
-                          onClick={() => {
-                            setSelectedOrder(order);
-                            setDropdownOpen(false);
-                            setOrderSearchQuery(order.id);
-                          }}
-                        >
-                          <div className="dropdown-item-header">
-                            <span className="order-num">طلب رقم: {order.id}</span>
-                            <span className="order-total">{order.total} د.ل</span>
-                          </div>
-                          <div className="dropdown-item-meta">
-                            <span>العميل: {order.customerName}</span>
-                            <span>التاريخ: {order.date}</span>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {selectedOrder && (
-              <div className="sales-selected-order-details">
-                <div className="selected-order-meta-grid">
-                  <div className="meta-col">
-                    <span className="meta-label">رقم الطلب:</span>
-                    <strong className="meta-val">{selectedOrder.id}</strong>
-                  </div>
-                  <div className="meta-col">
-                    <span className="meta-label">العميل:</span>
-                    <strong className="meta-val">{selectedOrder.customerName}</strong>
-                  </div>
-                  <div className="meta-col">
-                    <span className="meta-label">التاريخ:</span>
-                    <strong className="meta-val">{selectedOrder.date}</strong>
-                  </div>
-                  <div className="meta-col">
-                    <span className="meta-label">الحالة:</span>
-                    <strong className="meta-val">{selectedOrder.status}</strong>
-                  </div>
-                </div>
-
-                <div className="selected-order-products-table">
-                  <h5>المنتجات القابلة {activeAction === 'refund' ? 'للإرجاع' : 'للتبديل'}</h5>
-                  <div className="selected-order-products-list">
-                    {selectedOrder.products && selectedOrder.products.length > 0 ? (
-                      selectedOrder.products.map((item, idx) => {
-                        const line = {
-                          lineId: item.lineId ?? idx,
-                          orderId: selectedOrder.orderId,
-                          variantId: item.variantId,
-                          productId: item.productId,
-                          name: item.name,
-                          price: item.price,
-                          quantity: item.quantity,
-                          sku: item.sku || '',
-                          color: item.color || '',
-                          size: item.size || '',
-                        };
-                        return (
-                          <div key={idx} className="selected-order-product-row">
-                            <div className="prod-info">
-                              <span className="prod-name">{item.name}</span>
-                              {(item.color || item.size) ? (
-                                <span className="prod-variant">
-                                  {item.color && `اللون: ${item.color}`}
-                                  {item.color && item.size && ' | '}
-                                  {item.size && `المقاس: ${item.size}`}
-                                </span>
-                              ) : item.variantLabel ? (
-                                <span className="prod-variant">{item.variantLabel}</span>
-                              ) : null}
-                              {item.sku && (
-                                <span className="prod-sku">SKU: {item.sku}</span>
-                              )}
-                            </div>
-                            <div className="prod-meta">
-                              <span>الكمية: {item.quantity}</span>
-                              <span>السعر: {item.price} د.ل</span>
-                              <span className="prod-total">
-                                الإجمالي: {item.price * item.quantity} د.ل
-                              </span>
-                            </div>
-                            <div className="prod-actions">
-                              {activeAction === 'refund' ? (
-                                <button
-                                  type="button"
-                                  className="sales-line-btn refund"
-                                  onClick={() =>
-                                    setRefundTarget({
-                                      invoiceId: selectedOrder.id,
-                                      line,
-                                    })
-                                  }
-                                  disabled={isSaving}
-                                >
-                                  <RotateCcw size={14} />
-                                  استرداد
-                                </button>
-                              ) : (
-                                <button
-                                  type="button"
-                                  className="sales-line-btn exchange"
-                                  onClick={() =>
-                                    setExchangeTarget({
-                                      invoiceId: selectedOrder.id,
-                                      line,
-                                    })
-                                  }
-                                  disabled={isSaving}
-                                >
-                                  <ArrowLeftRight size={14} />
-                                  تبديل
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })
-                    ) : (
-                      <div className="no-items">لا توجد منتجات في هذا الطلب</div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
       {activeTab === 'cart' ? (
         <div className="sales-layout">
           <div className="sales-cart-panel">
@@ -648,14 +318,6 @@ const Sales = () => {
               <>
                 {cart.map((item) => (
                   <div key={item.key} className="sales-cart-item">
-                    <SalesProductThumb
-                      item={item}
-                      storeProducts={storeProducts}
-                      wrapperClassName="sales-cart-item-image-wrap"
-                      className="sales-cart-item-image"
-                      alt={item.name}
-                    />
-                    <div className="sales-cart-item-content">
                     <div className="sales-cart-item-header">
                       <div>
                         <p className="sales-cart-item-name">{item.name}</p>
@@ -678,7 +340,6 @@ const Sales = () => {
                       >
                         <Trash2 size={16} />
                       </button>
-                    </div>
                     </div>
                   </div>
                 ))}
@@ -705,27 +366,14 @@ const Sales = () => {
             <h3>منتجات المتجر</h3>
             {loadingProducts ? (
               <p className="sales-loading">جاري تحميل المنتجات...</p>
-            ) : productsLoadError ? (
-              <p className="sales-error">
-                {getApiErrorMessage(productsFetchError, 'تعذّر تحميل المنتجات')}
-              </p>
-            ) : products.length === 0 ? (
-              <p className="sales-loading">لا توجد منتجات في المتجر — أضف منتجات من صفحة المنتجات</p>
             ) : (
               <div className="sales-products-grid">
                 {products.map((product) => {
-                  const stockInfo = product.variants?.length
-                    ? getProductStockInfo(product)
-                    : {
-                        total: product.listStock != null ? Number(product.listStock) : 0,
-                        unknown: product.listStock == null,
-                      };
+                  const stockInfo = getProductStockInfo(product);
                   const totalStock = stockInfo.unknown && stockInfo.total === 0
                     ? null
                     : stockInfo.total;
-                  const outOfStock = product.variants?.length
-                    ? !isProductAvailable(product)
-                    : product.listStock != null && Number(product.listStock) <= 0;
+                  const outOfStock = !isProductAvailable(product);
                   return (
                     <div
                       key={product.id}
@@ -735,18 +383,21 @@ const Sales = () => {
                       onClick={() => !outOfStock && openProduct(product)}
                       onKeyDown={(e) => e.key === 'Enter' && !outOfStock && openProduct(product)}
                     >
-                      <SalesProductThumb
-                        item={product}
-                        storeProducts={storeProducts}
-                        wrapperClassName="sales-product-image-wrap"
+                      <img
                         className="sales-product-image"
+                        src={product.image}
                         alt={product.name}
+                        loading="lazy"
                       />
                       <div className="sales-product-body">
                         <p className="sales-product-name">{product.name}</p>
                         <div className="sales-product-colors">
                           {product.colors.map((c) => (
                             <span key={c} className="sales-color-dot">
+                              <span
+                                className="sales-color-circle"
+                                style={{ background: colorDots[c] || '#ccc' }}
+                              />
                               {c}
                             </span>
                           ))}
@@ -799,7 +450,7 @@ const Sales = () => {
                   <div>
                     <p className="sales-invoice-number">فاتورة رقم: {invoice.id}</p>
                     <p className="sales-invoice-meta">
-                      التاريخ: {invoice.date} | الموظف: {invoice.staff ?? invoice.customer}
+                      التاريخ: {invoice.date} | العميل: {invoice.customer}
                     </p>
                   </div>
                   <span className="sales-invoice-status">{invoice.status}</span>
@@ -857,8 +508,6 @@ const Sales = () => {
           setPendingExchange(null);
         }}
         product={activeProduct}
-        storeId={storeId}
-        storeProducts={storeProducts}
         onAdd={handleAddToCart}
         isSaving={isSaving}
         exchangeFrom={
@@ -874,7 +523,6 @@ const Sales = () => {
         cart={cart}
         onConfirm={handleCreateInvoice}
         isSaving={isSaving}
-        user={user}
       />
 
       <RefundModal
@@ -890,7 +538,6 @@ const Sales = () => {
         onClose={() => setExchangeTarget(null)}
         item={exchangeTarget?.line}
         products={products}
-        storeProducts={storeProducts}
         onConfirm={handleExchangeSelect}
       />
 

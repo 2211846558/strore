@@ -1,7 +1,6 @@
 import { apiRequest } from './client';
 import { API_ENDPOINTS } from './config';
 
-
 function extractList(res) {
   const payload = res?.data ?? res;
   if (Array.isArray(payload)) return payload;
@@ -11,9 +10,8 @@ function extractList(res) {
 
 /** حالات الطلب في الـ API → عربي */
 export const ORDER_STATUS_TO_AR = {
-  pending: 'تجهيز الطلب',
-  pending_admin: 'تجهيز الطلب',
-  new: 'تجهيز الطلب',
+  pending: 'جديد',
+  new: 'جديد',
   processing: 'قيد المعالجة',
   preparing: 'قيد المعالجة',
   prepared: 'قيد المعالجة',
@@ -28,7 +26,6 @@ export const ORDER_STATUS_TO_AR = {
 
 /** عربي → حالة الـ API */
 export const ORDER_STATUS_TO_API = {
-  'تجهيز الطلب': 'pending',
   جديد: 'pending',
   'قيد المعالجة': 'processing',
   'تم الشحن': 'shipped',
@@ -59,119 +56,51 @@ export function mapStatusToApi(status) {
   return status;
 }
 
-function extractOrderItems(row) {
-  const itemsRaw =
-    row.items ??
-    row.order_items ??
-    row.products ??
-    row.line_items ??
-    [];
-  return Array.isArray(itemsRaw) ? itemsRaw : [];
-}
-
 function mapOrderItem(item) {
-  const variant = item.variant ?? item.product_variant ?? {};
   return {
-    name: item.product_name ?? item.name ?? item.product?.name ?? item.title ?? '—',
+    name: item.product_name ?? item.name ?? item.product?.name ?? '—',
     quantity: Number(item.quantity ?? 1),
     price: Number(item.unit_price ?? item.price ?? 0),
-    variantLabel: item.variant_label ?? item.variantLabel ?? variant.label ?? null,
-    variantId: item.variant_id ?? item.variantId ?? item.product_variant_id ?? item.productVariantId ?? null,
-    lineId: item.id ?? item.lineId ?? null,
-    sku: item.sku ?? variant.sku ?? '',
-    productId: item.product_id ?? item.product?.id ?? variant.product_id ?? null,
-    color: item.color ?? variant.color ?? null,
-    size: item.size ?? variant.size ?? null,
+    variantLabel: item.sku ?? item.variant_label ?? null,
   };
-}
-
-function formatAddress(addr) {
-  if (!addr) return '—';
-  if (typeof addr === 'string') return addr;
-  const parts = [
-    addr.address_line_1,
-    addr.address_line_2,
-    addr.address_line,
-    addr.street,
-    addr.area,
-    addr.city,
-    addr.zone_name ?? addr.zone?.name,
-    addr.details,
-    addr.label,
-  ].filter(Boolean);
-  return parts.join('، ') || addr.full_address || '—';
-}
-
-function computeProductsCount(row, products) {
-  const quantity = Number(row.items_quantity ?? 0);
-  if (quantity > 0) return quantity;
-
-  const lineCount = Number(row.items_count ?? 0);
-  if (lineCount > 0) return lineCount;
-
-  const fromItems = products.reduce((sum, product) => sum + (product.quantity || 0), 0);
-  return fromItems || products.length;
 }
 
 function isPosOrder(row) {
   const number = String(row.order_number ?? row.code ?? '');
   const type = String(row.order_type ?? row.type ?? '').toLowerCase();
-  const channel = String(row.sales_channel ?? '').toLowerCase();
-  return number.includes('POS') || type === 'pos' || type === 'past' || channel === 'pos';
-}
-
-function resolveStaffName(row) {
-  return row.staff_name ?? row.cashier_name ?? row.seller?.name ?? row.seller_name ?? null;
-}
-
-function resolveBuyerName(row) {
-  return row.customer_name ?? row.customer?.name ?? row.user?.name ?? row.buyer_name ?? '—';
+  return number.includes('POS') || type === 'pos' || type === 'past';
 }
 
 export function mapOrder(row) {
-  const products = extractOrderItems(row).map(mapOrderItem);
+  const itemsRaw = row.items ?? row.order_items ?? row.products ?? [];
+  const products = (Array.isArray(itemsRaw) ? itemsRaw : []).map(mapOrderItem);
   const statusRaw = String(row.status ?? 'pending').toLowerCase();
   const status = mapStatusToArabic(statusRaw);
-  const isPos = isPosOrder(row);
-  const staffName = resolveStaffName(row);
-  const buyerName = resolveBuyerName(row);
-  const hasStaff = Boolean(staffName);
 
   return {
     id: row.order_number ?? row.code ?? `ORD-${row.id}`,
     orderId: row.id,
     date: formatDate(row.created_at ?? row.date ?? row.ordered_at),
-    staffName: staffName ?? '—',
-    buyerName,
-    customerName: hasStaff ? staffName : buyerName,
-    hasStaff,
+    customerName:
+      row.customer_name ?? row.customer?.name ?? row.user?.name ?? row.buyer_name ?? '—',
     phone:
       row.customer_phone ??
       row.phone ??
       row.customer?.phone ??
       row.user?.phone ??
       '—',
-    address: formatAddress(
-      row.shipping_address ?? row.delivery_address ?? row.address ?? row.shipping_address_text
-    ),
+    address:
+      row.shipping_address ??
+      row.delivery_address ??
+      row.address ??
+      row.shipping_address_text ??
+      '—',
     products,
-    productsCount: computeProductsCount(row, products),
     total: Number(row.total ?? row.total_amount ?? row.grand_total ?? 0),
     status,
     statusRaw,
     paymentMethod: row.payment_method ?? row.payment_method_name ?? null,
     notes: row.notes ?? row.cancellation_reason ?? null,
-    driverName: row.driver_name ?? row.driver?.user?.name ?? row.driver?.name ?? null,
-    hasDriver: Boolean(row.driver_name ?? row.driver?.user?.name ?? row.driver?.name ?? row.driver_id),
-    zoneId: row.zone_id ?? row.shipping_address?.zone_id ?? row.store?.zone_id ?? null,
-    zoneName:
-      row.zone_name ??
-      row.shipping_address?.zone_name ??
-      row.shipping_address?.zone?.name ??
-      row.store?.zone_name ??
-      row.store?.zone?.name ??
-      null,
-    isPos,
     raw: row,
   };
 }
@@ -217,17 +146,16 @@ export async function fetchOrders({
 
 export async function fetchAllOrders(filters = {}) {
   const perPage = filters.perPage ?? 100;
-  const maxPages = filters.maxPages ?? 5;
   const all = [];
   let page = 1;
   let lastPage = 1;
 
   do {
-    const result = await fetchOrders({ ...filters, perPage, page }, true);
+    const result = await fetchOrders({ ...filters, perPage, page });
     all.push(...result.orders);
-    lastPage = Number(result.meta?.last_page ?? result.meta?.total_pages ?? 1);
+    lastPage = Number(result.meta?.last_page ?? 1);
     page += 1;
-  } while (page <= lastPage && (maxPages === null || page <= maxPages));
+  } while (page <= lastPage);
 
   return all;
 }
@@ -237,23 +165,18 @@ export async function fetchAllOrders(filters = {}) {
  */
 export async function fetchOrder(id) {
   const res = await apiRequest(API_ENDPOINTS.order(id));
-  const row = res?.data?.data ?? res?.data ?? res;
-  return mapOrder(row);
+  return mapOrder(res?.data ?? res);
 }
 
 /**
  * PATCH /orders/{id}/status — تحديث حالة الطلب
  */
-export async function updateOrderStatus(id, status, comment) {
-  const body = { status: mapStatusToApi(status) };
-  if (comment?.trim()) body.comment = comment.trim();
-
+export async function updateOrderStatus(id, status) {
   const res = await apiRequest(API_ENDPOINTS.orderStatus(id), {
     method: 'PATCH',
-    body,
+    body: { status: mapStatusToApi(status) },
   });
-  const row = res?.data?.data ?? res?.data ?? res;
-  return mapOrder(row);
+  return mapOrder(res?.data ?? res);
 }
 
 /**
@@ -268,65 +191,11 @@ export async function cancelOrder(id, reason = 'إلغاء من لوحة الم�
 }
 
 /**
- * POST /orders/{id}/prepare — تجهيز الطلب ونقله للسائق (حالة shipped + تعيين سائق تلقائي)
+ * POST /orders/{id}/prepare — تجهيز الطلب
  */
 export async function prepareOrder(id) {
   const res = await apiRequest(API_ENDPOINTS.orderPrepare(id), { method: 'POST' });
-  const row = res?.data?.data ?? res?.data ?? res;
-  return mapOrder(row);
-}
-
-export function buildDispatchToast(order) {
-  const driver = order?.driverName;
-  const isDelivering =
-    order?.status === 'قيد التوصيل' || order?.statusRaw === 'out_for_delivery';
-
-  if (isDelivering && driver && driver !== '—') {
-    return `الطلب ${order.id} أصبح «قيد التوصيل» وظهر للسائق ${driver}`;
-  }
-  if (isDelivering) {
-    return `الطلب ${order.id} أصبح «قيد التوصيل»`;
-  }
-  if (order?.status === 'تم الشحن' || order?.statusRaw === 'shipped') {
-    const zone = order?.zoneName ? ` (${order.zoneName})` : '';
-    return `الطلب ${order.id} تم شحنه — في انتظار سائق متصل في المنطقة${zone}`;
-  }
-  return `تم تحديث الطلب ${order.id}`;
-}
-
-/**
- * إرسال الطلب للتوصيل:
- * - جديد/قيد المعالجة → POST /orders/{id}/prepare (shipped + تعيين سائق → out_for_delivery)
- * - تم الشحن → PATCH /orders/{id}/status → out_for_delivery + تعيين سائق
- */
-export async function dispatchOrderForDelivery(order) {
-  if (canPrepareOrder(order)) {
-    return prepareOrder(order.orderId);
-  }
-
-  const raw = String(order?.statusRaw ?? order?.status ?? '').toLowerCase();
-  if (raw === 'shipped' || order?.status === 'تم الشحن') {
-    return updateOrderStatus(
-      order.orderId,
-      'قيد التوصيل',
-      'إرسال الطلب للسائق للتوصيل'
-    );
-  }
-
-  return order;
-}
-
-export function shouldDispatchToDriver(newStatus) {
-  return newStatus === 'تم الشحن' || newStatus === 'قيد التوصيل';
-}
-
-export function canDispatchOrder(order) {
-  if (order?.isPos) return false;
-  if (canPrepareOrder(order)) return true;
-
-  const raw = String(order?.statusRaw ?? order?.status ?? '').toLowerCase();
-  const isShipped = raw === 'shipped' || order?.status === 'تم الشحن';
-  return isShipped && !order?.hasDriver;
+  return mapOrder(res?.data ?? res);
 }
 
 /**
@@ -338,16 +207,8 @@ export async function confirmOrderDelivery(id) {
 }
 
 export function canPrepareOrder(order) {
-  if (order?.isPos) return false;
   const raw = String(order?.statusRaw ?? order?.status ?? '').toLowerCase();
-  return (
-    ['pending', 'pending_admin', 'new', 'processing'].includes(raw)
-    || ['تجهيز الطلب', 'جديد', 'قيد المعالجة'].includes(order?.status)
-  );
-}
-
-export function shouldPrepareForShipped(status) {
-  return shouldDispatchToDriver(status);
+  return ['pending', 'new', 'processing'].includes(raw) || order?.status === 'جديد';
 }
 
 export function canConfirmDelivery(order) {

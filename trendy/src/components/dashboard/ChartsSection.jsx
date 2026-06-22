@@ -72,4 +72,4 @@ const ChartsSection = ({ data = [], loading = false }) => {
   );
 };
 
-export default React.memo(ChartsSection);
+export default ChartsSection;

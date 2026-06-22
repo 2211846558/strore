@@ -8,20 +8,6 @@ export const CAMPAIGN_SUBSCRIPTION_COST = 50;
 
 const MY_CAMPAIGNS_KEY = (storeId) => `trendy_my_campaigns_${storeId}`;
 
-function extractList(res) {
-  const payload = res?.data ?? res;
-  if (Array.isArray(payload)) return payload;
-  if (Array.isArray(payload?.data)) return payload.data;
-  return [];
-}
-
-function unwrapEntity(res) {
-  const payload = res?.data ?? res;
-  if (payload?.id != null) return payload;
-  if (payload?.data?.id != null) return payload.data;
-  return payload;
-}
-
 function readRawMyCampaigns(storeId) {
   if (!storeId) return [];
   try {
@@ -55,73 +41,38 @@ export function resolveCampaignBanner(campaign, availableCampaigns = []) {
   return live?.bannerImage ?? null;
 }
 
-function parseApiDate(value) {
-  if (!value) return null;
-  const normalized = String(value).includes('T') ? value : String(value).replace(' ', 'T');
-  const date = new Date(normalized);
-  return Number.isNaN(date.getTime()) ? null : date;
-}
-
 function calcDurationDays(startDate, endDate) {
-  const start = parseApiDate(startDate);
-  const end = parseApiDate(endDate);
-  if (!end) return 30;
-
-  const now = new Date();
-  const from = start && start > now ? start : now;
-  const days = Math.ceil((end.getTime() - from.getTime()) / (1000 * 60 * 60 * 24));
-  if (days > 0) return days;
-
-  if (start && end) {
-    return Math.max(
-      1,
-      Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)),
-    );
-  }
-
-  return 30;
+  if (!startDate || !endDate) return 30;
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const days = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
+  return Math.max(1, days);
 }
 
 function formatDate(date) {
-  const d = date instanceof Date ? date : new Date(date);
-  if (Number.isNaN(d.getTime())) return '—';
+  const d = new Date(date);
   const pad = (n) => String(n).padStart(2, '0');
   return `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()}`;
 }
 
-function mapCampaignStatus(status) {
-  const key = String(status ?? '').toLowerCase();
-  if (key === 'active') return 'active';
-  if (key === 'scheduled') return 'scheduled';
-  if (key === 'inactive' || key === 'ended' || key === 'expired') return 'inactive';
-  return key || 'active';
-}
-
 export function mapCampaignFromApi(campaign) {
   const durationDays = calcDurationDays(campaign.start_date, campaign.end_date);
-  const status = mapCampaignStatus(campaign.status);
-  const startDate = parseApiDate(campaign.start_date);
-  const endDate = parseApiDate(campaign.end_date);
-
   return {
     id: campaign.id,
     megaCampaignId: campaign.id,
     title: campaign.name,
     description: campaign.description || '',
-    type: campaign.type ?? 'default',
+    type: 'default',
     duration: String(durationDays),
     productsCount: String(
       campaign.max_products ?? campaign.products_count ?? campaign.products_limit ?? 10,
     ),
     price: String(
-      campaign.subscription_cost ??
-        campaign.subscription_price ??
-        campaign.price ??
-        CAMPAIGN_SUBSCRIPTION_COST,
+      campaign.subscription_cost ?? campaign.subscription_price ?? campaign.price ?? CAMPAIGN_SUBSCRIPTION_COST,
     ),
     startDate: campaign.start_date,
     endDate: campaign.end_date,
-    status,
+    status: campaign.status,
     stores: Array.isArray(campaign.stores) ? campaign.stores : [],
     bannerImage: resolveCampaignBannerUrl(
       campaign.banner_image ??
@@ -131,13 +82,6 @@ export function mapCampaignFromApi(campaign) {
           ? `campaigns/${campaign.media[0].file_name}`
           : null),
     ),
-    dateRange:
-      startDate && endDate
-        ? {
-            start: formatDate(startDate),
-            end: formatDate(endDate),
-          }
-        : { start: '—', end: '—' },
   };
 }
 
@@ -154,68 +98,29 @@ function findLocalCampaignEntry(storeId, megaCampaignId) {
   );
 }
 
-function normalizeSelectedProducts(source) {
-  if (!source) return [];
-  const list = Array.isArray(source) ? source : [];
-  return list
-    .map((product) => {
-      if (product == null) return null;
-      if (typeof product === 'number' || typeof product === 'string') {
-        const id = Number(product);
-        return Number.isFinite(id) ? { id, name: `منتج #${id}` } : null;
-      }
-      const id = product.id ?? product.product_id;
-      if (id == null) return null;
-      return {
-        id,
-        name: product.name ?? product.product_name ?? product.title ?? `منتج #${id}`,
-      };
-    })
-    .filter(Boolean);
-}
-
-function extractStoreSubscriptionProducts(storeSub) {
-  if (!storeSub) return [];
-  return normalizeSelectedProducts(
-    storeSub.products ??
-      storeSub.selected_products ??
-      storeSub.selectedProducts ??
-      storeSub.product_ids,
-  );
-}
-
 function mapApiSubscriptionToMyCampaign(campaign, storeId, localEntry = null) {
   const storeSub = (campaign.stores ?? []).find(
     (store) => Number(store.id) === Number(storeId),
   );
-
-  const startDate = parseApiDate(campaign.startDate ?? campaign.start_date);
-  const endDate = parseApiDate(campaign.endDate ?? campaign.end_date);
-  const isActive =
-    campaign.status === 'active' &&
-    (!endDate || endDate.getTime() >= Date.now());
-
-  const apiProducts = extractStoreSubscriptionProducts(storeSub);
-  const localProducts = normalizeSelectedProducts(localEntry?.selectedProducts);
 
   return {
     id: localEntry?.id ?? storeSub?.subscription_id ?? `sub-${campaign.megaCampaignId ?? campaign.id}`,
     megaCampaignId: campaign.megaCampaignId ?? campaign.id,
     title: campaign.title,
     description: campaign.description,
-    price: String(storeSub?.price_paid ?? campaign.price ?? CAMPAIGN_SUBSCRIPTION_COST),
+    price: campaign.price,
     duration: campaign.duration,
     productsCount: localEntry?.productsCount ?? campaign.productsCount,
-    status: isActive ? 'نشطة' : 'منتهية',
+    status: campaign.status === 'active' ? 'نشطة' : 'منتهية',
     dateRange:
       localEntry?.dateRange ??
-      (startDate && endDate
+      (campaign.startDate && campaign.endDate
         ? {
-            start: formatDate(startDate),
-            end: formatDate(endDate),
+            start: formatDate(campaign.startDate),
+            end: formatDate(campaign.endDate),
           }
         : { start: '—', end: '—' }),
-    selectedProducts: apiProducts.length > 0 ? apiProducts : localProducts,
+    selectedProducts: localEntry?.selectedProducts ?? [],
     discountPercentage:
       storeSub?.discount_percentage ?? localEntry?.discountPercentage ?? null,
     bannerImage: resolveCampaignBanner(campaign),
@@ -234,7 +139,6 @@ function mapStoredSubscription(entry) {
     status: entry.status === 'active' ? 'نشطة' : entry.status,
     dateRange: entry.dateRange,
     selectedProducts: entry.selectedProducts || [],
-    discountPercentage: entry.discountPercentage ?? null,
     bannerImage: resolveCampaignBannerUrl(entry.bannerImage ?? entry.banner_image),
   };
 }
@@ -244,15 +148,8 @@ function mapStoredSubscription(entry) {
  */
 export async function fetchAvailableCampaigns() {
   const res = await apiRequest(API_ENDPOINTS.campaigns, { auth: false });
-  return extractList(res).map(mapCampaignFromApi);
-}
-
-/**
- * GET /api/campaigns/{id} — تفاصيل حملة مع المتاجر المشتركة
- */
-export async function fetchCampaignById(campaignId) {
-  const res = await apiRequest(API_ENDPOINTS.campaign(campaignId), { auth: false });
-  return mapCampaignFromApi(unwrapEntity(res));
+  const list = res?.data ?? res ?? [];
+  return Array.isArray(list) ? list.map(mapCampaignFromApi) : [];
 }
 
 /**
@@ -271,19 +168,21 @@ export async function subscribeToCampaign({
   storeId,
   megaCampaignId,
   productIds,
+  discountPercentage,
 }) {
   return apiRequest(API_ENDPOINTS.storeCampaignSubscribe(storeId), {
     method: 'POST',
     body: {
-      mega_campaign_id: Number(megaCampaignId),
-      product_ids: productIds.map((id) => Number(id)),
-      discount_percentage: 1,
+      mega_campaign_id: megaCampaignId,
+      product_ids: productIds,
+      discount_percentage: Number(discountPercentage),
     },
   });
 }
 
 /**
- * حملاتي المشتركة المحفوظة محلياً (احتياط عند غياب stores[] في الاستجابة)
+ * حملاتي المشتركة — تُخزَّن محلياً بعد نجاح الاشتراك
+ * (لا يوجد GET مخصص في api.md)
  */
 export function loadMyCampaigns(storeId) {
   return readRawMyCampaigns(storeId).map(mapStoredSubscription);
@@ -298,23 +197,13 @@ function mapSubscriptionFromApiResponse(res, campaign, selectedProducts) {
     campaign.megaCampaignId ??
     campaign.id;
 
-  const startDate =
-    parseApiDate(subscription.start_date ?? subscription.starts_at) ??
-    parseApiDate(campaign.startDate) ??
-    new Date();
-  const endDate =
-    parseApiDate(subscription.end_date ?? subscription.ends_at) ??
-    parseApiDate(campaign.endDate) ??
-    new Date();
-
   return {
     id: subscription.id ?? Date.now(),
     megaCampaignId,
     title: subscription.campaign_name ?? subscription.name ?? campaign.title,
     description: subscription.description ?? campaign.description,
     price: String(
-      subscription.price_paid ??
-        subscription.subscription_cost ??
+      subscription.subscription_cost ??
         subscription.price ??
         campaign.price ??
         CAMPAIGN_SUBSCRIPTION_COST,
@@ -322,7 +211,7 @@ function mapSubscriptionFromApiResponse(res, campaign, selectedProducts) {
     duration: String(
       subscription.duration_days ??
         campaign.duration ??
-        calcDurationDays(startDate, endDate),
+        calcDurationDays(campaign.startDate, campaign.endDate),
     ),
     productsCount: String(
       subscription.products_count ??
@@ -331,8 +220,8 @@ function mapSubscriptionFromApiResponse(res, campaign, selectedProducts) {
     ),
     status: subscription.status === 'inactive' ? 'منتهية' : 'نشطة',
     dateRange: {
-      start: formatDate(startDate),
-      end: formatDate(endDate),
+      start: formatDate(subscription.start_date ?? campaign.startDate ?? new Date()),
+      end: formatDate(subscription.end_date ?? campaign.endDate ?? new Date()),
     },
     selectedProducts,
     discountPercentage: subscription.discount_percentage ?? null,
@@ -359,7 +248,6 @@ export function saveMyCampaign(storeId, entry) {
     status: entry.status === 'inactive' ? 'منتهية' : entry.status ?? 'نشطة',
     dateRange: entry.dateRange,
     selectedProducts: entry.selectedProducts,
-    discountPercentage: entry.discountPercentage ?? null,
     bannerImage: entry.bannerImage ?? entry.banner_image ?? null,
   };
   const next = [
@@ -372,6 +260,7 @@ export function saveMyCampaign(storeId, entry) {
 
 /**
  * GET /api/campaigns — حملاتي المشتركة (من stores[] لكل حملة)
+ * POST /api/stores/{store}/campaigns/subscribe — الاشتراك
  */
 export async function fetchMyCampaigns(storeId, availableCampaigns = null) {
   if (!storeId) return [];
@@ -382,114 +271,47 @@ export async function fetchMyCampaigns(storeId, availableCampaigns = null) {
       isStoreSubscribedToCampaign(campaign, storeId),
     );
 
-    const enrichedList = await Promise.allSettled(
-      subscribed.map(async (campaign) => {
-        try {
-          return await fetchCampaignById(campaign.megaCampaignId ?? campaign.id);
-        } catch {
-          return campaign;
-        }
-      }),
-    );
-
-    const apiSubscribed = enrichedList.map((result, index) => {
-      const campaign = subscribed[index];
-      const enriched = result.status === 'fulfilled' ? result.value : campaign;
+    return subscribed.map((campaign) => {
       const localEntry = findLocalCampaignEntry(
         storeId,
-        enriched.megaCampaignId ?? enriched.id,
+        campaign.megaCampaignId ?? campaign.id,
       );
-      return mapApiSubscriptionToMyCampaign(enriched, storeId, localEntry);
+      return mapApiSubscriptionToMyCampaign(campaign, storeId, localEntry);
     });
-
-    const localOnly = readRawMyCampaigns(storeId)
-      .filter(
-        (entry) =>
-          !apiSubscribed.some(
-            (campaign) => Number(campaign.megaCampaignId) === Number(entry.megaCampaignId),
-          ),
-      )
-      .map(mapStoredSubscription);
-
-    let merged = [...apiSubscribed, ...localOnly];
-
-    const needsProductNames = merged.some((campaign) =>
-      (campaign.selectedProducts ?? []).some(
-        (product) => !product.name || String(product.name).startsWith('منتج #'),
-      ),
-    );
-
-    if (needsProductNames) {
-      try {
-        const storeProducts = await fetchStoreProducts({ storeId });
-        const namesById = Object.fromEntries(
-          storeProducts.map((product) => [Number(product.id), product.name]),
-        );
-        merged = merged.map((campaign) => ({
-          ...campaign,
-          selectedProducts: (campaign.selectedProducts ?? []).map((product) => ({
-            ...product,
-            name: namesById[Number(product.id)] ?? product.name,
-          })),
-        }));
-      } catch {
-        // أسماء المنتجات اختيارية — نُبقي المعرفات إن فشل التحميل
-      }
-    }
-
-    merged.forEach((campaign) => {
-      if (!campaign.selectedProducts?.length) return;
-      const localEntry = findLocalCampaignEntry(storeId, campaign.megaCampaignId);
-      if (localEntry?.selectedProducts?.length) return;
-      saveMyCampaign(storeId, {
-        ...localEntry,
-        ...campaign,
-        status: campaign.status === 'منتهية' ? 'منتهية' : 'نشطة',
-      });
-    });
-
-    return merged;
   } catch {
     return loadMyCampaigns(storeId);
   }
 }
 
-/** @deprecated استخدم fetchMyCampaigns */
+/** @deprecated استخدم fetchMyCampaigns — تبقى للتوافق */
 export async function enrichMyCampaigns(storeId, availableCampaigns = null) {
   return fetchMyCampaigns(storeId, availableCampaigns);
 }
 
-export function buildSubscriptionEntry(
-  campaign,
-  selectedProducts,
-  apiResponse = null,
-) {
-  if (apiResponse?.subscription || apiResponse?.campaign_subscription || apiResponse?.data?.subscription) {
+export function buildSubscriptionEntry(campaign, selectedProducts, discountPercentage, apiResponse = null) {
+  if (apiResponse) {
     return mapSubscriptionFromApiResponse(apiResponse, campaign, selectedProducts);
   }
 
-  const startDate = parseApiDate(campaign.startDate) ?? new Date();
-  const endDate =
-    parseApiDate(campaign.endDate) ??
-    (() => {
-      const fallback = new Date(startDate);
-      fallback.setDate(fallback.getDate() + Number(campaign.duration || 30));
-      return fallback;
-    })();
+  const today = new Date();
+  const end = campaign.endDate ? new Date(campaign.endDate) : new Date(today);
+  if (!campaign.endDate) {
+    end.setDate(today.getDate() + Number(campaign.duration || 30));
+  }
 
   return {
     megaCampaignId: campaign.megaCampaignId ?? campaign.id,
     title: campaign.title,
     description: campaign.description,
-    price: String(campaign.price ?? CAMPAIGN_SUBSCRIPTION_COST),
-    duration: String(calcDurationDays(startDate, endDate)),
+    price: campaign.price,
+    duration: campaign.duration,
     productsCount: String(selectedProducts.length),
-    status: 'نشطة',
     dateRange: {
-      start: formatDate(startDate),
-      end: formatDate(endDate),
+      start: formatDate(campaign.startDate || today),
+      end: formatDate(end),
     },
     selectedProducts,
+    discountPercentage,
     bannerImage: campaign.bannerImage ?? null,
   };
 }

@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { X, Tag, Calendar, Percent, Edit2 } from 'lucide-react';
+import { X, Tag, Calendar, Percent } from 'lucide-react';
 import { buildPromotionPricingRows, formatPromotionMoney } from '../../api/promotions';
 import './OfferDetailModal.css';
 
@@ -9,8 +9,6 @@ const OfferDetailModal = ({
   offer,
   catalogProducts = [],
   loading = false,
-  onEdit,
-  editDisabled = false,
 }) => {
   const pricingRows = useMemo(
     () => (offer ? buildPromotionPricingRows(offer, catalogProducts) : []),
@@ -128,17 +126,6 @@ const OfferDetailModal = ({
         )}
 
         <div className="modal-footer offer-detail-footer">
-          {typeof onEdit === 'function' && offer && !loading && (
-            <button
-              className="save-button offer-detail-edit-btn"
-              onClick={() => onEdit(offer)}
-              type="button"
-              disabled={editDisabled}
-            >
-              <Edit2 size={16} />
-              تعديل
-            </button>
-          )}
           <button className="cancel-button" onClick={onClose} type="button">
             إغلاق
           </button>

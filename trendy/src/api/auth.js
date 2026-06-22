@@ -1,8 +1,5 @@
 import { apiRequest } from './client';
 import { API_ENDPOINTS, STORE_AUTH_ENDPOINTS } from './config';
-import { syncRoleIdCacheFromUser } from './employees';
-
-const LOCAL_SUBSCRIPTION_KEY_PREFIX = 'trendy_plan_sub_';
 
 const TOKEN_KEY = 'trendy_auth_token';
 const USER_KEY = 'trendy_auth_user';
@@ -41,38 +38,6 @@ export const getActiveStore = (user) => {
   return null;
 };
 
-/** يُرجع بيانات المتجر المطابقة لـ storeId (ملكية/توظيف) وليس المتجر الافتراضي فقط */
-export function resolveStoreForUser(user, storeId = null) {
-  if (!user) return null;
-
-  const targetId = storeId != null ? Number(storeId) : null;
-  if (targetId && !Number.isNaN(targetId) && targetId > 0) {
-    const owned = user.owned_stores || user.ownedStores || [];
-    const employed = user.employed_stores || user.employedStores || [];
-    const fromList = [...owned, ...employed].find((entry) => Number(entry?.id) === targetId);
-    if (fromList) {
-      if (user.store && Number(user.store.id) === targetId) {
-        return { ...fromList, ...user.store };
-      }
-      return fromList;
-    }
-    if (user.store && Number(user.store.id) === targetId) {
-      return user.store;
-    }
-    if (Number(user.store_id) === targetId) {
-      return (
-        user.store ?? {
-          id: targetId,
-          status: user.store_status ?? 'inactive',
-          plan_id: user.plan_id ?? null,
-        }
-      );
-    }
-  }
-
-  return getActiveStore(user);
-}
-
 export function getUserRoleNames(user) {
   if (!user) return [];
   const roles = user.roles;
@@ -99,50 +64,19 @@ export function userCanChargeStoreWallet(user) {
   return !roles.includes('store_staff');
 }
 
-/** تعديل بيانات المتجر — غير متاح لموظف المتجر (store_staff) */
-export function userCanEditStoreProfile(user) {
-  if (!user) return false;
-  if (userHasRole(user, 'store_manager')) return true;
-  return !userHasRole(user, 'store_staff');
-}
-
-/** إدارة الموظفين — متاح لمدير المتجر فقط */
-export function userCanManageEmployees(user) {
-  if (!user) return false;
-  return userHasRole(user, 'store_manager') || userHasRole(user, 'super_admin');
-}
-
-/** عرض رصيد المحفظة — غير متاح لموظف المتجر (store_staff) */
-export function userCanViewStoreWalletBalance(user) {
-  if (!user) return false;
-  if (userHasRole(user, 'store_manager') || userHasRole(user, 'super_admin')) return true;
-  return !userHasRole(user, 'store_staff');
-}
-
-function collectAccessibleStoreIds(user) {
-  const owned = user?.owned_stores || user?.ownedStores || [];
-  const employed = user?.employed_stores || user?.employedStores || [];
-  const ids = [...owned, ...employed]
-    .map((store) => Number(store?.id))
-    .filter((id) => !Number.isNaN(id) && id > 0);
-
-  return [...new Set(ids)];
-}
-
 /**
- * معرف المتجر النشط — مطابق لمنطق الباكند resolveActiveStoreId (ملكية + توظيف)
+ * معرف المتجر الذي يملكه مدير المتجر — مطابق لمنطق الباكند resolveManagedStoreId
  */
 export function resolveManagedStoreId(user, explicitStoreId = null) {
   if (!user) return getStoredStoreId();
 
-  const accessibleIds = collectAccessibleStoreIds(user);
   const owned = user.owned_stores || user.ownedStores || [];
   const ownedIds = owned.map((store) => Number(store?.id)).filter((id) => !Number.isNaN(id) && id > 0);
 
   if (explicitStoreId != null && explicitStoreId !== '') {
     const id = Number(explicitStoreId);
     if (!Number.isNaN(id) && id > 0) {
-      if (accessibleIds.length === 0 || accessibleIds.includes(id)) return id;
+      if (ownedIds.length === 0 || ownedIds.includes(id)) return id;
     }
   }
 
@@ -150,10 +84,9 @@ export function resolveManagedStoreId(user, explicitStoreId = null) {
 
   const sessionStoreId = Number(user.store_id ?? getStoredStoreId());
   if (!Number.isNaN(sessionStoreId) && sessionStoreId > 0) {
-    if (accessibleIds.length === 0 || accessibleIds.includes(sessionStoreId)) return sessionStoreId;
+    if (ownedIds.length === 0 || ownedIds.includes(sessionStoreId)) return sessionStoreId;
   }
 
-  if (accessibleIds.length === 1) return accessibleIds[0];
   if (ownedIds.length > 0) return ownedIds[0];
 
   const activeStoreId = Number(getActiveStore(user)?.id);
@@ -170,12 +103,6 @@ function mergeUserSession(freshUser) {
     stored?.owned_stores ??
     stored?.ownedStores ??
     [];
-  const employed =
-    freshUser?.employed_stores ??
-    freshUser?.employedStores ??
-    stored?.employed_stores ??
-    stored?.employedStores ??
-    [];
 
   return {
     ...stored,
@@ -185,150 +112,31 @@ function mergeUserSession(freshUser) {
     roles: freshUser?.roles ?? stored?.roles ?? [],
     owned_stores: owned,
     ownedStores: owned,
-    employed_stores: employed,
-    employedStores: employed,
   };
 }
 
-function parseApiDate(value) {
-  if (!value) return null;
-  const normalized = String(value).includes('T') ? value : String(value).replace(' ', 'T');
-  const date = new Date(normalized);
-  return Number.isNaN(date.getTime()) ? null : date;
-}
-
-function readLocalSubscriptionDates(storeId) {
-  if (!storeId) return { startsAt: null, endsAt: null };
-  try {
-    const raw = localStorage.getItem(`${LOCAL_SUBSCRIPTION_KEY_PREFIX}${storeId}`);
-    if (!raw) return { startsAt: null, endsAt: null };
-    const item = JSON.parse(raw);
-    const startsAt = parseApiDate(item.starts_at);
-    const endsAt = parseApiDate(item.ends_at);
-    if (endsAt && endsAt.getTime() <= Date.now()) {
-      clearLocalSubscriptionDates(storeId);
-      return { startsAt: null, endsAt: null };
-    }
-    return { startsAt, endsAt };
-  } catch {
-    return { startsAt: null, endsAt: null };
-  }
-}
-
-export function clearLocalSubscriptionDates(storeId) {
-  if (!storeId) return;
-  localStorage.removeItem(`${LOCAL_SUBSCRIPTION_KEY_PREFIX}${storeId}`);
-}
-
-export function isSubscriptionAccessBlockedError(error) {
-  const msg = String(error?.message ?? error?.data?.message ?? '');
-  return (
-    error?.status === 403 &&
-    /store_inactive_subscription|store_plan_inactive|plan.*expired|subscription.*expired|inactive subscription|يجب الاشتراك|انتهى.*اشتراك|الاشتراك.*منته/i.test(
-      msg,
-    )
-  );
-}
-
-/**
- * يتحقق من نشاط خطة المتجر عبر GET /my-store/products (محمي بـ store_plan_active).
- * عند انتهاء الاشتراك يُرجع الباكند 403 — لا حاجة لتعديل الباكند.
- */
-export async function verifyStorePlanActive(storeId) {
-  if (!storeId) return { active: false, reason: 'no_store' };
-
-  const query = new URLSearchParams({ per_page: '1', store_id: String(storeId) });
-
-  try {
-    await apiRequest(`${API_ENDPOINTS.myStoreProducts}?${query}`);
-    return { active: true };
-  } catch (err) {
-    if (isSubscriptionAccessBlockedError(err)) {
-      return { active: false, reason: 'subscription_expired' };
-    }
-    if (err?.status === 403) {
-      return { active: false, reason: 'forbidden' };
-    }
-    return { active: null, error: err };
-  }
-}
-
-export function extractStoreSubscriptionDates(store, storeId = null) {
-  const resolvedStoreId = storeId ?? store?.id ?? null;
-
-  let startsAt = parseApiDate(
-    store?.subscription_starts_at ??
-      store?.plan_starts_at ??
-      store?.subscription?.starts_at ??
-      store?.subscription?.start_date,
-  );
-  let endsAt = parseApiDate(
-    store?.subscription_ends_at ??
-      store?.plan_expires_at ??
-      store?.subscription?.ends_at ??
-      store?.subscription?.end_date ??
-      store?.expires_at,
-  );
-
-  const pivot = store?.plan?.pivot ?? store?.subscription?.pivot ?? null;
-  if (pivot) {
-    startsAt = startsAt ?? parseApiDate(pivot.starts_at ?? pivot.start_date);
-    endsAt = endsAt ?? parseApiDate(pivot.ends_at ?? pivot.end_date);
-  }
-
-  const status = String(store?.status ?? '').toLowerCase();
-  if (status === 'inactive' || status === 'expired') {
-    clearLocalSubscriptionDates(resolvedStoreId);
-  } else {
-    const local = readLocalSubscriptionDates(resolvedStoreId);
-    startsAt = startsAt ?? local.startsAt;
-    endsAt = endsAt ?? local.endsAt;
-  }
-
-  return { startsAt, endsAt };
-}
-
-export function storeSubscriptionExpired(store, storeId = null) {
+export function storeHasActivePlan(store) {
   if (!store) return false;
+  if (store.status === 'active') return true;
 
   const planId = store.plan_id ?? store.plan?.id ?? store.subscription?.plan_id;
-  const { startsAt, endsAt } = extractStoreSubscriptionDates(store, storeId);
-  const now = Date.now();
-
-  if (endsAt) return endsAt.getTime() <= now;
-  if (startsAt && startsAt.getTime() > now) return false;
-
-  const status = String(store.status ?? '').toLowerCase();
-  return Boolean(planId) && (status === 'inactive' || status === 'expired');
-}
-
-export function storeHasActivePlan(store, storeId = null) {
-  if (!store) return false;
-
-  const status = String(store.status ?? '').toLowerCase();
-  if (status === 'deactivated' || status === 'inactive' || status === 'expired') return false;
-
-  const planId = store.plan_id ?? store.plan?.id ?? store.subscription?.plan_id;
-  const { startsAt, endsAt } = extractStoreSubscriptionDates(store, storeId);
-  const now = Date.now();
-
-  if (endsAt) {
-    if (endsAt.getTime() <= now) return false;
-    if (startsAt && startsAt.getTime() > now) return false;
-    return true;
-  }
-
-  if (startsAt && startsAt.getTime() > now) return false;
   if (!planId) return false;
-  if (status === 'inactive' || status === 'expired') return false;
 
-  return status === 'active';
+  const endRaw =
+    store.subscription_ends_at ??
+    store.plan_expires_at ??
+    store.subscription?.ends_at ??
+    store.subscription?.end_date ??
+    null;
+
+  if (endRaw) return new Date(endRaw).getTime() > Date.now();
+
+  return store.status !== 'inactive';
 }
 
 export const persistAuthSession = ({ token, user }) => {
   localStorage.setItem(TOKEN_KEY, token);
   localStorage.setItem(USER_KEY, JSON.stringify(user));
-  syncRoleIdCacheFromUser(user);
   const storeId = user.store_id || getActiveStore(user)?.id;
   if (storeId) {
     localStorage.setItem(STORE_ID_KEY, String(storeId));

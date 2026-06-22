@@ -2,7 +2,6 @@ import { apiRequest } from './client';
 import { API_ENDPOINTS } from './config';
 import { fetchRevenueOverview, fetchProfitOverview } from './finance';
 
-
 const AR_MONTHS = [
   'يناير',
   'فبراير',
@@ -116,18 +115,6 @@ export async function fetchStoreMonthlyRevenueChart(monthCount = 5) {
       }
     }),
   );
-}
-
-/**
- * لوحة التحكم — يجمع الإحصائيات والرسم البياني من مسارات الـ API المتوفرة
- * (total-new-orders, total-employees, finance/revenue-overview, ...)
- */
-export async function fetchStoreDashboard({ storeId } = {}) {
-  const [stats, monthlyRevenue] = await Promise.all([
-    fetchDashboardStats({ storeId }),
-    fetchStoreMonthlyRevenueChart(5),
-  ]);
-  return { stats, monthlyRevenue };
 }
 
 async function safeDashboardCall(fn, fallback) {

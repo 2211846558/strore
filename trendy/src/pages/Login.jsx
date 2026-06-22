@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, ArrowRight, Hash } from 'lucide-react';
-import { useAuth, useAuthActions } from '../context/AuthContext';
-import { getLoginErrorMessage } from '../api/stores';
+import { useAuth } from '../context/AuthContext';
+import { getActiveStore, storeHasActivePlan } from '../api/auth';
+import { getApiErrorMessage } from '../api/stores';
 import './Login.css';
 
 const Login = () => {
-  const { isLoading } = useAuth();
-  const { login } = useAuthActions();
+  const { login, isLoading } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -18,14 +18,15 @@ const Login = () => {
     e.preventDefault();
     setError('');
     try {
-      await login({
+      const data = await login({
         email: email.trim(),
         password,
         storeCode: storeCode.trim(),
       });
-      navigate('/');
+      const store = getActiveStore(data.user);
+      navigate(storeHasActivePlan(store) ? '/' : '/plans');
     } catch (err) {
-      setError(getLoginErrorMessage(err));
+      setError(getApiErrorMessage(err, 'فشل تسجيل الدخول. تحقق من البيانات.'));
     }
   };
 
