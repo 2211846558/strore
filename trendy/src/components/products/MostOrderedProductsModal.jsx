@@ -2,7 +2,41 @@ import React, { useState, useEffect } from 'react';
 import { X, TrendingUp } from 'lucide-react';
 import { fetchMostOrderedProducts } from '../../api/products';
 import { getApiErrorMessage } from '../../api/stores';
+import { productPlaceholderImage } from '../../api/media';
 import './MostOrderedProductsModal.css';
+
+const MostOrderedProductThumb = ({ product }) => {
+  const candidates = product.imageCandidates?.length
+    ? product.imageCandidates
+    : product.image
+      ? [product.image]
+      : [productPlaceholderImage()];
+
+  const [candidateIndex, setCandidateIndex] = useState(0);
+
+  useEffect(() => {
+    setCandidateIndex(0);
+  }, [product.id, candidates]);
+
+  const src =
+    candidateIndex < candidates.length
+      ? candidates[candidateIndex]
+      : productPlaceholderImage();
+
+  return (
+    <img
+      className="mo-thumb"
+      src={src}
+      alt={product.name}
+      loading="lazy"
+      onError={() => {
+        if (candidateIndex < candidates.length) {
+          setCandidateIndex((prev) => prev + 1);
+        }
+      }}
+    />
+  );
+};
 
 const MostOrderedProductsModal = ({ isOpen, onClose, storeId, limit = 10 }) => {
   const [products, setProducts] = useState([]);
@@ -71,14 +105,7 @@ const MostOrderedProductsModal = ({ isOpen, onClose, storeId, limit = 10 }) => {
                   <span className={`mo-rank ${index < 3 ? 'mo-rank-top' : ''}`}>
                     {index + 1}
                   </span>
-                  <img
-                    className="mo-thumb"
-                    src={product.image}
-                    alt={product.name}
-                    onError={(e) => {
-                      e.currentTarget.style.display = 'none';
-                    }}
-                  />
+                  <MostOrderedProductThumb product={product} />
                   <div className="mo-info">
                     <span className="mo-name">{product.name}</span>
                     {product.category && (

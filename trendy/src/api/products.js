@@ -208,8 +208,9 @@ function extractOrdersCount(item) {
 }
 
 export function mapMostOrderedProduct(item) {
+  const product = item?.product ?? item;
   return {
-    ...mapProductFromList(item),
+    ...mapProductFromList(product),
     ordersCount: extractOrdersCount(item),
   };
 }
