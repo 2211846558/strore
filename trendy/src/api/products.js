@@ -1,5 +1,6 @@
 import { apiRequest } from './client';
 import { API_ENDPOINTS } from './config';
+import { buildVariantDisplayLabel, buildVariantFullLabel } from '../utils/variantLabel';
 import {
   getProductImageCandidates,
   productPlaceholderImage,
@@ -228,6 +229,32 @@ export async function fetchMostOrderedProducts({ storeId, limit = 10 } = {}) {
 }
 
 /**
+ * GET /api/stores/{storeId}/products — منتجات المتجر النشطة (عرض عام)
+ * filters: { name, categoryId, minPrice, maxPrice, perPage }
+ */
+export async function fetchStorePublicProducts({
+  storeId,
+  name,
+  categoryId,
+  minPrice,
+  maxPrice,
+  perPage = 100,
+} = {}) {
+  if (!storeId) {
+    throw new Error('معرّف المتجر مطلوب لجلب المنتجات');
+  }
+
+  const query = new URLSearchParams({ per_page: String(perPage) });
+  if (name?.trim()) query.set('name', name.trim());
+  if (categoryId && categoryId !== 'all') query.set('category_id', String(categoryId));
+  if (minPrice != null && minPrice !== '') query.set('min_price', String(minPrice));
+  if (maxPrice != null && maxPrice !== '') query.set('max_price', String(maxPrice));
+
+  const res = await apiRequest(`${API_ENDPOINTS.storePublicProducts(storeId)}?${query}`);
+  return extractList(res);
+}
+
+/**
  * GET /api/my-store/products — بحث وفلترة من الخادم
  * filters: { name, category_id, status, storeId, perPage }
  */
@@ -332,7 +359,7 @@ export async function restoreProduct(id) {
  * GET /api/products/{productId} — استخراج التنوعات المحفوظة من تفاصيل المنتج
  * يُعيد مصفوفة من التنوعات مع قيم الخصائص والسعر والكمية
  */
-export async function fetchProductVariants(productId) {
+export async function fetchProductVariants(productId, { productName } = {}) {
   const res = await apiRequest(`${API_ENDPOINTS.product(productId)}/variants`);
   const item = res?.data ?? res;
   const rawVariants = Array.isArray(item)
@@ -353,9 +380,51 @@ export async function fetchProductVariants(productId) {
           : Array.isArray(v.values)
             ? v.values
             : [];
-    const label = attrValues.map((av) => av.value ?? av.name ?? String(av.id)).join(' / ');
+    const label = buildVariantDisplayLabel(productName, attrValues, {
+      variantId: v.id,
+      existingLabel: v.label,
+      sku: v.sku,
+      variant: v,
+    });
+    const fullLabel = buildVariantFullLabel(productName, attrValues, {
+      variantId: v.id,
+      existingLabel: v.label,
+      sku: v.sku,
+      variant: v,
+    });
     // قد يُعيد الـ API inventory_summary أو current_shipment
     const inventory = v.inventory_summary ?? v.current_inventory ?? {};
+    const currentShipmentObj = v.current_shipment ?? inventory.current_shipment ?? null;
+    const currentShipmentId =
+      v.current_shipment_id
+      ?? inventory.current_shipment_id
+      ?? currentShipmentObj?.id
+      ?? '';
+    const currentShipmentCode =
+      currentShipmentObj?.shipment_number
+      ?? currentShipmentObj?.code
+      ?? currentShipmentObj?.batch_number
+      ?? inventory.current_shipment_code
+      ?? inventory.shipment_number
+      ?? '';
+    let currentShipmentRemaining = null;
+    for (const source of [v, inventory, currentShipmentObj]) {
+      if (!source) continue;
+      for (const field of [
+        'current_shipment_remaining',
+        'current_shipment_remaining_quantity',
+        'remaining_quantity',
+        'remaining_qty',
+        'remaining_in_current_shipment',
+        'shipment_remaining_quantity',
+      ]) {
+        if (source[field] != null && source[field] !== '') {
+          currentShipmentRemaining = Number(source[field]);
+          break;
+        }
+      }
+      if (currentShipmentRemaining != null) break;
+    }
     const selections = {};
     attrValues.forEach((av) => {
       const attrId = av.attribute_id ?? av.attribute?.id ?? av.pivot?.attribute_id;
@@ -366,7 +435,8 @@ export async function fetchProductVariants(productId) {
 
     return {
       id: v.id,
-      label: label || `تنوع #${v.id}`,
+      label,
+      fullLabel,
       attributeValueIds: attrValues.map((av) => av.id),
       attributeValues: attrValues,
       selections,
@@ -377,7 +447,10 @@ export async function fetchProductVariants(productId) {
         .join('|'),
       price: v.selling_price ?? v.price ?? inventory.selling_price ?? '',
       quantity: v.total_quantity ?? v.quantity ?? inventory.total_quantity ?? '',
-      currentShipment: v.current_shipment_id ?? inventory.current_shipment_id ?? '',
+      currentShipment: currentShipmentId,
+      currentShipmentCode,
+      currentShipmentRemaining,
+      shipmentBreakdown: [],
     };
   });
 }

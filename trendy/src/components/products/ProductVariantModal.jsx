@@ -53,10 +53,6 @@ function PendingRow({
       <td className="vt-cell vt-cell--readonly">
         <span className="vt-auto-badge">🔒 تلقائي</span>
       </td>
-      {/* الشحنة الحالية — read only */}
-      <td className="vt-cell vt-cell--readonly">
-        <span className="vt-auto-badge">🔒 تلقائي</span>
-      </td>
       {/* حذف الصف */}
       <td className="vt-cell vt-cell--action">
         <button
@@ -118,13 +114,6 @@ function SavedRow({ variant, attributes, onDelete, disabled }) {
           <span className="vt-dash">—</span>
         )}
       </td>
-      <td className="vt-cell vt-cell--readonly">
-        {variant.currentShipment ? (
-          <span className="vt-shipment-badge">#{variant.currentShipment}</span>
-        ) : (
-          <span className="vt-dash">—</span>
-        )}
-      </td>
       <td className="vt-cell vt-cell--action">
         <button
           type="button"
@@ -167,7 +156,7 @@ const ProductVariantModal = ({ isOpen, onClose, product, storeId, onVariantAdded
     setRowErrors({});
     setPendingRows([makeEmptyRow()]);
 
-    Promise.all([fetchAttributes(), fetchProductVariants(product.id)])
+    Promise.all([fetchAttributes(), fetchProductVariants(product.id, { productName: product.name })])
       .then(([attrs, variants]) => {
         setAttributes(attrs.filter((a) => a.values?.length > 0));
         setSavedVariants(variants);
@@ -267,7 +256,7 @@ const ProductVariantModal = ({ isOpen, onClose, product, storeId, onVariantAdded
     if (succeeded.length) {
       // إعادة جلب التنوعات المحدّثة
       try {
-        const fresh = await fetchProductVariants(product.id);
+        const fresh = await fetchProductVariants(product.id, { productName: product.name });
         setSavedVariants(fresh);
       } catch {
         /* ignore */
@@ -363,7 +352,6 @@ const ProductVariantModal = ({ isOpen, onClose, product, storeId, onVariantAdded
                       ))}
                       <th className="vt-th">السعر</th>
                       <th className="vt-th">الكمية الإجمالية</th>
-                      <th className="vt-th">الشحنة الحالية</th>
                       <th className="vt-th"></th>
                     </tr>
                   </thead>
@@ -383,7 +371,7 @@ const ProductVariantModal = ({ isOpen, onClose, product, storeId, onVariantAdded
                     {savedVariants.length > 0 && pendingRows.length > 0 && (
                       <tr className="vt-separator">
                         <td
-                          colSpan={attrHeaders.length + 4}
+                          colSpan={attrHeaders.length + 3}
                           className="vt-separator-cell"
                         >
                           — صفوف جديدة —

@@ -24,11 +24,11 @@ const RefundModal = ({ isOpen, onClose, item, onConfirm, isSaving = false }) => 
   const refundQtyNum = clampInteger(parseIntegerInput(refundQty, 1), 1, maxQty);
 
   return (
-    <div className="sales-modal-overlay" onClick={onClose}>
+    <div className="sales-modal-overlay" onClick={() => !isSaving && onClose()}>
       <div className="sales-modal" onClick={(e) => e.stopPropagation()}>
         <div className="sales-modal-header">
           <h2 className="sales-modal-title">استرداد منتج</h2>
-          <button type="button" className="sales-modal-close" onClick={onClose}>
+          <button type="button" className="sales-modal-close" onClick={onClose} disabled={isSaving}>
             <X size={24} />
           </button>
         </div>
@@ -98,7 +98,7 @@ const RefundModal = ({ isOpen, onClose, item, onConfirm, isSaving = false }) => 
           >
             {isSaving ? 'جاري الاسترداد...' : 'تأكيد الاسترداد'}
           </button>
-          <button type="button" className="sales-btn-secondary" onClick={onClose}>
+          <button type="button" className="sales-btn-secondary" onClick={onClose} disabled={isSaving}>
             إلغاء
           </button>
         </div>

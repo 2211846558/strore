@@ -1,11 +1,26 @@
 import { apiRequest } from './client';
 import { API_ENDPOINTS } from './config';
+import { buildVariantDisplayLabel } from '../utils/variantLabel';
 
 function extractList(res) {
   const payload = res?.data ?? res;
   if (Array.isArray(payload)) return payload;
   if (Array.isArray(payload?.data)) return payload.data;
+  if (Array.isArray(payload?.orders)) return payload.orders;
+  if (Array.isArray(payload?.items)) return payload.items;
   return [];
+}
+
+function extractPaginationMeta(res) {
+  const meta = res?.meta ?? res?.data?.meta ?? res?.pagination ?? {};
+  const lastPage = Number(
+    meta.last_page ?? meta.lastPage ?? res?.last_page ?? res?.data?.last_page ?? 1,
+  );
+  const total = Number(meta.total ?? res?.total ?? res?.data?.total ?? 0);
+  return {
+    last_page: Number.isFinite(lastPage) && lastPage > 0 ? lastPage : 1,
+    total: Number.isFinite(total) ? total : 0,
+  };
 }
 
 /** حالات الطلب في الـ API → عربي */
@@ -68,11 +83,23 @@ function extractOrderItems(row) {
 
 function mapOrderItem(item) {
   const variant = item.variant ?? item.product_variant ?? {};
+  const productName = item.product_name ?? item.name ?? item.product?.name ?? item.title ?? '—';
   return {
-    name: item.product_name ?? item.name ?? item.product?.name ?? item.title ?? '—',
+    lineId: item.id ?? item.line_id ?? null,
+    variantId: item.variant_id ?? item.product_variant_id ?? variant.id ?? null,
+    name: productName,
     quantity: Number(item.quantity ?? 1),
     price: Number(item.unit_price ?? item.price ?? item.total ?? 0),
-    variantLabel: item.sku ?? item.variant_label ?? variant.label ?? null,
+    variantLabel: buildVariantDisplayLabel(
+      productName,
+      variant.attribute_values ?? variant.attributes ?? item.attribute_values,
+      {
+        sku: item.sku ?? variant.sku,
+        variantId: variant.id,
+        existingLabel: item.variant_label ?? variant.label,
+        variant: { ...variant, color: item.color, size: item.size },
+      },
+    ) || null,
     sku: item.sku ?? variant.sku ?? '',
   };
 }
@@ -105,11 +132,24 @@ function computeProductsCount(row, products) {
   return fromItems || products.length;
 }
 
-function isPosOrder(row) {
-  const number = String(row.order_number ?? row.code ?? '');
+export function isPosOrder(row) {
+  if (!row) return false;
+  if (row.is_pos === true || row.isPos === true) return true;
+  if (row.is_pos === false || row.isPos === false) return false;
+
+  const number = String(row.order_number ?? row.code ?? '').toUpperCase();
   const type = String(row.order_type ?? row.type ?? '').toLowerCase();
-  const channel = String(row.sales_channel ?? '').toLowerCase();
-  return number.includes('POS') || type === 'pos' || type === 'past' || channel === 'pos';
+  const channel = String(
+    row.sales_channel ?? row.channel ?? row.source ?? row.order_source ?? '',
+  ).toLowerCase();
+
+  return (
+    number.includes('POS')
+    || type === 'pos'
+    || channel === 'pos'
+    || channel === 'point_of_sale'
+    || channel === 'in_store'
+  );
 }
 
 function resolveStaffName(row) {
@@ -189,7 +229,6 @@ export async function fetchOrders({
   status,
   perPage = 50,
   page = 1,
-  excludePos = true,
 } = {}) {
   const query = new URLSearchParams({
     per_page: String(perPage),
@@ -201,14 +240,12 @@ export async function fetchOrders({
   if (apiStatus) query.set('status', apiStatus);
 
   const res = await apiRequest(`${API_ENDPOINTS.orders}?${query}`);
-  let rows = extractList(res).map(mapOrder);
-  if (excludePos) {
-    rows = rows.filter((order) => !isPosOrder(order.raw));
-  }
+  const rows = extractList(res).map(mapOrder);
+  const meta = extractPaginationMeta(res);
 
   return {
     orders: rows,
-    meta: res?.meta ?? null,
+    meta,
   };
 }
 
@@ -221,11 +258,81 @@ export async function fetchAllOrders(filters = {}) {
   do {
     const result = await fetchOrders({ ...filters, perPage, page });
     all.push(...result.orders);
-    lastPage = Number(result.meta?.last_page ?? 1);
+    lastPage = result.meta?.last_page ?? 1;
+    if (result.orders.length < perPage && page >= lastPage) break;
     page += 1;
   } while (page <= lastPage);
 
   return all;
+}
+
+export function mapOrderToSalesInvoice(order) {
+  const items = (order.products ?? []).map((item) => ({
+    lineId: item.lineId ?? item.variantId ?? `${order.orderId}-${item.sku}`,
+    orderId: order.orderId,
+    variantId: item.variantId,
+    name: item.name,
+    color: item.sku ?? item.variantLabel ?? '—',
+    size: '—',
+    sku: item.sku ?? '',
+    quantity: Number(item.quantity ?? 1),
+    price: Number(item.price ?? 0),
+  }));
+
+  const customer = order.isPos
+    ? (order.staffName && order.staffName !== '—' ? order.staffName : order.buyerName)
+    : order.buyerName;
+
+  return {
+    id: order.id,
+    orderId: order.orderId,
+    date: order.date,
+    customer: customer ?? '—',
+    status: order.status,
+    statusRaw: order.statusRaw,
+    isPos: Boolean(order.isPos),
+    typeLabel: order.isPos ? 'مبيعات مباشرة' : 'عبر التطبيق',
+    itemsCount: order.productsCount ?? items.length,
+    total: Number(order.total ?? 0),
+    phone: order.phone ?? '—',
+    address: order.address ?? '—',
+    items,
+    order,
+  };
+}
+
+function buildStoreSalesOrderStats(orders = []) {
+  const pos = orders.filter((order) => order.isPos).length;
+  return {
+    total: orders.length,
+    pos,
+    app: orders.length - pos,
+  };
+}
+
+/**
+ * GET /orders — كل طلبات المتجر (POS + عبر التطبيق) للفواتير والمبيعات
+ */
+export async function fetchStoreSalesOrders({ storeId, search, perPage = 100 } = {}) {
+  let orders = await fetchAllOrders({ storeId, search, perPage });
+
+  if (!orders.length && storeId) {
+    orders = await fetchAllOrders({ search, perPage });
+  }
+
+  const sorted = [...orders].sort((a, b) => {
+    const left = new Date(a.date || 0).getTime();
+    const right = new Date(b.date || 0).getTime();
+    return right - left;
+  });
+
+  const invoices = sorted.map(mapOrderToSalesInvoice);
+
+  return {
+    orders: sorted,
+    invoices,
+    stats: buildStoreSalesOrderStats(sorted),
+  };
 }
 
 /**

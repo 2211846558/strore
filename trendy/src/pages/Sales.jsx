@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   ShoppingCart,
   FileText,
@@ -6,18 +6,24 @@ import {
   Trash2,
   Plus,
   CheckCircle2,
-  RotateCcw,
+  Eye,
+  Wallet,
   ArrowLeftRight,
+  Undo2,
 } from 'lucide-react';
 import { COLOR_DOTS } from '../data/salesProducts';
 import { fetchAttributes, buildColorDotsFromAttributes } from '../api/products';
+import { fetchOrder } from '../api/orders';
+import { getStatusBadgeClass } from '../data/ordersData';
 import {
+  fetchPosInit,
   fetchPosCatalog,
   fetchPosCart,
   addToPosCart,
   removeFromPosCart,
   checkoutPosCart,
   refundPosItem,
+  exchangeOrderItems,
   exchangePosItem,
   fetchPosInvoices,
   getProductStockInfo,
@@ -28,22 +34,37 @@ import {
 } from '../api/pos';
 import { getApiErrorMessage } from '../api/stores';
 import { useAuth } from '../context/AuthContext';
+import OrderDetailModal from '../components/orders/OrderDetailModal';
 import VariantModal from '../components/sales/VariantModal';
 import CreateInvoiceModal from '../components/sales/CreateInvoiceModal';
 import RefundModal from '../components/sales/RefundModal';
 import ExchangeModal from '../components/sales/ExchangeModal';
+import PosOrderActionModal from '../components/sales/PosOrderActionModal';
 import './Sales.css';
 
-const calcInvoiceTotal = (items) =>
-  items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+const toSalesLine = (order, product) => ({
+  lineId: product.lineId,
+  orderId: order.orderId,
+  variantId: product.variantId,
+  name: product.name,
+  quantity: product.quantity,
+  price: product.price,
+  sku: product.sku,
+  isPos: Boolean(order.isPos),
+  color: product.variantLabel ?? product.sku ?? '—',
+  size: '—',
+});
 
 const Sales = () => {
-  const { storeId } = useAuth();
+  const { storeId, user } = useAuth();
   const [activeTab, setActiveTab] = useState('cart');
   const [products, setProducts] = useState([]);
   const [cart, setCart] = useState([]);
   const [cartTotal, setCartTotal] = useState(0);
+  const [wallet, setWallet] = useState({ balance: 0, status: 'نشطة' });
   const [invoices, setInvoices] = useState([]);
+  const [orderStats, setOrderStats] = useState({ total: 0, pos: 0, online: 0 });
+  const [orderTypeFilter, setOrderTypeFilter] = useState('all');
   const [invoiceSearch, setInvoiceSearch] = useState('');
   const [debouncedInvoiceSearch, setDebouncedInvoiceSearch] = useState('');
   const [loadingProducts, setLoadingProducts] = useState(true);
@@ -58,6 +79,8 @@ const Sales = () => {
   const [refundTarget, setRefundTarget] = useState(null);
   const [exchangeTarget, setExchangeTarget] = useState(null);
   const [pendingExchange, setPendingExchange] = useState(null);
+  const [detailModal, setDetailModal] = useState({ open: false, order: null, loading: false });
+  const [orderActionMode, setOrderActionMode] = useState(null);
   const [toast, setToast] = useState(null);
 
   const showToast = (message) => {
@@ -76,7 +99,36 @@ const Sales = () => {
       .catch(() => {});
   }, []);
 
+  const loadPosInit = useCallback(async () => {
+    if (!storeId) {
+      setError('لم يتم تحديد المتجر — أعد تسجيل الدخول');
+      setLoadingProducts(false);
+      setLoadingCart(false);
+      return;
+    }
+
+    setLoadingProducts(true);
+    setLoadingCart(true);
+    setError('');
+    try {
+      const init = await fetchPosInit({ storeId });
+      setProducts(init.catalog);
+      setCart(init.cart.items);
+      setCartTotal(init.cart.total);
+      setWallet(init.wallet);
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'تعذّر تحميل بيانات المبيعات المباشرة'));
+      setProducts([]);
+      setCart([]);
+      setCartTotal(0);
+    } finally {
+      setLoadingProducts(false);
+      setLoadingCart(false);
+    }
+  }, [storeId]);
+
   const loadProducts = useCallback(async () => {
+    if (!storeId) return;
     setLoadingProducts(true);
     try {
       const catalog = await fetchPosCatalog({ storeId });
@@ -104,38 +156,57 @@ const Sales = () => {
     }
   }, []);
 
+  const applyCartResult = (result) => {
+    if (result?.cart) {
+      setCart(result.cart.items);
+      setCartTotal(result.cart.total);
+    }
+  };
+
   const loadInvoices = useCallback(async () => {
+    if (!storeId) return;
     setLoadingInvoices(true);
     try {
-      const list = await fetchPosInvoices({ search: debouncedInvoiceSearch });
-      setInvoices(list);
+      const result = await fetchPosInvoices({
+        storeId,
+        search: debouncedInvoiceSearch,
+      });
+      setInvoices(result.invoices);
+      setOrderStats(result.stats ?? {
+        total: result.invoices.length,
+        pos: result.invoices.filter((inv) => inv.isPos).length,
+        online: result.invoices.filter((inv) => !inv.isPos).length,
+      });
     } catch (err) {
-      setError(getApiErrorMessage(err, 'تعذّر تحميل الفواتير'));
+      setError(getApiErrorMessage(err, 'تعذّر تحميل الطلبات'));
       setInvoices([]);
     } finally {
       setLoadingInvoices(false);
     }
-  }, [debouncedInvoiceSearch]);
+  }, [storeId, debouncedInvoiceSearch]);
 
   useEffect(() => {
-    loadProducts();
-    loadCart();
-  }, [loadProducts, loadCart]);
+    loadPosInit();
+  }, [loadPosInit]);
 
   useEffect(() => {
-    if (activeTab === 'invoices') loadInvoices();
-  }, [activeTab, loadInvoices]);
+    if (storeId) loadInvoices();
+  }, [storeId, loadInvoices]);
 
   const cartCount = cart.reduce((s, i) => s + i.quantity, 0);
 
-  const filteredInvoices = useMemo(() => {
-    const q = invoiceSearch.trim().toLowerCase();
-    if (!q) return invoices;
-    return invoices.filter((inv) => inv.id.toLowerCase().includes(q));
-  }, [invoices, invoiceSearch]);
+  const visibleInvoices = invoices.filter((invoice) => {
+    if (orderTypeFilter === 'pos') return invoice.isPos;
+    if (orderTypeFilter === 'online') return !invoice.isPos;
+    return true;
+  });
 
   const refreshAll = async () => {
-    await Promise.all([loadProducts(), loadCart(), activeTab === 'invoices' ? loadInvoices() : Promise.resolve()]);
+    await Promise.all([
+      loadProducts(),
+      loadCart(),
+      activeTab === 'invoices' ? loadInvoices() : Promise.resolve(),
+    ]);
   };
 
   const openProduct = (product) => {
@@ -167,6 +238,7 @@ const Sales = () => {
           oldQuantity: pendingExchange.quantity,
           newVariantId: resolved.id,
           newQuantity: pendingExchange.quantity,
+          isPos: pendingExchange.isPos,
         });
 
         const diffInfo = getExchangePriceDiff(
@@ -196,8 +268,12 @@ const Sales = () => {
 
     setIsSaving(true);
     try {
-      await addToPosCart({ variantId: resolved.id, quantity: 1 });
-      await loadCart();
+      const result = await addToPosCart({ variantId: resolved.id, quantity: 1 });
+      if (result?.cart) {
+        applyCartResult(result);
+      } else {
+        await loadCart();
+      }
       showToast(`تمت إضافة «${product.name}» إلى السلة`);
     } catch (err) {
       showToast(getApiErrorMessage(err, 'تعذّر إضافة المنتج للسلة'));
@@ -209,8 +285,12 @@ const Sales = () => {
   const removeFromCart = async (cartItemId) => {
     setIsSaving(true);
     try {
-      await removeFromPosCart(cartItemId);
-      await loadCart();
+      const result = await removeFromPosCart(cartItemId);
+      if (result?.cart) {
+        applyCartResult(result);
+      } else {
+        await loadCart();
+      }
       showToast('تم حذف المنتج من السلة');
     } catch (err) {
       showToast(getApiErrorMessage(err, 'تعذّر حذف المنتج'));
@@ -219,11 +299,11 @@ const Sales = () => {
     }
   };
 
-  const handleCreateInvoice = async (customerId) => {
+  const handleCreateInvoice = async () => {
     setIsSaving(true);
     try {
-      const invoice = await checkoutPosCart({ customerId });
-      await loadCart();
+      const invoice = await checkoutPosCart();
+      await loadPosInit();
       await loadInvoices();
       setActiveTab('invoices');
       showToast(`تم إنشاء الفاتورة ${invoice.id} بنجاح`);
@@ -234,17 +314,19 @@ const Sales = () => {
     }
   };
 
-  const handleRefund = async () => {
+  const handleRefund = async (chosenQty) => {
     if (!refundTarget) return;
     const { line } = refundTarget;
+    const quantity = chosenQty || line.quantity || 1;
     setIsSaving(true);
     try {
       await refundPosItem({
         orderId: line.orderId,
         variantId: line.variantId,
-        quantity: line.quantity || 1,
+        quantity,
+        isPos: line.isPos,
       });
-      showToast(`تم استرداد «${line.name}» بنجاح`);
+      showToast(`تم استرداد «${line.name}» (${quantity} قطعة) بنجاح`);
       setRefundTarget(null);
       await refreshAll();
     } catch (err) {
@@ -254,25 +336,124 @@ const Sales = () => {
     }
   };
 
-  const handleExchangeSelect = (newProduct) => {
-    if (!exchangeTarget) return;
-    setPendingExchange({
-      orderId: exchangeTarget.line.orderId,
-      variantId: exchangeTarget.line.variantId,
-      oldPrice: exchangeTarget.line.price,
-      quantity: exchangeTarget.line.quantity || 1,
-    });
-    setExchangeTarget(null);
-    setSelectedProduct(products.find((p) => p.id === newProduct.id) ?? newProduct);
-    setVariantOpen(true);
-    showToast('اختر اللون والمقاس للمنتج الجديد');
+  const handleExchangeConfirm = async (selectedNewItems, chosenQty, lineOverride = null) => {
+    const sourceLine = lineOverride ?? exchangeTarget?.line;
+    if (!sourceLine) return;
+    setIsSaving(true);
+    try {
+      await exchangeOrderItems({
+        orderId: sourceLine.orderId,
+        isPos: sourceLine.isPos,
+        oldItems: [{ variantId: sourceLine.variantId, quantity: chosenQty }],
+        newItems: selectedNewItems.map((item) => ({
+          variantId: item.variant?.id ?? item.id,
+          quantity: item.quantity,
+        })),
+      });
+
+      const oldTotal = sourceLine.price * chosenQty;
+      const newTotal = selectedNewItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+      const diff = newTotal - oldTotal;
+
+      let msg = 'تم استبدال المنتجات بنجاح';
+      if (diff < 0) msg += ` — يُسترد للعميل ${Math.abs(diff)} د.ل`;
+      else if (diff > 0) msg += ` — مبلغ إضافي ${Math.abs(diff)} د.ل`;
+
+      showToast(msg);
+      setExchangeTarget(null);
+      setOrderActionMode(null);
+      await refreshAll();
+    } catch (err) {
+      showToast(getApiErrorMessage(err, 'تعذّر إتمام الاستبدال'));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleOrderActionRefund = async (chosenQty, line) => {
+    if (!line) return;
+    const quantity = chosenQty || line.quantity || 1;
+    setIsSaving(true);
+    try {
+      await refundPosItem({
+        orderId: line.orderId,
+        variantId: line.variantId,
+        quantity,
+        isPos: line.isPos,
+      });
+      showToast(`تم استرجاع «${line.name}» (${quantity} قطعة) بنجاح`);
+      setOrderActionMode(null);
+      await refreshAll();
+    } catch (err) {
+      showToast(getApiErrorMessage(err, 'تعذّر إتمام الاسترجاع'));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const openInvoiceDetails = async (invoice) => {
+    setDetailModal({ open: true, order: null, loading: true });
+    try {
+      const details = await fetchOrder(invoice.orderId);
+      setDetailModal({ open: true, order: details, loading: false });
+    } catch (err) {
+      showToast(getApiErrorMessage(err, 'تعذّر تحميل تفاصيل الطلب'));
+      setDetailModal({ open: false, order: null, loading: false });
+    }
+  };
+
+  const handlePosRefundLine = (product) => {
+    const order = detailModal.order;
+    if (!order) return;
+    const line = toSalesLine(order, product);
+    setDetailModal({ open: false, order: null, loading: false });
+    setRefundTarget({ invoiceId: order.id, line });
+  };
+
+  const handlePosExchangeLine = (product) => {
+    const order = detailModal.order;
+    if (!order) return;
+    const line = toSalesLine(order, product);
+    setDetailModal({ open: false, order: null, loading: false });
+    setExchangeTarget({ invoiceId: order.id, line });
   };
 
   return (
     <div className="sales-page">
       <div className="sales-header">
-        <h1 className="page-title">المبيعات المباشرة</h1>
-        <p className="page-subtitle">إدارة المنتجات المباعة مباشرة من المتجر</p>
+        <div>
+          <h1 className="page-title">المبيعات المباشرة</h1>
+          <p className="page-subtitle">إدارة المبيعات المباشرة والاستبدال والاسترجاع لطلبات المتجر</p>
+        </div>
+        <div className="sales-wallet-badge">
+          <Wallet size={18} />
+          <div className="sales-wallet-info">
+            <span className="sales-wallet-label">رصيد المحفظة</span>
+            <strong>{wallet.balance} د.ل</strong>
+            <span className="sales-wallet-status">{wallet.status}</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="sales-top-actions">
+        <button
+          type="button"
+          className="sales-top-action-btn exchange"
+          onClick={() => setOrderActionMode('exchange')}
+          disabled={isSaving}
+        >
+          <ArrowLeftRight size={18} />
+          استبدال
+        </button>
+        <button
+          type="button"
+          className="sales-top-action-btn return"
+          onClick={() => setOrderActionMode('return')}
+          disabled={isSaving}
+        >
+          <Undo2 size={18} />
+          استرجاع
+        </button>
       </div>
 
       <div className="sales-tabs">
@@ -290,7 +471,7 @@ const Sales = () => {
           onClick={() => setActiveTab('invoices')}
         >
           <FileText size={18} />
-          الفواتير والمبيعات ({invoices.length})
+          الفواتير والمبيعات ({orderStats.total})
         </button>
       </div>
 
@@ -320,9 +501,8 @@ const Sales = () => {
                   <div key={item.key} className="sales-cart-item">
                     <div className="sales-cart-item-header">
                       <div>
-                        <p className="sales-cart-item-name">{item.name}</p>
-                        <p className="sales-cart-item-variant">
-                          {item.sku || item.variantLabel}
+                        <p className="sales-cart-item-name">
+                          {item.variantLabel || item.name}
                         </p>
                       </div>
                       <span className="sales-cart-item-price">
@@ -424,78 +604,94 @@ const Sales = () => {
           </div>
         </div>
       ) : (
-        <div>
-          <div className="sales-invoices-search">
-            <Search size={18} color="#9ca3af" />
-            <input
-              type="text"
-              placeholder="البحث برقم الفاتورة..."
-              value={invoiceSearch}
-              onChange={(e) => setInvoiceSearch(e.target.value)}
-            />
+        <div className="sales-invoices-panel">
+          <div className="sales-invoices-toolbar">
+            <div className="sales-invoices-search">
+              <Search size={18} color="#9ca3af" />
+              <input
+                type="text"
+                placeholder="البحث برقم الطلب أو اسم العميل..."
+                value={invoiceSearch}
+                onChange={(e) => setInvoiceSearch(e.target.value)}
+              />
+            </div>
+
+            <div className="sales-order-type-filters">
+              <button
+                type="button"
+                className={`sales-order-type-btn ${orderTypeFilter === 'all' ? 'active' : ''}`}
+                onClick={() => setOrderTypeFilter('all')}
+              >
+                الكل ({orderStats.total})
+              </button>
+              <button
+                type="button"
+                className={`sales-order-type-btn online ${orderTypeFilter === 'online' ? 'active' : ''}`}
+                onClick={() => setOrderTypeFilter('online')}
+              >
+                أونلاين ({orderStats.online})
+              </button>
+              <button
+                type="button"
+                className={`sales-order-type-btn pos ${orderTypeFilter === 'pos' ? 'active' : ''}`}
+                onClick={() => setOrderTypeFilter('pos')}
+              >
+                مبيعات مباشرة ({orderStats.pos})
+              </button>
+            </div>
           </div>
 
           {loadingInvoices ? (
-            <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 40 }}>
-              جاري تحميل الفواتير...
-            </p>
-          ) : filteredInvoices.length === 0 ? (
-            <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 40 }}>
-              لا توجد فواتير مطابقة للبحث
-            </p>
+            <p className="sales-invoices-empty">جاري تحميل الطلبات...</p>
+          ) : visibleInvoices.length === 0 ? (
+            <p className="sales-invoices-empty">لا توجد طلبات مطابقة للبحث أو الفلتر</p>
           ) : (
-            filteredInvoices.map((invoice) => (
-              <div key={invoice.orderId} className="sales-invoice-card">
-                <div className="sales-invoice-header">
-                  <div>
-                    <p className="sales-invoice-number">فاتورة رقم: {invoice.id}</p>
-                    <p className="sales-invoice-meta">
-                      التاريخ: {invoice.date} | العميل: {invoice.customer}
-                    </p>
-                  </div>
-                  <span className="sales-invoice-status">{invoice.status}</span>
-                </div>
-
-                {invoice.items.map((line) => (
-                  <div key={line.lineId} className="sales-invoice-line">
-                    <div className="sales-invoice-line-info">
-                      <p className="sales-invoice-line-name">{line.name}</p>
-                      <p className="sales-invoice-line-detail">
-                        SKU: {line.sku || '—'} | الكمية: {line.quantity}
-                      </p>
-                    </div>
-                    <span className="sales-invoice-line-price">
-                      {line.price * line.quantity} د.ل
-                    </span>
-                    <div className="sales-invoice-line-actions">
-                      <button
-                        type="button"
-                        className="sales-line-btn"
-                        onClick={() => setRefundTarget({ invoiceId: invoice.id, line })}
-                        disabled={isSaving}
-                      >
-                        <RotateCcw size={14} />
-                        استرداد
-                      </button>
-                      <button
-                        type="button"
-                        className="sales-line-btn"
-                        onClick={() => setExchangeTarget({ invoiceId: invoice.id, line })}
-                        disabled={isSaving}
-                      >
-                        <ArrowLeftRight size={14} />
-                        تبديل
-                      </button>
-                    </div>
-                  </div>
-                ))}
-
-                <div className="sales-invoice-total-row">
-                  <span>الإجمالي:</span>
-                  <span>{calcInvoiceTotal(invoice.items)} د.ل</span>
-                </div>
-              </div>
-            ))
+            <div className="sales-invoices-table-wrap">
+              <table className="sales-invoices-table">
+                <thead>
+                  <tr>
+                    <th>رقم الطلب</th>
+                    <th>التاريخ</th>
+                    <th>العميل / الموظف</th>
+                    <th>النوع</th>
+                    <th>الحالة</th>
+                    <th>الإجمالي</th>
+                    <th>إجراءات</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleInvoices.map((invoice) => (
+                    <tr key={invoice.orderId}>
+                      <td className="sales-invoices-cell-number">{invoice.id}</td>
+                      <td>{invoice.date}</td>
+                      <td>{invoice.customer}</td>
+                      <td>
+                        <span className={`sales-invoice-type ${invoice.isPos ? 'pos' : 'online'}`}>
+                          {invoice.typeLabel}
+                        </span>
+                      </td>
+                      <td>
+                        <span className={`order-status-badge ${getStatusBadgeClass(invoice.status)}`}>
+                          {invoice.status}
+                        </span>
+                      </td>
+                      <td className="sales-invoices-cell-total">{invoice.total} د.ل</td>
+                      <td>
+                        <button
+                          type="button"
+                          className="sales-invoice-view-btn"
+                          onClick={() => openInvoiceDetails(invoice)}
+                          aria-label={`عرض تفاصيل الطلب ${invoice.id}`}
+                        >
+                          <Eye size={16} />
+                          <span>عرض التفاصيل</span>
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       )}
@@ -510,6 +706,8 @@ const Sales = () => {
         product={activeProduct}
         onAdd={handleAddToCart}
         isSaving={isSaving}
+        storeId={storeId}
+        storeProducts={products}
         exchangeFrom={
           pendingExchange
             ? { oldPrice: pendingExchange.oldPrice, quantity: pendingExchange.quantity }
@@ -523,6 +721,7 @@ const Sales = () => {
         cart={cart}
         onConfirm={handleCreateInvoice}
         isSaving={isSaving}
+        user={user}
       />
 
       <RefundModal
@@ -535,10 +734,34 @@ const Sales = () => {
 
       <ExchangeModal
         isOpen={!!exchangeTarget}
-        onClose={() => setExchangeTarget(null)}
+        onClose={() => !isSaving && setExchangeTarget(null)}
         item={exchangeTarget?.line}
         products={products}
-        onConfirm={handleExchangeSelect}
+        storeProducts={products}
+        onConfirm={(items, qty) => handleExchangeConfirm(items, qty)}
+        isSaving={isSaving}
+      />
+
+      <PosOrderActionModal
+        isOpen={!!orderActionMode}
+        onClose={() => !isSaving && setOrderActionMode(null)}
+        mode={orderActionMode ?? 'return'}
+        storeId={storeId}
+        products={products}
+        onRefundConfirm={handleOrderActionRefund}
+        onExchangeConfirm={handleExchangeConfirm}
+        isSaving={isSaving}
+      />
+
+      <OrderDetailModal
+        isOpen={detailModal.open}
+        onClose={() => setDetailModal({ open: false, order: null, loading: false })}
+        order={detailModal.order}
+        loading={detailModal.loading}
+        showPosActions
+        onRefundLine={handlePosRefundLine}
+        onExchangeLine={handlePosExchangeLine}
+        actionsDisabled={isSaving}
       />
 
       {toast && (

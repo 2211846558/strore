@@ -17,7 +17,16 @@ function formatPayment(method) {
   return PAYMENT_LABELS[key] ?? method;
 }
 
-const OrderDetailModal = ({ isOpen, onClose, order, loading = false }) => {
+const OrderDetailModal = ({
+  isOpen,
+  onClose,
+  order,
+  loading = false,
+  showPosActions = false,
+  onRefundLine,
+  onExchangeLine,
+  actionsDisabled = false,
+}) => {
   if (!isOpen) return null;
 
   return (
@@ -71,9 +80,14 @@ const OrderDetailModal = ({ isOpen, onClose, order, loading = false }) => {
                     </span>
                   </div>
                   <div className="order-detail-field">
-                    <span className="order-detail-label">التاريخ</span>
-                    <strong>{order.date}</strong>
+                    <span className="order-detail-label">النوع</span>
+                    <strong>{order.isPos ? 'مبيعات مباشرة' : 'طلب أونلاين'}</strong>
                   </div>
+                </div>
+
+                <div className="order-detail-field">
+                  <span className="order-detail-label">التاريخ</span>
+                  <strong>{order.date}</strong>
                 </div>
 
                 {!order.isPos && (
@@ -102,14 +116,40 @@ const OrderDetailModal = ({ isOpen, onClose, order, loading = false }) => {
                     {order.products?.length ? (
                       order.products.map((p, idx) => (
                         <div key={idx} className="order-product-item">
-                          <span className="order-product-name">
-                            {p.name}
-                            {p.variantLabel ? ` (${p.variantLabel})` : ''}
-                          </span>
-                          <span className="order-product-meta">
-                            {p.quantity > 1 ? `× ${p.quantity}` : ''}
-                            {p.price > 0 ? `${p.quantity > 1 ? ' — ' : ''}${p.price} د.ل` : ''}
-                          </span>
+                          <div className="order-product-item-main">
+                            <span className="order-product-name">
+                              {p.name}
+                              {p.variantLabel ? ` (${p.variantLabel})` : ''}
+                            </span>
+                            <span className="order-product-meta">
+                              {p.quantity > 1 ? `× ${p.quantity}` : ''}
+                              {p.price > 0 ? `${p.quantity > 1 ? ' — ' : ''}${p.price} د.ل` : ''}
+                            </span>
+                          </div>
+                          {showPosActions && (onRefundLine || onExchangeLine) && (
+                            <div className="order-product-pos-actions">
+                              {onRefundLine && (
+                                <button
+                                  type="button"
+                                  className="order-product-pos-btn refund"
+                                  onClick={() => onRefundLine(p)}
+                                  disabled={actionsDisabled}
+                                >
+                                  استرداد
+                                </button>
+                              )}
+                              {onExchangeLine && (
+                                <button
+                                  type="button"
+                                  className="order-product-pos-btn exchange"
+                                  onClick={() => onExchangeLine(p)}
+                                  disabled={actionsDisabled}
+                                >
+                                  استبدال
+                                </button>
+                              )}
+                            </div>
+                          )}
                         </div>
                       ))
                     ) : (

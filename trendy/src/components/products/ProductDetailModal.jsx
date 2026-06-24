@@ -27,7 +27,7 @@ const ProductDetailModal = ({ isOpen, onClose, product, storeId, onEdit }) => {
         if (cancelled) return;
         setDetails(data);
 
-        return fetchProductVariants(product.id).then((variantData) => {
+        return fetchProductVariants(product.id, { productName: product.name }).then((variantData) => {
           if (cancelled) return;
           setVariants(variantData);
 

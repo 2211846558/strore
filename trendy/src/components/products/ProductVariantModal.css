@@ -234,18 +234,6 @@
   border: 1px solid rgba(139,92,246,0.25);
 }
 
-.vt-shipment-badge {
-  display: inline-block;
-  font-size: 11px;
-  font-weight: 700;
-  font-family: 'Courier New', monospace;
-  padding: 2px 8px;
-  border-radius: 6px;
-  background: var(--bg-main);
-  border: 1px solid var(--border-color);
-  color: var(--text-secondary);
-}
-
 .vt-dash {
   color: var(--text-muted);
 }

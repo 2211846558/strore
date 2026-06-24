@@ -1,9 +1,10 @@
 import { useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { fetchPosInit, fetchPosCatalog, fetchPosCart, addToPosCart, removeFromPosCart, checkoutPosCart } from '../pos'
+import { fetchPosInit, fetchPosStoreCatalog, fetchPosCart, addToPosCart, removeFromPosCart, checkoutPosCart } from '../pos'
 import { buildPosDisplayProducts } from '../posImages'
 import { useProducts } from './useProducts'
 
+const POS_INIT_KEY = 'posInit'
 const POS_CART_KEY = 'posCart'
 
 /** نفس فلاتر صفحة المنتجات — GET /my-store/products (api.md) */
@@ -14,8 +15,8 @@ export const SALES_PRODUCT_FILTERS = {
 }
 
 /**
- * منتجات المبيعات المباشرة + صورها
- * GET /my-store/products + GET /inventory
+ * منتجات المبيعات المباشرة
+ * GET /stores/{storeId}/products
  */
 export function useSalesProducts(storeId) {
   const filters = useMemo(
@@ -26,7 +27,8 @@ export function useSalesProducts(storeId) {
   const storeQuery = useProducts(filters)
   const catalogQuery = useQuery({
     queryKey: ['salesPosCatalog', storeId ?? null],
-    queryFn: () => fetchPosCatalog({ storeId }),
+    queryFn: () => fetchPosStoreCatalog({ storeId }),
+    enabled: Boolean(storeId),
     staleTime: 30 * 1000,
     retry: 1,
   })
@@ -54,7 +56,7 @@ export function useSalesProducts(storeId) {
 
 export function usePosInit(storeId) {
   return useQuery({
-    queryKey: ['posInit', storeId ?? null],
+    queryKey: [POS_INIT_KEY, storeId ?? null],
     queryFn: () => fetchPosInit({ storeId }),
     staleTime: 15 * 1000,
     retry: 1,
@@ -73,7 +75,10 @@ export function useAddToCart() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: addToPosCart,
-    onSuccess: () => qc.invalidateQueries({ queryKey: [POS_CART_KEY] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [POS_CART_KEY] })
+      qc.invalidateQueries({ queryKey: [POS_INIT_KEY] })
+    },
   })
 }
 
@@ -81,7 +86,10 @@ export function useRemoveFromCart() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: removeFromPosCart,
-    onSuccess: () => qc.invalidateQueries({ queryKey: [POS_CART_KEY] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [POS_CART_KEY] })
+      qc.invalidateQueries({ queryKey: [POS_INIT_KEY] })
+    },
   })
 }
 
@@ -91,7 +99,7 @@ export function useCheckoutCart() {
     mutationFn: checkoutPosCart,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: [POS_CART_KEY] })
-      qc.invalidateQueries({ queryKey: ['posInit'] })
+      qc.invalidateQueries({ queryKey: [POS_INIT_KEY] })
     },
   })
 }

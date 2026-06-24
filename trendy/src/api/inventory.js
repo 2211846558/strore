@@ -1,6 +1,7 @@
 import { apiRequest } from './client';
 import { API_ENDPOINTS } from './config';
 import { fetchStoreProducts } from './products';
+import { buildVariantDisplayLabel } from '../utils/variantLabel';
 
 function extractList(res) {
   const payload = res?.data ?? res;
@@ -44,11 +45,30 @@ function formatDate(value) {
   return date.toISOString().slice(0, 10);
 }
 
+function readShipmentItemRemaining(item) {
+  for (const field of [
+    'remaining_quantity',
+    'remaining_qty',
+    'remaining',
+    'current_quantity',
+    'available_quantity',
+    'qty_remaining',
+  ]) {
+    if (item[field] != null && item[field] !== '') {
+      return Number(item[field]);
+    }
+  }
+  return Number(item.quantity ?? item.qty ?? 0);
+}
+
 function mapShipmentItem(item) {
   const variant = item.variant ?? item.product_variant ?? {};
   const product = variant.product ?? item.product ?? {};
   const attrs = variant.attribute_values ?? variant.attributes ?? item.attribute_values ?? [];
   const attrValues = attrs.map((a) => a.value ?? a.name).filter(Boolean);
+  const originalQuantity = Number(
+    item.original_quantity ?? item.initial_quantity ?? item.received_quantity ?? item.quantity ?? item.qty ?? 0,
+  );
 
   return {
     id: item.id ?? `${variant.id}-${item.quantity}`,
@@ -57,13 +77,76 @@ function mapShipmentItem(item) {
     category: product.category?.name ?? item.category ?? item.category_name ?? '—',
     color: item.color ?? attrValues[0] ?? '—',
     size: item.size ?? attrValues[1] ?? '—',
-    variantLabel: item.variant_label ?? (attrValues.join(' / ') || variant.sku || '—'),
-    quantity: Number(item.quantity ?? item.original_quantity ?? item.qty ?? 0),
+    variantLabel: buildVariantDisplayLabel(
+      product.name ?? item.product_name ?? item.name,
+      attrs,
+      {
+        sku: variant.sku ?? item.sku,
+        variantId: variant.id,
+        existingLabel: item.variant_label,
+        variant: { ...variant, color: item.color, size: item.size },
+      },
+    ),
+    quantity: originalQuantity,
+    remainingQuantity: readShipmentItemRemaining(item),
     unitCost:
       item.unit_cost ?? item.cost_price ?? item.unit_price ?? item.purchase_price ?? null,
     sellingPrice:
       item.selling_price ?? item.sale_price ?? item.retail_price ?? null,
   };
+}
+
+/**
+ * دمج الكمية المتبقية لكل تنوع من بيانات الشحنات
+ */
+export function enrichVariantsWithShipmentRemaining(variants, shipments) {
+  if (!Array.isArray(variants) || !variants.length) return variants ?? [];
+
+  const shipmentList = Array.isArray(shipments) ? shipments : [];
+
+  return variants.map((variant) => {
+    const breakdown = [];
+    let currentShipmentRemaining = variant.currentShipmentRemaining ?? null;
+    let currentShipmentCode = variant.currentShipmentCode ?? '';
+
+    shipmentList.forEach((shipment) => {
+      (shipment.items ?? []).forEach((item) => {
+        if (String(item.variantId) !== String(variant.id)) return;
+
+        const remaining = Number(item.remainingQuantity ?? item.remaining ?? item.quantity ?? 0);
+        breakdown.push({
+          shipmentId: shipment.id,
+          shipmentCode: shipment.code,
+          remaining,
+          statusRaw: shipment.statusRaw,
+        });
+
+        if (variant.currentShipment && String(shipment.id) === String(variant.currentShipment)) {
+          currentShipmentRemaining = remaining;
+          currentShipmentCode = shipment.code;
+        }
+      });
+    });
+
+    if (currentShipmentRemaining == null && breakdown.length) {
+      const active =
+        breakdown.find((entry) => entry.statusRaw === 'received' && entry.remaining > 0)
+        ?? breakdown.find((entry) => entry.remaining > 0)
+        ?? breakdown[0];
+
+      if (active) {
+        currentShipmentRemaining = active.remaining;
+        currentShipmentCode = active.shipmentCode;
+      }
+    }
+
+    return {
+      ...variant,
+      currentShipmentRemaining,
+      currentShipmentCode,
+      shipmentBreakdown: breakdown,
+    };
+  });
 }
 
 export function mapShipment(row) {
@@ -362,11 +445,16 @@ export async function fetchShipmentCatalog({ storeId } = {}) {
 
       const variants = (Array.isArray(variantsRaw) ? variantsRaw : []).map((variant) => {
         const attrs = variant.attribute_values ?? variant.attributes ?? [];
-        const label = attrs.map((a) => a.value ?? a.name).filter(Boolean).join(' / ');
+        const productName = raw.name ?? product.name;
         return {
           id: variant.id,
           sku: variant.sku ?? '',
-          label: label || variant.sku || `تنوع #${variant.id}`,
+          label: buildVariantDisplayLabel(productName, attrs, {
+            sku: variant.sku,
+            variantId: variant.id,
+            existingLabel: variant.label,
+            variant,
+          }),
         };
       });
 

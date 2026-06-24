@@ -1,4 +1,4 @@
-﻿.order-modal-overlay {
+.order-modal-overlay {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.5);
@@ -107,6 +107,45 @@
   line-height: 1.4;
 }
 
+.order-detail-modal .order-status-badge {
+  display: inline-block;
+  width: fit-content;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.order-detail-modal .order-status-badge.status-new {
+  background: rgba(59, 130, 246, 0.12);
+  color: #2563eb;
+}
+
+.order-detail-modal .order-status-badge.status-processing {
+  background: rgba(245, 158, 11, 0.12);
+  color: #d97706;
+}
+
+.order-detail-modal .order-status-badge.status-shipped {
+  background: rgba(14, 165, 233, 0.12);
+  color: #0284c7;
+}
+
+.order-detail-modal .order-status-badge.status-delivery {
+  background: rgba(168, 85, 247, 0.12);
+  color: #7c3aed;
+}
+
+.order-detail-modal .order-status-badge.status-completed {
+  background: rgba(34, 197, 94, 0.12);
+  color: #16a34a;
+}
+
+.order-detail-modal .order-status-badge.status-cancelled {
+  background: rgba(239, 68, 68, 0.12);
+  color: #dc2626;
+}
+
 .order-products-list {
   display: flex;
   flex-direction: column;
@@ -126,8 +165,7 @@
 
 .order-product-item {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
+  flex-direction: column;
   gap: 8px;
   background: var(--bg-input);
   border-radius: 8px;
@@ -135,6 +173,44 @@
   font-size: 12px;
   font-weight: 600;
   color: var(--text-primary);
+}
+
+.order-product-item-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.order-product-pos-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.order-product-pos-btn {
+  border: none;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.order-product-pos-btn.refund {
+  background: rgba(239, 68, 68, 0.12);
+  color: #dc2626;
+}
+
+.order-product-pos-btn.exchange {
+  background: rgba(59, 130, 246, 0.12);
+  color: #2563eb;
+}
+
+.order-product-pos-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .order-product-item.muted {

@@ -4,31 +4,30 @@ import { getApiErrorMessage } from '../../api/stores';
 import './SalesModals.css';
 
 const CreateInvoiceModal = ({ isOpen, onClose, cart, onConfirm, isSaving = false, user }) => {
-  const [customerId, setCustomerId] = useState('');
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (isOpen) {
-      setCustomerId(user?.name || '');
-      setError('');
-    }
-  }, [isOpen, user]);
+    if (isOpen) setError('');
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
   const totalQty = cart.reduce((s, i) => s + i.quantity, 0);
   const totalAmount = cart.reduce((s, i) => s + i.price * i.quantity, 0);
+  const staffName = user?.name ?? '—';
+  const staffId = user?.id;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    let id = Number(customerId);
-    if (Number.isNaN(id) || id <= 0) {
-      id = 1;
+
+    if (!staffId) {
+      setError('تعذّر تحديد هوية الموظف — أعد تسجيل الدخول');
+      return;
     }
+
     try {
-      await onConfirm(id);
-      setCustomerId(user?.name || '');
+      await onConfirm();
       onClose();
     } catch (err) {
       setError(getApiErrorMessage(err, 'تعذّر إنشاء الفاتورة'));
@@ -46,15 +45,13 @@ const CreateInvoiceModal = ({ isOpen, onClose, cart, onConfirm, isSaving = false
         </div>
         <form onSubmit={handleSubmit}>
           <div className="sales-form-group">
-            <label htmlFor="customer-id">بواسطة الموظف</label>
+            <label htmlFor="staff-name">بواسطة الموظف</label>
             <input
-              id="customer-id"
-              className="sales-form-input"
-              placeholder="اسم الموظف"
-              value={customerId}
-              onChange={(e) => setCustomerId(e.target.value)}
-              dir="ltr"
-              required
+              id="staff-name"
+              className="sales-form-input sales-form-input-readonly"
+              value={staffName}
+              readOnly
+              dir="rtl"
             />
           </div>
           <div className="sales-invoice-summary">
@@ -74,7 +71,7 @@ const CreateInvoiceModal = ({ isOpen, onClose, cart, onConfirm, isSaving = false
           </div>
           {error && <p className="sales-form-error">{error}</p>}
           <div className="sales-modal-footer">
-            <button type="submit" className="sales-btn-primary" disabled={!customerId || isSaving}>
+            <button type="submit" className="sales-btn-primary" disabled={!staffId || isSaving}>
               {isSaving ? 'جاري الإنشاء...' : 'إنشاء الفاتورة'}
             </button>
             <button type="button" className="sales-btn-secondary" onClick={onClose} disabled={isSaving}>

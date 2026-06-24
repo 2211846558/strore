@@ -76,7 +76,8 @@ const AddShipmentModal = ({
 
     setLoadingVariants(true);
     setError('');
-    fetchProductVariants(selectedProductId)
+    const productName = catalog.find((p) => String(p.id) === String(selectedProductId))?.name;
+    fetchProductVariants(selectedProductId, { productName })
       .then((variants) => {
         setVariantsList(variants);
         // Pre-fill quantities
@@ -95,7 +96,7 @@ const AddShipmentModal = ({
         setQuantities({});
       })
       .finally(() => setLoadingVariants(false));
-  }, [selectedProductId, initialData]);
+  }, [selectedProductId, initialData, catalog]);
 
   const selectedProduct = catalog.find((p) => String(p.id) === String(selectedProductId));
 

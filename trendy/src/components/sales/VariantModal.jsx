@@ -70,6 +70,11 @@ const VariantModal = ({ isOpen, onClose, product, onAdd, isSaving, exchangeFrom,
     (stock > 0 || variant?.stockUnknown) &&
     !isSaving;
   const isExchange = Boolean(exchangeFrom);
+  const selectedAttrsLabel = selectionReady
+    ? useDirectSelection
+      ? (variant?.label ?? '')
+      : [color, effectiveSize].filter((v) => v && v !== '—' && v !== 'واحد').join(' / ')
+    : '';
 
   useEffect(() => {
     if (!variant?.id || !selectionReady) {
@@ -135,6 +140,9 @@ const VariantModal = ({ isOpen, onClose, product, onAdd, isSaving, exchangeFrom,
             alt={activeProduct?.name ?? product?.name}
           />
           <p className="sales-modal-product-name">{activeProduct?.name ?? product.name}</p>
+          {selectedAttrsLabel && (
+            <p className="sales-modal-variant-label">{selectedAttrsLabel}</p>
+          )}
           <p className="sales-modal-product-price">{price} د.ل</p>
         </div>
 

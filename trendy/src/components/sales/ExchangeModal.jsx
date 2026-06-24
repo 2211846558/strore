@@ -15,7 +15,7 @@ import {
 import SalesProductThumb from './SalesProductThumb';
 import './SalesModals.css';
 
-const ExchangeModal = ({ isOpen, onClose, item, products = [], storeProducts = [], onConfirm }) => {
+const ExchangeModal = ({ isOpen, onClose, item, products = [], storeProducts = [], onConfirm, isSaving = false }) => {
   const [exchangeQty, setExchangeQty] = useState('1');
   const [selectedNewItems, setSelectedNewItems] = useState([]);
   const [prevItem, setPrevItem] = useState(null);
@@ -227,11 +227,11 @@ const ExchangeModal = ({ isOpen, onClose, item, products = [], storeProducts = [
   };
 
   return (
-    <div className="sales-modal-overlay" onClick={onClose}>
+    <div className="sales-modal-overlay" onClick={() => !isSaving && onClose()}>
       <div className="sales-modal" style={{ maxWidth: '600px' }} onClick={(e) => e.stopPropagation()}>
         <div className="sales-modal-header">
-          <h2 className="sales-modal-title">تبديل منتج (متعدد المنتجات)</h2>
-          <button type="button" className="sales-modal-close" onClick={onClose} aria-label="إغلاق">
+          <h2 className="sales-modal-title">استبدال منتج</h2>
+          <button type="button" className="sales-modal-close" onClick={onClose} aria-label="إغلاق" disabled={isSaving}>
             <X size={24} />
           </button>
         </div>
@@ -568,11 +568,11 @@ const ExchangeModal = ({ isOpen, onClose, item, products = [], storeProducts = [
             type="button"
             className="sales-btn-primary"
             onClick={handleConfirm}
-            disabled={selectedNewItems.length === 0}
+            disabled={selectedNewItems.length === 0 || isSaving}
           >
-            تأكيد التبديل
+            {isSaving ? 'جاري الاستبدال...' : 'تأكيد الاستبدال'}
           </button>
-          <button type="button" className="sales-btn-secondary" onClick={onClose}>
+          <button type="button" className="sales-btn-secondary" onClick={onClose} disabled={isSaving}>
             إلغاء
           </button>
         </div>
