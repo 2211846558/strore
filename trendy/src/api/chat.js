@@ -86,15 +86,100 @@ export function mapMessage(row) {
   };
 }
 
-/** الزبون = أول مشارك في المحادثة ليس المستخدم الحالي */
+const STORE_PARTICIPANT_ROLES = new Set([
+  'store',
+  'store_manager',
+  'store_staff',
+  'merchant',
+  'owner',
+  'participant',
+]);
+
+function isStoreParticipant(participant) {
+  if (!participant || typeof participant !== 'object') return false;
+
+  const role = String(participant.role ?? '').toLowerCase();
+  if (STORE_PARTICIPANT_ROLES.has(role)) return true;
+
+  const roles = Array.isArray(participant.roles) ? participant.roles : [];
+  return roles.some((entry) => STORE_PARTICIPANT_ROLES.has(String(entry).toLowerCase()));
+}
+
+function resolveParticipantName(participant) {
+  if (!participant || typeof participant !== 'object') return '';
+  return String(
+    participant.name ??
+      participant.user?.name ??
+      participant.customer?.name ??
+      '',
+  ).trim();
+}
+
+function resolveParticipantPhone(participant) {
+  if (!participant || typeof participant !== 'object') return '';
+  return String(
+    participant.phone ??
+      participant.user?.phone ??
+      participant.customer?.phone ??
+      '',
+  ).trim();
+}
+
+/** الزبون = مشارك بدور customer أو أول مشارك ليس من فريق المتجر */
 function resolveCustomerParticipant(row) {
   const participants = Array.isArray(row.participants) ? row.participants : [];
   const currentId = getCurrentUserId();
-  return (
-    participants.find((p) => Number(p.id) !== Number(currentId)) ??
-    participants[0] ??
-    null
+
+  const byRole = participants.find(
+    (participant) => String(participant.role ?? '').toLowerCase() === 'customer',
   );
+  if (byRole) return byRole;
+
+  return (
+    participants.find((participant) => {
+      const participantId = Number(participant.user_id ?? participant.user?.id ?? participant.id);
+      if (!participantId || Number(participantId) === Number(currentId)) return false;
+      return !isStoreParticipant(participant);
+    }) ?? null
+  );
+}
+
+function resolveCustomerName(row) {
+  const context = row.context ?? row.contextable ?? null;
+  const customer = resolveCustomerParticipant(row);
+
+  const name = [
+    row.customer_name,
+    row.customer?.name,
+    row.user?.name,
+    context?.customer_name,
+    context?.customer?.user?.name,
+    context?.customer?.name,
+    resolveParticipantName(customer),
+  ]
+    .map((value) => String(value ?? '').trim())
+    .find(Boolean);
+
+  return name || 'زبون';
+}
+
+function resolveCustomerPhone(row) {
+  const context = row.context ?? row.contextable ?? null;
+  const customer = resolveCustomerParticipant(row);
+
+  const phone = [
+    row.customer_phone,
+    row.customer?.phone,
+    row.user?.phone,
+    context?.customer_phone,
+    context?.customer?.user?.phone,
+    context?.customer?.phone,
+    resolveParticipantPhone(customer),
+  ]
+    .map((value) => String(value ?? '').trim())
+    .find(Boolean);
+
+  return phone || '';
 }
 
 /** وصف سياق المحادثة (متجر أو طلب) من ConversationResource */
@@ -119,18 +204,8 @@ export function mapChat(row) {
 
   return {
     id: Number(row.id ?? row.chat_id ?? row.order_id),
-    customerName:
-      row.customer_name ??
-      row.customer?.name ??
-      row.user?.name ??
-      customer?.name ??
-      'زبون',
-    phone:
-      row.customer_phone ??
-      row.customer?.phone ??
-      row.user?.phone ??
-      customer?.phone ??
-      '',
+    customerName: resolveCustomerName(row),
+    phone: resolveCustomerPhone(row),
     avatar: row.customer?.avatar ?? row.avatar ?? customer?.avatar ?? '',
     product:
       row.product_name ??
