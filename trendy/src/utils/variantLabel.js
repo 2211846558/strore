@@ -68,6 +68,70 @@ export function extractVariantAttributeValues(source) {
   return [source.color, source.size].filter(isMeaningfulValue);
 }
 
+function extractSingleAttributeValue(entry) {
+  if (typeof entry === 'string') return isMeaningfulValue(entry) ? entry : null;
+  if (!entry || typeof entry !== 'object') return null;
+
+  const candidates = [
+    entry.value,
+    entry.name,
+    entry.label,
+    entry.attribute_value?.value,
+    entry.attribute_value?.name,
+    entry.value?.value,
+    entry.value?.name,
+    entry.attribute?.value,
+    entry.pivot?.value,
+    entry.pivot?.name,
+  ];
+
+  return candidates.find(isMeaningfulValue) ?? null;
+}
+
+function extractSingleAttributeName(entry) {
+  if (!entry || typeof entry !== 'object') return null;
+
+  const candidates = [
+    entry.attribute_name,
+    entry.attribute?.name,
+    entry.attr_name,
+    entry.attribute_label,
+  ];
+
+  return candidates.find(isMeaningfulValue) ?? null;
+}
+
+/**
+ * يُعيد أزواج اسم الخاصية وقيمتها لعرض تفاصيل التنوع (مثل: اللون → أحمر).
+ */
+export function extractVariantAttributePairs(attrs, { variant } = {}) {
+  const pairs = [];
+
+  if (Array.isArray(attrs)) {
+    attrs.forEach((entry) => {
+      const value = extractSingleAttributeValue(entry);
+      if (!isMeaningfulValue(value)) return;
+
+      const name = extractSingleAttributeName(entry);
+      pairs.push({
+        name: name ? String(name).trim() : null,
+        value: String(value).trim(),
+      });
+    });
+  }
+
+  if (!pairs.length && variant) {
+    if (isMeaningfulValue(variant.color)) {
+      pairs.push({ name: 'اللون', value: String(variant.color).trim() });
+    }
+    if (isMeaningfulValue(variant.size) && variant.size !== 'واحد') {
+      pairs.push({ name: 'المقاس', value: String(variant.size).trim() });
+    }
+  }
+
+  return pairs;
+}
+
 function normalizeExistingLabel(existingLabel, productName) {
   const label = String(existingLabel ?? '').trim();
   const name = String(productName ?? '').trim();

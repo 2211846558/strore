@@ -88,98 +88,87 @@ export function mapMessage(row) {
 
 const STORE_PARTICIPANT_ROLES = new Set([
   'store',
+  'seller',
   'store_manager',
   'store_staff',
   'merchant',
-  'owner',
-  'participant',
+  'admin',
 ]);
 
 function isStoreParticipant(participant) {
-  if (!participant || typeof participant !== 'object') return false;
-
+  if (!participant) return false;
   const role = String(participant.role ?? '').toLowerCase();
   if (STORE_PARTICIPANT_ROLES.has(role)) return true;
 
-  const roles = Array.isArray(participant.roles) ? participant.roles : [];
-  return roles.some((entry) => STORE_PARTICIPANT_ROLES.has(String(entry).toLowerCase()));
+  const roles = participant.roles ?? participant.user?.roles;
+  if (Array.isArray(roles)) {
+    return roles.some((r) => STORE_PARTICIPANT_ROLES.has(String(r).toLowerCase()));
+  }
+
+  return Boolean(participant.store_id);
 }
 
-function resolveParticipantName(participant) {
-  if (!participant || typeof participant !== 'object') return '';
-  return String(
-    participant.name ??
-      participant.user?.name ??
-      participant.customer?.name ??
-      '',
-  ).trim();
+function participantUser(participant) {
+  if (!participant) return null;
+  if (participant.user && typeof participant.user === 'object') return participant.user;
+  if (participant.name) return participant;
+  return null;
 }
 
-function resolveParticipantPhone(participant) {
-  if (!participant || typeof participant !== 'object') return '';
-  return String(
-    participant.phone ??
-      participant.user?.phone ??
-      participant.customer?.phone ??
-      '',
-  ).trim();
-}
-
-/** الزبون = مشارك بدور customer أو أول مشارك ليس من فريق المتجر */
+/** الزبون = مشارك بدور customer أو غير تابع للمتجر */
 function resolveCustomerParticipant(row) {
   const participants = Array.isArray(row.participants) ? row.participants : [];
   const currentId = getCurrentUserId();
 
-  const byRole = participants.find(
-    (participant) => String(participant.role ?? '').toLowerCase() === 'customer',
+  const customerByRole = participants.find(
+    (p) => String(p.role ?? '').toLowerCase() === 'customer',
   );
-  if (byRole) return byRole;
+  if (customerByRole) return participantUser(customerByRole) ?? customerByRole;
 
+  const nonStore = participants.find((p) => !isStoreParticipant(p));
+  if (nonStore) return participantUser(nonStore) ?? nonStore;
+
+  const other = participants.find((p) => {
+    const uid = p.user_id ?? p.user?.id ?? p.id;
+    return Number(uid) !== Number(currentId) && !isStoreParticipant(p);
+  });
+  if (other) return participantUser(other) ?? other;
+
+  return participantUser(participants[0]) ?? participants[0] ?? null;
+}
+
+function resolveCustomerNameFromContext(context) {
+  if (!context || typeof context !== 'object') return null;
   return (
-    participants.find((participant) => {
-      const participantId = Number(participant.user_id ?? participant.user?.id ?? participant.id);
-      if (!participantId || Number(participantId) === Number(currentId)) return false;
-      return !isStoreParticipant(participant);
-    }) ?? null
+    context.customer_name
+    ?? context.customer?.user?.name
+    ?? context.customer?.name
+    ?? context.user?.name
+    ?? null
   );
 }
 
-function resolveCustomerName(row) {
-  const context = row.context ?? row.contextable ?? null;
-  const customer = resolveCustomerParticipant(row);
-
-  const name = [
-    row.customer_name,
-    row.customer?.name,
-    row.user?.name,
-    context?.customer_name,
-    context?.customer?.user?.name,
-    context?.customer?.name,
-    resolveParticipantName(customer),
-  ]
-    .map((value) => String(value ?? '').trim())
-    .find(Boolean);
-
-  return name || 'زبون';
+function resolveCustomerPhoneFromContext(context) {
+  if (!context || typeof context !== 'object') return null;
+  return (
+    context.customer_phone
+    ?? context.customer?.user?.phone
+    ?? context.customer?.phone
+    ?? context.user?.phone
+    ?? null
+  );
 }
 
-function resolveCustomerPhone(row) {
-  const context = row.context ?? row.contextable ?? null;
-  const customer = resolveCustomerParticipant(row);
+function resolveParticipantName(participant) {
+  if (!participant) return null;
+  const user = participantUser(participant);
+  return user?.name ?? participant.name ?? null;
+}
 
-  const phone = [
-    row.customer_phone,
-    row.customer?.phone,
-    row.user?.phone,
-    context?.customer_phone,
-    context?.customer?.user?.phone,
-    context?.customer?.phone,
-    resolveParticipantPhone(customer),
-  ]
-    .map((value) => String(value ?? '').trim())
-    .find(Boolean);
-
-  return phone || '';
+function resolveParticipantPhone(participant) {
+  if (!participant) return null;
+  const user = participantUser(participant);
+  return user?.phone ?? participant.phone ?? null;
 }
 
 /** وصف سياق المحادثة (متجر أو طلب) من ConversationResource */
@@ -200,13 +189,31 @@ function resolveChatContext(row) {
 
 export function mapChat(row) {
   const lastMessage = row.last_message ?? row.latest_message ?? null;
-  const customer = resolveCustomerParticipant(row);
+  const context = row.context ?? row.contextable ?? null;
+  const customerParticipant = resolveCustomerParticipant(row);
 
   return {
     id: Number(row.id ?? row.chat_id ?? row.order_id),
-    customerName: resolveCustomerName(row),
-    phone: resolveCustomerPhone(row),
-    avatar: row.customer?.avatar ?? row.avatar ?? customer?.avatar ?? '',
+    customerName:
+      row.customer_name
+      ?? row.customer?.name
+      ?? row.user?.name
+      ?? resolveCustomerNameFromContext(context)
+      ?? resolveParticipantName(customerParticipant)
+      ?? 'زبون',
+    phone:
+      row.customer_phone
+      ?? row.customer?.phone
+      ?? row.user?.phone
+      ?? resolveCustomerPhoneFromContext(context)
+      ?? resolveParticipantPhone(customerParticipant)
+      ?? '',
+    avatar:
+      row.customer?.avatar
+      ?? row.avatar
+      ?? participantUser(customerParticipant)?.avatar
+      ?? customerParticipant?.avatar
+      ?? '',
     product:
       row.product_name ??
       row.product?.name ??

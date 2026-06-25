@@ -18,7 +18,7 @@ const VariantModal = ({ isOpen, onClose, product, onAdd, isSaving, exchangeFrom,
   const [loadingStock, setLoadingStock] = useState(false);
 
   const activeProduct = product;
-  const useDirectSelection = Boolean(activeProduct?.useDirectSelection);
+  const useDirectSelection = false;
   const variantOptions = activeProduct?.variantOptions ?? [];
 
   useEffect(() => {
@@ -126,7 +126,7 @@ const VariantModal = ({ isOpen, onClose, product, onAdd, isSaving, exchangeFrom,
       <div className="sales-modal" onClick={(e) => e.stopPropagation()}>
         <div className="sales-modal-header">
           <h2 className="sales-modal-title">
-            {isExchange ? 'اختيار متغير المنتج الجديد' : 'اختيار متغير المنتج'}
+            {isExchange ? 'اختيار خصائص المنتج الجديد' : 'اختيار خصائص المنتج'}
           </h2>
           <button type="button" className="sales-modal-close" onClick={onClose} aria-label="إغلاق">
             <X size={24} />

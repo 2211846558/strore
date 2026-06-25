@@ -1,0 +1,712 @@
+/* ═══════════════════════════════════════════════════════════
+   Light Mode — Professional UI Overrides
+   Colors & shapes only — no content changes
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── Page titles: solid professional heading color ── */
+[data-theme='light'] .page-title {
+  background: none;
+  -webkit-text-fill-color: var(--text-primary);
+  color: var(--text-primary);
+}
+
+/* ── Cards & containers — larger radius, soft lift ── */
+[data-theme='light'] .stat-card,
+[data-theme='light'] .chart-card,
+[data-theme='light'] .chart-section,
+[data-theme='light'] .store-card,
+[data-theme='light'] .order-card,
+[data-theme='light'] .product-card,
+[data-theme='light'] .plan-card,
+[data-theme='light'] .subscription-card,
+[data-theme='light'] .campaign-card,
+[data-theme='light'] .transactions-section,
+[data-theme='light'] .finance-page .stat-card,
+[data-theme='light'] .finance-page .chart-section,
+[data-theme='light'] .inventory-card,
+[data-theme='light'] .shipment-card,
+[data-theme='light'] .offer-card,
+[data-theme='light'] .staff-card,
+[data-theme='light'] .notification-card,
+[data-theme='light'] .sales-card,
+[data-theme='light'] .login-container {
+  border-radius: var(--radius-card);
+}
+
+/* ── Primary action buttons — pill shape ── */
+[data-theme='light'] .add-product-btn,
+[data-theme='light'] .add-offer-btn,
+[data-theme='light'] .add-shipment-btn,
+[data-theme='light'] .export-btn,
+[data-theme='light'] .edit-store-btn,
+[data-theme='light'] .export-statement-btn,
+[data-theme='light'] .save-button:not(.archive-btn):not(.restore-btn),
+[data-theme='light'] .plan-card .subscribe-btn,
+[data-theme='light'] .subscription-card .renew-btn,
+[data-theme='light'] .campaign-subscribe-btn,
+[data-theme='light'] .payment-confirm-btn,
+[data-theme='light'] .confirm-btn,
+[data-theme='light'] .order-btn-view,
+[data-theme='light'] .order-btn-cancel {
+  border-radius: var(--radius-button) !important;
+}
+
+[data-theme='light'] .add-product-btn:hover,
+[data-theme='light'] .add-offer-btn:hover,
+[data-theme='light'] .add-shipment-btn:hover,
+[data-theme='light'] .export-btn:hover,
+[data-theme='light'] .edit-store-btn:hover,
+[data-theme='light'] .export-statement-btn:hover:not(:disabled),
+[data-theme='light'] .save-button:not(.archive-btn):not(.restore-btn):hover,
+[data-theme='light'] .plan-card .subscribe-btn:hover,
+[data-theme='light'] .subscription-card .renew-btn:hover,
+[data-theme='light'] .campaign-subscribe-btn:hover,
+[data-theme='light'] .payment-confirm-btn:hover,
+[data-theme='light'] .confirm-btn:hover {
+  box-shadow: 0 6px 20px rgba(92, 89, 179, 0.35) !important;
+}
+
+/* ── Search bars & inputs — pill shape ── */
+[data-theme='light'] .search-bar,
+[data-theme='light'] .orders-search,
+[data-theme='light'] .products-controls select,
+[data-theme='light'] .filter-dropdown select,
+[data-theme='light'] .sales-search,
+[data-theme='light'] .staff-search,
+[data-theme='light'] .finance-page input,
+[data-theme='light'] .finance-page select,
+[data-theme='light'] .tabs-container {
+  border-radius: var(--radius-input) !important;
+}
+
+[data-theme='light'] .search-bar,
+[data-theme='light'] .orders-search,
+[data-theme='light'] .sales-search {
+  background: #ffffff;
+  box-shadow: var(--shadow-sm);
+}
+
+[data-theme='light'] .orders-search .search-icon,
+[data-theme='light'] .sales-search .search-icon {
+  color: var(--text-muted);
+}
+
+/* ── Nav links — rounded highlight ── */
+[data-theme='light'] .nav-link {
+  border-radius: var(--radius-nav);
+}
+
+/* ── Info rows & list strips — pastel backgrounds ── */
+[data-theme='light'] .info-row,
+[data-theme='light'] .rating {
+  background: var(--bg-pastel-lavender);
+  border-radius: 16px;
+}
+
+[data-theme='light'] .order-card:nth-child(3n+1) {
+  background: var(--bg-card);
+}
+
+[data-theme='light'] .order-card:nth-child(3n+2) {
+  background: var(--bg-pastel-lavender);
+  border-color: transparent;
+}
+
+[data-theme='light'] .order-card:nth-child(3n) {
+  background: var(--bg-pastel-blue);
+  border-color: transparent;
+}
+
+/* ── Error / alert boxes — light pastel instead of dark tints ── */
+[data-theme='light'] .dashboard-error,
+[data-theme='light'] .orders-error,
+[data-theme='light'] .products-error,
+[data-theme='light'] .staff-error,
+[data-theme='light'] .chat-error,
+[data-theme='light'] .chat-badge-error,
+[data-theme='light'] .support-badge-error {
+  background-color: var(--bg-pastel-pink) !important;
+  border-color: rgba(231, 76, 60, 0.2) !important;
+  color: var(--danger) !important;
+}
+
+[data-theme='light'] .staff-modal .error-text,
+[data-theme='light'] .variant-error {
+  color: var(--danger) !important;
+}
+
+/* ── Status badges — light pastel backgrounds ── */
+[data-theme='light'] .order-status-badge.status-shipped,
+[data-theme='light'] .notification-type.info,
+[data-theme='light'] .notif-type-badge.info {
+  background: var(--bg-pastel-blue) !important;
+  color: #3b82f6 !important;
+}
+
+[data-theme='light'] .order-status-badge.status-delivery {
+  background: var(--bg-pastel-lavender) !important;
+  color: #5c59b3 !important;
+}
+
+[data-theme='light'] .order-status-badge.status-completed,
+[data-theme='light'] .notification-type.success,
+[data-theme='light'] .notif-type-badge.success {
+  background: var(--bg-pastel-green) !important;
+  color: var(--success) !important;
+}
+
+[data-theme='light'] .order-status-badge.status-cancelled,
+[data-theme='light'] .notification-type.error,
+[data-theme='light'] .notif-type-badge.error {
+  background: var(--bg-pastel-pink) !important;
+  color: var(--danger) !important;
+}
+
+[data-theme='light'] .notification-type.warning,
+[data-theme='light'] .notif-type-badge.warning {
+  background: var(--bg-pastel-amber) !important;
+  color: var(--warning) !important;
+}
+
+/* ── Finance & transaction status tints ── */
+[data-theme='light'] .txn-detail-modal .status-badge.pending,
+[data-theme='light'] .txn-detail-modal .type-badge.sub,
+[data-theme='light'] .archive-confirm-modal .warning-box {
+  background-color: var(--bg-pastel-amber) !important;
+  border-color: rgba(243, 156, 18, 0.2) !important;
+  color: var(--warning) !important;
+}
+
+[data-theme='light'] .txn-detail-modal .status-badge.failed,
+[data-theme='light'] .txn-detail-modal .type-badge.refund {
+  background-color: var(--bg-pastel-pink) !important;
+  border-color: rgba(231, 76, 60, 0.2) !important;
+  color: var(--danger) !important;
+}
+
+[data-theme='light'] .txn-detail-modal .type-badge.refund {
+  color: var(--warning) !important;
+  background-color: var(--bg-pastel-amber) !important;
+  border-color: rgba(243, 156, 18, 0.2) !important;
+}
+
+[data-theme='light'] .txn-detail-modal .status-badge.success,
+[data-theme='light'] .txn-detail-modal .type-badge.sales {
+  background: var(--gradient-primary) !important;
+  color: #ffffff !important;
+}
+
+/* ── Sales modal status boxes ── */
+[data-theme='light'] .sales-modal .info-box,
+[data-theme='light'] .sales-detail-modal .info-box {
+  background: var(--bg-pastel-blue) !important;
+  border-color: rgba(92, 89, 179, 0.15) !important;
+  color: #3b82f6 !important;
+}
+
+[data-theme='light'] .sales-modal .warning-box,
+[data-theme='light'] .sales-detail-modal .warning-box {
+  background: var(--bg-pastel-amber) !important;
+  border-color: rgba(243, 156, 18, 0.2) !important;
+  color: var(--warning) !important;
+}
+
+[data-theme='light'] .sales-modal .success-box,
+[data-theme='light'] .sales-detail-modal .success-box {
+  background: var(--bg-pastel-green) !important;
+  border-color: rgba(46, 204, 113, 0.2) !important;
+  color: var(--success) !important;
+}
+
+/* ── Inventory / offers archive buttons ── */
+[data-theme='light'] .archive-btn:hover,
+[data-theme='light'] .delete-btn:hover,
+[data-theme='light'] .remove-btn:hover,
+[data-theme='light'] .inventory-page .danger-btn:hover {
+  background-color: var(--bg-pastel-pink) !important;
+  border-color: rgba(231, 76, 60, 0.25) !important;
+  color: var(--danger) !important;
+}
+
+/* ── Sadad recharge modal ── */
+[data-theme='light'] .sadad-modal {
+  background: #ffffff;
+  border-color: var(--border-color);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-lg);
+}
+
+[data-theme='light'] .sadad-close {
+  color: var(--text-muted);
+}
+
+[data-theme='light'] .sadad-subtitle {
+  color: var(--text-secondary);
+}
+
+[data-theme='light'] .sadad-field.readonly,
+[data-theme='light'] .sadad-form input {
+  background: var(--bg-pastel-lavender);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+[data-theme='light'] .sadad-form input::placeholder {
+  color: var(--text-muted);
+}
+
+[data-theme='light'] .sadad-form input:focus {
+  border-color: var(--primary);
+}
+
+[data-theme='light'] .sadad-icon-wrap {
+  background: var(--gradient-primary);
+}
+
+/* ── Modals — white cards with soft shadow ── */
+[data-theme='light'] .modal-overlay .modal-content,
+[data-theme='light'] .modal-container,
+[data-theme='light'] .product-modal,
+[data-theme='light'] .order-detail-modal,
+[data-theme='light'] .staff-modal,
+[data-theme='light'] .wallet-modal,
+[data-theme='light'] .offer-modal,
+[data-theme='light'] .shipment-modal,
+[data-theme='light'] .variant-modal,
+[data-theme='light'] .sales-modal-content {
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-lg);
+}
+
+/* ── Tables — subtle row hover ── */
+[data-theme='light'] .transaction-table tbody tr:hover,
+[data-theme='light'] .staff-table tbody tr:hover,
+[data-theme='light'] .sales-table tbody tr:hover {
+  background: var(--bg-pastel-lavender);
+}
+
+/* ── Stat card accents — professional tones ── */
+[data-theme='light'] .stat-card.revenue .stat-value,
+[data-theme='light'] .stat-card.revenue .stat-value.highlight,
+[data-theme='light'] .stat-card.revenue .stat-value .currency,
+[data-theme='light'] .stat-card.revenue .stat-icon,
+[data-theme='light'] .finance-page .stat-value.green,
+[data-theme='light'] .finance-page .stat-icon.green {
+  color: var(--success) !important;
+}
+
+[data-theme='light'] .stat-card.revenue .stat-icon {
+  background: rgba(46, 204, 113, 0.12) !important;
+}
+
+[data-theme='light'] .stat-card.orders .stat-value,
+[data-theme='light'] .stat-card.orders .stat-icon {
+  color: #5c59b3 !important;
+}
+
+[data-theme='light'] .stat-card.orders .stat-icon {
+  background: var(--primary-light) !important;
+}
+
+/* ── Tabs — pill container ── */
+[data-theme='light'] .tabs-container {
+  background: #ffffff;
+  border-radius: var(--radius-button) !important;
+  padding: 4px;
+}
+
+[data-theme='light'] .tab-btn {
+  border-radius: var(--radius-button);
+}
+
+[data-theme='light'] .tab-btn.active {
+  background: var(--primary-light);
+  color: var(--primary);
+}
+
+/* ── Plans search ── */
+[data-theme='light'] .plans-controls .search-bar {
+  border-radius: var(--radius-input) !important;
+}
+
+/* ── Login page — soft professional look ── */
+[data-theme='light'] .login-page .bg-shape {
+  opacity: 0.35;
+}
+
+[data-theme='light'] .shape-1 {
+  background: rgba(92, 89, 179, 0.12);
+}
+
+[data-theme='light'] .shape-2 {
+  background: rgba(92, 89, 179, 0.08);
+}
+
+[data-theme='light'] .login-container {
+  box-shadow: var(--shadow-lg);
+}
+
+/* ── Toast ── */
+[data-theme='light'] .toast-notification {
+  border-radius: var(--radius-button) !important;
+}
+
+/* ── Product variant highlights ── */
+[data-theme='light'] .variant-row.highlighted {
+  background-color: var(--bg-pastel-lavender) !important;
+}
+
+[data-theme='light'] .variant-row.success-highlight {
+  background-color: var(--bg-pastel-green) !important;
+}
+
+[data-theme='light'] .variant-row.error-highlight {
+  background-color: var(--bg-pastel-pink) !important;
+}
+
+/* ── Sales page filter chips ── */
+[data-theme='light'] .sales-filter-btn.active {
+  background: var(--primary-light) !important;
+  border-color: var(--primary) !important;
+  color: var(--primary) !important;
+}
+
+/* ── Staff status indicators ── */
+[data-theme='light'] .staff-status.active {
+  color: var(--success) !important;
+}
+
+[data-theme='light'] .staff-status.inactive {
+  color: var(--danger) !important;
+}
+
+/* ── Open badge on store card ── */
+[data-theme='light'] .open-badge {
+  border-radius: var(--radius-button);
+  box-shadow: var(--shadow-sm);
+}
+
+[data-theme='light'] .open-badge.status-active {
+  background: var(--success) !important;
+}
+
+/* ── Page header accent line ── */
+[data-theme='light'] .page-header::after {
+  background: var(--primary);
+  border-radius: var(--radius-button);
+}
+
+/* ── Notifications — icon wraps & unread cards ── */
+[data-theme='light'] .notification-icon-wrap.order {
+  background: var(--bg-pastel-blue) !important;
+  color: #3b82f6 !important;
+}
+
+[data-theme='light'] .notification-icon-wrap.store {
+  background: var(--bg-pastel-green) !important;
+  color: var(--success) !important;
+}
+
+[data-theme='light'] .notification-icon-wrap.stock {
+  background: var(--bg-pastel-pink) !important;
+  color: var(--danger) !important;
+}
+
+[data-theme='light'] .notification-icon-wrap.system {
+  background: var(--bg-pastel-lavender) !important;
+  color: var(--primary) !important;
+}
+
+[data-theme='light'] .notification-card.unread {
+  background: var(--bg-pastel-lavender);
+  border-right-color: var(--primary);
+}
+
+[data-theme='light'] .notification-card {
+  border-radius: var(--radius-card);
+}
+
+[data-theme='light'] .mark-all-read-btn {
+  border-radius: var(--radius-button);
+}
+
+/* ── Notification detail modal status ── */
+[data-theme='light'] .notification-detail-icon.order {
+  background: var(--bg-pastel-blue) !important;
+  color: #3b82f6 !important;
+}
+
+[data-theme='light'] .notification-detail-icon.store {
+  background: var(--bg-pastel-green) !important;
+  color: var(--success) !important;
+}
+
+[data-theme='light'] .notification-detail-icon.stock {
+  background: var(--bg-pastel-pink) !important;
+  color: var(--danger) !important;
+}
+
+[data-theme='light'] .notification-detail-icon.system {
+  background: var(--bg-pastel-lavender) !important;
+  color: var(--primary) !important;
+}
+
+[data-theme='light'] .notification-detail-modal {
+  border-radius: var(--radius-card);
+}
+
+/* ── Sales modals — status boxes ── */
+[data-theme='light'] .sales-stock-box {
+  background: var(--bg-pastel-blue) !important;
+  border-color: rgba(92, 89, 179, 0.15) !important;
+  color: #3b82f6 !important;
+}
+
+[data-theme='light'] .sales-policy-box {
+  background: var(--bg-pastel-amber) !important;
+  border-color: rgba(243, 156, 18, 0.2) !important;
+}
+
+[data-theme='light'] .sales-policy-icon {
+  background: var(--warning) !important;
+  color: #ffffff !important;
+}
+
+[data-theme='light'] .sales-policy-title {
+  color: var(--warning) !important;
+}
+
+[data-theme='light'] .sales-exchange-diff.refund {
+  background: var(--bg-pastel-green) !important;
+  border-color: rgba(46, 204, 113, 0.2) !important;
+}
+
+[data-theme='light'] .sales-exchange-diff.refund .sales-exchange-diff-title {
+  color: var(--success) !important;
+}
+
+[data-theme='light'] .sales-exchange-diff.pay {
+  background: var(--bg-pastel-amber) !important;
+  border-color: rgba(243, 156, 18, 0.2) !important;
+}
+
+[data-theme='light'] .sales-exchange-diff.pay .sales-exchange-diff-title {
+  color: var(--warning) !important;
+}
+
+[data-theme='light'] .sales-summary-row.total .total-value {
+  color: var(--success) !important;
+}
+
+[data-theme='light'] .sales-btn-primary {
+  border-radius: var(--radius-button);
+  box-shadow: var(--shadow-primary);
+}
+
+[data-theme='light'] .sales-btn-secondary {
+  border-radius: var(--radius-button);
+}
+
+[data-theme='light'] .sales-modal {
+  border-radius: var(--radius-card);
+}
+
+[data-theme='light'] .sales-form-select,
+[data-theme='light'] .sales-form-input {
+  border-radius: 12px;
+}
+
+/* ── Marketing campaign cards ── */
+[data-theme='light'] .campaign-info,
+[data-theme='light'] .sub-campaign-info {
+  background: var(--bg-pastel-lavender) !important;
+}
+
+[data-theme='light'] .campaign-title,
+[data-theme='light'] .sub-campaign-title {
+  color: var(--text-primary) !important;
+}
+
+[data-theme='light'] .campaign-desc,
+[data-theme='light'] .sub-campaign-desc {
+  color: var(--text-secondary) !important;
+}
+
+[data-theme='light'] .campaign-card,
+[data-theme='light'] .subscribed-campaign-card {
+  border-radius: var(--radius-card);
+}
+
+[data-theme='light'] .campaign-banner {
+  background: var(--gradient-primary);
+}
+
+[data-theme='light'] .campaign-status-badge {
+  background: var(--success) !important;
+  color: #ffffff !important;
+}
+
+/* ── Wallet modal transaction rows ── */
+[data-theme='light'] .wallet-txn-row.credit {
+  background: var(--bg-pastel-green) !important;
+}
+
+[data-theme='light'] .wallet-txn-row.debit {
+  background: var(--bg-pastel-pink) !important;
+}
+
+/* ── Plan cards ── */
+[data-theme='light'] .plan-card {
+  border-radius: var(--radius-card);
+}
+
+[data-theme='light'] .plan-card .subscribe-btn {
+  border-radius: var(--radius-button) !important;
+}
+
+/* ── Chat page ── */
+[data-theme='light'] .chat-sidebar,
+[data-theme='light'] .chat-main {
+  border-radius: var(--radius-card);
+}
+
+[data-theme='light'] .chat-search {
+  border-radius: var(--radius-input) !important;
+  background: #ffffff;
+}
+
+/* ── Attributes page ── */
+[data-theme='light'] .attributes-card {
+  border-radius: var(--radius-card);
+}
+
+/* ── Staff modal ── */
+[data-theme='light'] .staff-modal .form-input,
+[data-theme='light'] .staff-modal select {
+  border-radius: 12px;
+}
+
+/* ── Product modal inputs ── */
+[data-theme='light'] .product-modal input,
+[data-theme='light'] .product-modal select,
+[data-theme='light'] .product-modal textarea {
+  border-radius: 12px;
+}
+
+/* ── Inventory shipment cards ── */
+[data-theme='light'] .shipment-card {
+  border-radius: var(--radius-card);
+}
+
+/* ── Offers cards ── */
+[data-theme='light'] .offer-card {
+  border-radius: var(--radius-card);
+}
+
+/* ── Finance table badges ── */
+[data-theme='light'] .transaction-table .type-badge.refund,
+[data-theme='light'] .finance-page .type-badge.refund {
+  background-color: var(--bg-pastel-amber) !important;
+  color: var(--warning) !important;
+}
+
+[data-theme='light'] .transaction-table .status-badge.failed,
+[data-theme='light'] .finance-page .status-badge.failed {
+  background-color: var(--bg-pastel-pink) !important;
+  color: var(--danger) !important;
+}
+
+[data-theme='light'] .transaction-table .status-badge.pending,
+[data-theme='light'] .finance-page .status-badge.pending,
+[data-theme='light'] .transaction-table .type-badge.sub,
+[data-theme='light'] .finance-page .type-badge.sub {
+  background-color: var(--bg-pastel-lavender) !important;
+  color: var(--primary) !important;
+}
+
+[data-theme='light'] .finance-page .amount-cell.positive {
+  color: var(--success) !important;
+}
+
+[data-theme='light'] .finance-page .amount-cell.negative {
+  color: var(--danger) !important;
+}
+
+/* ── Archive confirm modal ── */
+[data-theme='light'] .archive-icon.archive {
+  background-color: var(--bg-pastel-amber) !important;
+  color: var(--warning) !important;
+}
+
+[data-theme='light'] .archive-icon.restore {
+  background-color: var(--bg-pastel-green) !important;
+  color: var(--success) !important;
+}
+
+[data-theme='light'] .archive-btn {
+  background-color: var(--warning) !important;
+  color: #ffffff !important;
+}
+
+[data-theme='light'] .archive-btn:hover {
+  background-color: #e67e22 !important;
+}
+
+[data-theme='light'] .restore-btn {
+  background-color: var(--success) !important;
+  color: #ffffff !important;
+}
+
+[data-theme='light'] .modal-content,
+[data-theme='light'] .archive-modal-content {
+  border-radius: var(--radius-card);
+}
+
+/* ── Sub-campaign status badges ── */
+[data-theme='light'] .sub-campaign-status.active {
+  background: var(--success) !important;
+  color: #ffffff !important;
+}
+
+[data-theme='light'] .sub-campaign-status.expired {
+  background: var(--bg-pastel-lavender) !important;
+  color: var(--text-secondary) !important;
+}
+
+[data-theme='light'] .sub-campaign-banner {
+  background: var(--gradient-primary);
+}
+
+/* ── Sales page POS ── */
+[data-theme='light'] .sales-remove-btn {
+  background: var(--bg-pastel-pink) !important;
+  border-color: rgba(231, 76, 60, 0.2) !important;
+  color: var(--danger) !important;
+}
+
+[data-theme='light'] .sales-remove-btn:hover {
+  background: rgba(231, 76, 60, 0.15) !important;
+}
+
+[data-theme='light'] .sales-line-btn.refund:hover {
+  background: var(--bg-pastel-pink) !important;
+  border-color: var(--danger) !important;
+  color: var(--danger) !important;
+}
+
+[data-theme='light'] .sales-line-btn.exchange:hover {
+  background: var(--bg-pastel-blue) !important;
+  border-color: #3b82f6 !important;
+  color: #3b82f6 !important;
+}
+
+[data-theme='light'] .sales-cart-panel,
+[data-theme='light'] .sales-products-panel {
+  border-radius: var(--radius-card);
+}
+
+[data-theme='light'] .sales-error {
+  background: var(--bg-pastel-pink) !important;
+  border-color: rgba(231, 76, 60, 0.2) !important;
+  color: var(--danger) !important;
+}

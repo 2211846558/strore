@@ -219,10 +219,36 @@
   font-weight: 500;
 }
 
-.order-product-name {
+.order-product-info {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
   text-align: right;
+}
+
+.order-product-name {
   line-height: 1.35;
+}
+
+.order-product-variant {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: flex-start;
+}
+
+.order-product-variant-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.1);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.3;
 }
 
 .order-product-meta {

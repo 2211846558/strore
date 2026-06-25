@@ -1,6 +1,6 @@
 import { apiRequest } from './client';
 import { API_ENDPOINTS } from './config';
-import { buildVariantDisplayLabel } from '../utils/variantLabel';
+import { buildVariantDisplayLabel, extractVariantAttributePairs } from '../utils/variantLabel';
 
 function extractList(res) {
   const payload = res?.data ?? res;
@@ -84,6 +84,9 @@ function extractOrderItems(row) {
 function mapOrderItem(item) {
   const variant = item.variant ?? item.product_variant ?? {};
   const productName = item.product_name ?? item.name ?? item.product?.name ?? item.title ?? '—';
+  const attrs = variant.attribute_values ?? variant.attributes ?? item.attribute_values ?? [];
+  const variantContext = { ...variant, color: item.color, size: item.size };
+  const variantAttributes = extractVariantAttributePairs(attrs, { variant: variantContext });
   return {
     lineId: item.id ?? item.line_id ?? null,
     variantId: item.variant_id ?? item.product_variant_id ?? variant.id ?? null,
@@ -92,14 +95,15 @@ function mapOrderItem(item) {
     price: Number(item.unit_price ?? item.price ?? item.total ?? 0),
     variantLabel: buildVariantDisplayLabel(
       productName,
-      variant.attribute_values ?? variant.attributes ?? item.attribute_values,
+      attrs,
       {
         sku: item.sku ?? variant.sku,
         variantId: variant.id,
         existingLabel: item.variant_label ?? variant.label,
-        variant: { ...variant, color: item.color, size: item.size },
+        variant: variantContext,
       },
     ) || null,
+    variantAttributes,
     sku: item.sku ?? variant.sku ?? '',
   };
 }

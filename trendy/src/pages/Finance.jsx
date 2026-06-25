@@ -222,9 +222,9 @@ const Finance = () => {
           ) : (
             <ResponsiveContainer width="100%" height={300}>
               <LineChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#242240" />
-                <XAxis dataKey="month" tick={{ fontSize: 13, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 13, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
+                <XAxis dataKey="month" tick={{ fontSize: 13, fill: 'var(--chart-tick)' }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 13, fill: 'var(--chart-tick)' }} axisLine={false} tickLine={false} />
                 <Tooltip
                   contentStyle={{ borderRadius: 10, border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
                   formatter={(value) => [`${formatMoney(value)} د.ل`, 'الإيرادات']}
@@ -232,9 +232,9 @@ const Finance = () => {
                 <Line
                   type="monotone"
                   dataKey="revenue"
-                  stroke="#8b3dff"
+                  stroke="var(--primary)"
                   strokeWidth={2}
-                  dot={{ r: 4, fill: '#8b3dff', strokeWidth: 2, stroke: '#18162e' }}
+                  dot={{ r: 4, fill: 'var(--primary)', strokeWidth: 2, stroke: 'var(--bg-card)' }}
                   activeDot={{ r: 6 }}
                 />
               </LineChart>

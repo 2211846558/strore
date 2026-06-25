@@ -154,7 +154,7 @@ const Orders = () => {
 
       <div className="orders-controls">
         <div className="orders-search">
-          <Search size={20} color="#9ca3af" />
+          <Search size={20} className="search-icon" />
           <input
             type="text"
             placeholder="البحث برقم الطلب أو اسم العميل..."

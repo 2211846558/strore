@@ -6,6 +6,7 @@ import {
   buildVariantFullLabel,
   isWeakVariantAttrsLabel,
   isWeakVariantFullLabel,
+  extractVariantAttributePairs,
 } from '../utils/variantLabel';
 import { fetchAllOrders } from './orders';
 import { fetchStorePublicProducts, fetchProductVariants } from './products';
@@ -81,8 +82,12 @@ function resolveProductImage(raw) {
 
 function mapPosVariant(variant, productRaw) {
   const attrs = mapAttributeValues(variant.attribute_values ?? variant.attributes);
-  const color = variant.color ?? attrs[0] ?? '—';
-  const size = variant.size ?? attrs[1] ?? (attrs.length === 1 ? 'واحد' : '—');
+  const pairs = extractVariantAttributePairs(variant.attribute_values ?? variant.attributes);
+  const colorPair = pairs.find(p => p.name && (p.name.includes('لون') || p.name.toLowerCase().includes('color') || p.name.includes('الوان') || p.name.includes('الألوان')));
+  const sizePair = pairs.find(p => p.name && (p.name.includes('مقاس') || p.name.toLowerCase().includes('size') || p.name.includes('المقاس')));
+
+  const color = variant.color ?? colorPair?.value ?? attrs[0] ?? '—';
+  const size = variant.size ?? sizePair?.value ?? attrs[1] ?? (attrs.length === 1 ? 'واحد' : '—');
   const variantId = Number(variant.id);
   const productName = productRaw?.name ?? productRaw?.product_name ?? '';
   const fromProduct = readVariantStockFromPayload(variant);

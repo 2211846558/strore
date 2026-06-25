@@ -607,7 +607,7 @@ const Sales = () => {
         <div className="sales-invoices-panel">
           <div className="sales-invoices-toolbar">
             <div className="sales-invoices-search">
-              <Search size={18} color="#9ca3af" />
+              <Search size={18} className="search-icon" />
               <input
                 type="text"
                 placeholder="البحث برقم الطلب أو اسم العميل..."

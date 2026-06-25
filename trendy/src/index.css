@@ -1,4 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap');
+@import './light-theme.css';
 
 :root {
   /* Dark Neon Brand Palette */
@@ -38,28 +39,66 @@
   --shadow-lg: 0 14px 32px rgba(0, 0, 0, 0.5);
   --shadow-card: 0 4px 20px rgba(0, 0, 0, 0.35);
   --shadow-primary: 0 4px 14px rgba(139, 61, 255, 0.4);
+
+  --chart-grid: #242240;
+  --chart-tick: #9ca3af;
 }
 
 [data-theme='light'] {
-  --bg-main: #edeef6;
-  --bg-card: #f4f5fb;
-  --bg-sidebar: #edeef6;
+  /* Professional light palette — inspired by modern dashboard UI */
+  --primary: #5c59b3;
+  --primary-hover: #4e4ba0;
+  --primary-light: rgba(92, 89, 179, 0.1);
+  --primary-dark: #5c59b3;
+  --accent: #5c59b3;
+  --accent-light: rgba(92, 89, 179, 0.08);
+
+  --gradient-primary: linear-gradient(135deg, #6b68c4 0%, #5c59b3 50%, #504da8 100%);
+  --gradient-primary-hover: linear-gradient(135deg, #5c59b3 0%, #4e4ba0 100%);
+  --gradient-soft: #f0f4ff;
+  --gradient-sidebar: #5c59b3;
+
+  --bg-main: #f0f4ff;
+  --bg-card: #ffffff;
+  --bg-sidebar: #5c59b3;
   --bg-input: #ffffff;
 
-  --text-primary: #131127;
-  --text-secondary: #4b4868;
-  --text-muted: #7b7898;
+  --bg-pastel-lavender: #f0efff;
+  --bg-pastel-pink: #fff5f7;
+  --bg-pastel-blue: #f5f7ff;
+  --bg-pastel-green: #f0fdf4;
+  --bg-pastel-amber: #fffbeb;
 
-  --border-color: rgba(19, 17, 39, 0.06);
-  --border-focus: rgba(19, 17, 39, 0.15);
+  --text-primary: #2d2d50;
+  --text-secondary: #757575;
+  --text-muted: #9e9e9e;
 
-  --gradient-soft: linear-gradient(160deg, #edeef6 0%, #e2e4ef 100%);
-  --gradient-sidebar: linear-gradient(180deg, #edeef6 0%, #e2e4ef 100%);
+  --success: #2ecc71;
+  --danger: #e74c3c;
+  --warning: #f39c12;
 
-  --shadow-sm: 0 1px 2px rgba(19, 17, 39, 0.05);
-  --shadow-md: 0 4px 6px -1px rgba(19, 17, 39, 0.08);
-  --shadow-lg: 0 10px 15px -3px rgba(19, 17, 39, 0.08);
-  --shadow-card: 0 4px 10px rgba(19, 17, 39, 0.05);
+  --border-color: rgba(45, 45, 80, 0.08);
+  --border-focus: rgba(92, 89, 179, 0.25);
+
+  --shadow-sm: 0 1px 3px rgba(45, 45, 80, 0.04);
+  --shadow-md: 0 4px 12px rgba(45, 45, 80, 0.06);
+  --shadow-lg: 0 8px 24px rgba(45, 45, 80, 0.08);
+  --shadow-card: 0 4px 20px rgba(45, 45, 80, 0.06);
+  --shadow-primary: 0 4px 14px rgba(92, 89, 179, 0.28);
+
+  --radius-card: 24px;
+  --radius-button: 999px;
+  --radius-input: 999px;
+  --radius-nav: 16px;
+
+  --sidebar-text: rgba(255, 255, 255, 0.92);
+  --sidebar-text-muted: rgba(255, 255, 255, 0.65);
+  --sidebar-hover: rgba(255, 255, 255, 0.14);
+  --sidebar-active: rgba(255, 255, 255, 0.22);
+  --sidebar-border: rgba(255, 255, 255, 0.15);
+
+  --chart-grid: rgba(45, 45, 80, 0.08);
+  --chart-tick: #9e9e9e;
 }
 
 * {

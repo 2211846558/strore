@@ -17,6 +17,49 @@ function formatPayment(method) {
   return PAYMENT_LABELS[key] ?? method;
 }
 
+function formatVariantAttribute({ name, value }) {
+  return name ? `${name}: ${value}` : value;
+}
+
+function getProductAttributes(product) {
+  if (product.variantAttributes?.length) {
+    return product.variantAttributes;
+  }
+  const attrs = [];
+  const color = product.color ?? product.variant?.color ?? product.variant_color;
+  const size = product.size ?? product.variant?.size ?? product.variant_size;
+
+  if (color && color !== '—') {
+    attrs.push({ name: 'اللون', value: color });
+  }
+  if (size && size !== '—' && size !== 'واحد') {
+    attrs.push({ name: 'المقاس', value: size });
+  }
+  return attrs;
+}
+
+function getVariantLabel(product) {
+  return product.variantLabel ?? product.variant?.label ?? product.variant_label ?? '';
+}
+
+function getDriverName(order) {
+  if (!order) return null;
+  const name = order.driverName ??
+    order.driver?.name ??
+    order.driver?.user?.name ??
+    order.raw?.driver?.name ??
+    order.raw?.driver?.user?.name ??
+    order.raw?.driver_name;
+  return name && name !== '—' ? name : null;
+}
+
+function hasVariantDetails(product) {
+  return (
+    getProductAttributes(product).length > 0
+    || (getVariantLabel(product) && getVariantLabel(product) !== '—')
+  );
+}
+
 const OrderDetailModal = ({
   isOpen,
   onClose,
@@ -94,9 +137,9 @@ const OrderDetailModal = ({
                   <div className="order-detail-field">
                     <span className="order-detail-label">السائق</span>
                     <strong>
-                      {order.hasDriver
-                        ? order.driverName
-                        : ['تم الشحن', 'قيد التوصيل'].includes(order.status)
+                      {getDriverName(order)
+                        ? getDriverName(order)
+                        : ['shipped', 'out_for_delivery', 'delivering'].includes(order.statusRaw?.toLowerCase()) || ['تم الشحن', 'قيد التوصيل'].includes(order.status)
                           ? 'في انتظار سائق متاح'
                           : '—'}
                     </strong>
@@ -117,10 +160,16 @@ const OrderDetailModal = ({
                       order.products.map((p, idx) => (
                         <div key={idx} className="order-product-item">
                           <div className="order-product-item-main">
-                            <span className="order-product-name">
-                              {p.name}
-                              {p.variantLabel ? ` (${p.variantLabel})` : ''}
-                            </span>
+                            <div className="order-product-info">
+                              <span className="order-product-name">
+                                {p.name}
+                                {getProductAttributes(p).length ? (
+                                  ` — ${getProductAttributes(p).map(attr => formatVariantAttribute(attr)).join(' / ')}`
+                                ) : getVariantLabel(p) && getVariantLabel(p) !== '—' ? (
+                                  ` — ${getVariantLabel(p)}`
+                                ) : ''}
+                              </span>
+                            </div>
                             <span className="order-product-meta">
                               {p.quantity > 1 ? `× ${p.quantity}` : ''}
                               {p.price > 0 ? `${p.quantity > 1 ? ' — ' : ''}${p.price} د.ل` : ''}
