@@ -1237,3 +1237,12 @@
     justify-content: flex-end;
   }
 }
+
+.sales-returns-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 16px;
+  margin-top: 8px;
+}

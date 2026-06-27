@@ -26,6 +26,7 @@ import {
   exchangeOrderItems,
   exchangePosItem,
   fetchPosInvoices,
+  fetchReturnRequests,
   getProductStockInfo,
   isProductAvailable,
   getVariantStock,
@@ -82,6 +83,12 @@ const Sales = () => {
   const [detailModal, setDetailModal] = useState({ open: false, order: null, loading: false });
   const [orderActionMode, setOrderActionMode] = useState(null);
   const [toast, setToast] = useState(null);
+  const [returnRequests, setReturnRequests] = useState([]);
+  const [loadingReturns, setLoadingReturns] = useState(false);
+  const [returnRequestsMeta, setReturnRequestsMeta] = useState(null);
+  const [exchangeRequests, setExchangeRequests] = useState([]);
+  const [loadingExchanges, setLoadingExchanges] = useState(false);
+  const [exchangeRequestsMeta, setExchangeRequestsMeta] = useState(null);
 
   const showToast = (message) => {
     setToast(message);
@@ -185,6 +192,44 @@ const Sales = () => {
     }
   }, [storeId, debouncedInvoiceSearch]);
 
+  const loadReturnRequests = useCallback(async (page = 1) => {
+    if (!storeId) return;
+    setLoadingReturns(true);
+    try {
+      const res = await fetchReturnRequests({ page, perPage: 15, actionType: 'refund' });
+      setReturnRequests(res?.data ?? []);
+      setReturnRequestsMeta({
+        currentPage: res?.current_page ?? 1,
+        lastPage: res?.last_page ?? 1,
+        total: res?.total ?? 0,
+      });
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'تعذّر تحميل سجل الاسترجاع'));
+      setReturnRequests([]);
+    } finally {
+      setLoadingReturns(false);
+    }
+  }, [storeId]);
+
+  const loadExchangeRequests = useCallback(async (page = 1) => {
+    if (!storeId) return;
+    setLoadingExchanges(true);
+    try {
+      const res = await fetchReturnRequests({ page, perPage: 15, actionType: 'replacement' });
+      setExchangeRequests(res?.data ?? []);
+      setExchangeRequestsMeta({
+        currentPage: res?.current_page ?? 1,
+        lastPage: res?.last_page ?? 1,
+        total: res?.total ?? 0,
+      });
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'تعذّر تحميل سجل الاستبدال'));
+      setExchangeRequests([]);
+    } finally {
+      setLoadingExchanges(false);
+    }
+  }, [storeId]);
+
   useEffect(() => {
     loadPosInit();
   }, [loadPosInit]);
@@ -192,6 +237,11 @@ const Sales = () => {
   useEffect(() => {
     if (storeId) loadInvoices();
   }, [storeId, loadInvoices]);
+
+  useEffect(() => {
+    if (storeId && activeTab === 'returns') loadReturnRequests();
+    if (storeId && activeTab === 'exchanges') loadExchangeRequests();
+  }, [storeId, activeTab, loadReturnRequests, loadExchangeRequests]);
 
   const cartCount = cart.reduce((s, i) => s + i.quantity, 0);
 
@@ -473,6 +523,22 @@ const Sales = () => {
           <FileText size={18} />
           الفواتير والمبيعات ({orderStats.total})
         </button>
+        <button
+          type="button"
+          className={`sales-tab ${activeTab === 'returns' ? 'active' : ''}`}
+          onClick={() => setActiveTab('returns')}
+        >
+          <Undo2 size={18} />
+          سجل الاسترجاع ({returnRequestsMeta?.total ?? 0})
+        </button>
+        <button
+          type="button"
+          className={`sales-tab ${activeTab === 'exchanges' ? 'active' : ''}`}
+          onClick={() => setActiveTab('exchanges')}
+        >
+          <ArrowLeftRight size={18} />
+          سجل الاستبدال ({exchangeRequestsMeta?.total ?? 0})
+        </button>
       </div>
 
       {error && <p className="sales-error">{error}</p>}
@@ -602,6 +668,198 @@ const Sales = () => {
               </div>
             )}
           </div>
+        </div>
+      ) : activeTab === 'returns' ? (
+        <div className="sales-invoices-panel">
+          <div className="sales-invoices-toolbar">
+            <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '600' }}>سجل عمليات الاسترجاع</h3>
+          </div>
+
+          {loadingReturns ? (
+            <p className="sales-invoices-empty">جاري تحميل السجل...</p>
+          ) : returnRequests.length === 0 ? (
+            <p className="sales-invoices-empty">لا توجد عمليات استرجاع مسجلة</p>
+          ) : (
+            <>
+              <div className="sales-invoices-table-wrap">
+                <table className="sales-invoices-table">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>رقم الطلب</th>
+                      <th>المنتج</th>
+                      <th>الكمية</th>
+                      <th>المبلغ المسترد</th>
+                      <th>الحالة</th>
+                      <th>التاريخ</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {returnRequests.map((rr) => {
+                      const productName = rr.product_variant?.product?.name ?? '—';
+                      const variantInfo = rr.product_variant?.sku ?? '';
+                      return (
+                        <tr key={rr.id}>
+                          <td className="sales-invoices-cell-number">{rr.id}</td>
+                          <td className="sales-invoices-cell-number">
+                            {rr.order?.order_number ?? `#${rr.order_id}`}
+                          </td>
+                          <td>
+                            <div style={{ fontWeight: '600' }}>{productName}</div>
+                            {variantInfo && (
+                              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{variantInfo}</div>
+                            )}
+                          </td>
+                          <td>{rr.quantity}</td>
+                          <td className="sales-invoices-cell-total">
+                            {rr.refund_amount != null ? `${rr.refund_amount} د.ل` : '—'}
+                          </td>
+                          <td>
+                            <span className={`order-status-badge ${getStatusBadgeClass(
+                              rr.status === 'refunded' ? 'تم التسليم' : rr.status === 'rejected' ? 'ملغي' : 'قيد الشحن'
+                            )}`}>
+                              {rr.status === 'pending' ? 'قيد المراجعة' : rr.status === 'refunded' ? 'تم الاسترجاع' : rr.status === 'received' ? 'تم الاستلام' : rr.status === 'rejected' ? 'مرفوض' : rr.status}
+                            </span>
+                          </td>
+                          <td style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                            {new Date(rr.created_at).toLocaleDateString('ar-LY')}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              {returnRequestsMeta && returnRequestsMeta.lastPage > 1 && (
+                <div className="sales-returns-pagination">
+                  <button
+                    type="button"
+                    className="sales-btn-secondary"
+                    disabled={returnRequestsMeta.currentPage <= 1}
+                    onClick={() => loadReturnRequests(returnRequestsMeta.currentPage - 1)}
+                  >
+                    السابق
+                  </button>
+                  <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+                    صفحة {returnRequestsMeta.currentPage} من {returnRequestsMeta.lastPage}
+                  </span>
+                  <button
+                    type="button"
+                    className="sales-btn-secondary"
+                    disabled={returnRequestsMeta.currentPage >= returnRequestsMeta.lastPage}
+                    onClick={() => loadReturnRequests(returnRequestsMeta.currentPage + 1)}
+                  >
+                    التالي
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      ) : activeTab === 'exchanges' ? (
+        <div className="sales-invoices-panel">
+          <div className="sales-invoices-toolbar">
+            <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '600' }}>سجل عمليات الاستبدال</h3>
+          </div>
+
+          {loadingExchanges ? (
+            <p className="sales-invoices-empty">جاري تحميل السجل...</p>
+          ) : exchangeRequests.length === 0 ? (
+            <p className="sales-invoices-empty">لا توجد عمليات استبدال مسجلة</p>
+          ) : (
+            <>
+              <div className="sales-invoices-table-wrap">
+                <table className="sales-invoices-table">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>رقم الطلب</th>
+                      <th>المنتج المستبدل</th>
+                      <th>الكمية</th>
+                      <th>المنتج البديل</th>
+                      <th>فرق السعر</th>
+                      <th>الحالة</th>
+                      <th>التاريخ</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {exchangeRequests.map((rr) => {
+                      const productName = rr.product_variant?.product?.name ?? '—';
+                      const variantInfo = rr.product_variant?.sku ?? '';
+                      const newProductName = rr.replacement?.new_variant?.product?.name ?? null;
+                      const newVariantSku = rr.replacement?.new_variant?.sku ?? '';
+                      const priceDiff = rr.replacement?.price_difference;
+                      return (
+                        <tr key={rr.id}>
+                          <td className="sales-invoices-cell-number">{rr.id}</td>
+                          <td className="sales-invoices-cell-number">
+                            {rr.order?.order_number ?? `#${rr.order_id}`}
+                          </td>
+                          <td>
+                            <div style={{ fontWeight: '600' }}>{productName}</div>
+                            {variantInfo && (
+                              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{variantInfo}</div>
+                            )}
+                          </td>
+                          <td>{rr.quantity}</td>
+                          <td>
+                            {newProductName ? (
+                              <>
+                                <div style={{ fontWeight: '600' }}>{newProductName}</div>
+                                {newVariantSku && (
+                                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{newVariantSku}</div>
+                                )}
+                              </>
+                            ) : '—'}
+                          </td>
+                          <td className="sales-invoices-cell-total">
+                            {priceDiff != null && priceDiff !== 0
+                              ? <span style={{ color: priceDiff > 0 ? '#f59e0b' : '#10b981' }}>
+                                  {priceDiff > 0 ? '+' : ''}{priceDiff} د.ل
+                                </span>
+                              : '—'}
+                          </td>
+                          <td>
+                            <span className={`order-status-badge ${getStatusBadgeClass(
+                              rr.status === 'approved' ? 'قيد التنفيذ' : rr.status === 'rejected' ? 'ملغي' : 'قيد الشحن'
+                            )}`}>
+                              {rr.status === 'pending' ? 'قيد المراجعة' : rr.status === 'approved' ? 'موافق عليه' : rr.status === 'received' ? 'تم الاستلام' : rr.status === 'rejected' ? 'مرفوض' : rr.status}
+                            </span>
+                          </td>
+                          <td style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                            {new Date(rr.created_at).toLocaleDateString('ar-LY')}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              {exchangeRequestsMeta && exchangeRequestsMeta.lastPage > 1 && (
+                <div className="sales-returns-pagination">
+                  <button
+                    type="button"
+                    className="sales-btn-secondary"
+                    disabled={exchangeRequestsMeta.currentPage <= 1}
+                    onClick={() => loadExchangeRequests(exchangeRequestsMeta.currentPage - 1)}
+                  >
+                    السابق
+                  </button>
+                  <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+                    صفحة {exchangeRequestsMeta.currentPage} من {exchangeRequestsMeta.lastPage}
+                  </span>
+                  <button
+                    type="button"
+                    className="sales-btn-secondary"
+                    disabled={exchangeRequestsMeta.currentPage >= exchangeRequestsMeta.lastPage}
+                    onClick={() => loadExchangeRequests(exchangeRequestsMeta.currentPage + 1)}
+                  >
+                    التالي
+                  </button>
+                </div>
+              )}
+            </>
+          )}
         </div>
       ) : (
         <div className="sales-invoices-panel">

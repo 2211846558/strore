@@ -760,3 +760,14 @@ export function getExchangePriceDiff(oldUnitPrice, quantity, newUnitPrice) {
     type: diff > 0 ? 'pay' : diff < 0 ? 'refund' : 'equal',
   };
 }
+
+/**
+ * جلب سجل عمليات الاسترجاع والاستبدال
+ * @param {{ page?: number, perPage?: number, actionType?: 'refund'|'replacement' }} params
+ */
+export async function fetchReturnRequests({ page = 1, perPage = 20, actionType } = {}) {
+  const query = new URLSearchParams({ page: String(page), per_page: String(perPage) });
+  if (actionType) query.set('action_type', actionType);
+  const res = await apiRequest(`${API_ENDPOINTS.returnRequests}?${query}`);
+  return res;
+}

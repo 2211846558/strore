@@ -74,6 +74,7 @@ export const API_ENDPOINTS = {
   posCheckout: '/pos/checkout',
   posRefund: '/pos/refund',
   posExchange: '/pos/exchange',
+  returnRequests: '/return-requests',
   orders: '/orders',
   order: (id) => `/orders/${id}`,
   orderStatus: (id) => `/orders/${id}/status`,
