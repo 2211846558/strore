@@ -2,8 +2,9 @@ import React, { useState, useEffect, useCallback } from 'react';
 import StatCard from '../components/dashboard/StatCard';
 import StoreCard from '../components/dashboard/StoreCard';
 import EditStoreModal from '../components/dashboard/EditStoreModal';
+import StoreDetailsModal from '../components/dashboard/StoreDetailsModal';
 import ChartsSection from '../components/dashboard/ChartsSection';
-import { Edit, Package, ShoppingCart, DollarSign, TrendingUp, Users } from 'lucide-react';
+import { Package, ShoppingCart, DollarSign, TrendingUp, Users } from 'lucide-react';
 import ChatBadge from '../components/chat/ChatBadge';
 import SupportBadge from '../components/chat/SupportBadge';
 import { useAuth } from '../context/AuthContext';
@@ -15,6 +16,8 @@ import {
   fetchStoreRatings,
   mergeStoreProfile,
   resolveStoreEmail,
+  fetchZones,
+  resolveStoreLocation,
 } from '../api/stores';
 import { fetchDashboardStats, fetchStoreMonthlyRevenueChart } from '../api/dashboard';
 import { getStoreLogoCandidates, resolveStoreLogoUrl } from '../api/media';
@@ -26,7 +29,19 @@ const STORE_STATUS_LABELS = {
   pending: 'قيد المراجعة',
 };
 
-const mapStoreToForm = (store, ratingAverage = null, user = null) => {
+const ENTITY_TYPE_LABELS = {
+  company: 'شركة',
+  individual: 'فرد',
+};
+
+const STORE_TYPE_LABELS = {
+  local: 'محلي',
+  international: 'دولي',
+  محلي: 'محلي',
+  دولي: 'دولي',
+};
+
+const mapStoreToForm = (store, ratingAverage = null, user = null, zones = []) => {
   const rawLogo = store?.logo || '';
   const id = store?.id;
   const imageCandidates = getStoreLogoCandidates(rawLogo, id);
@@ -36,6 +51,8 @@ const mapStoreToForm = (store, ratingAverage = null, user = null) => {
       : '—';
 
   const statusRaw = String(store?.status ?? 'inactive').toLowerCase();
+  const entityType = store?.entity_type ?? '';
+  const storeType = store?.type ?? '';
 
   return {
     id,
@@ -44,7 +61,14 @@ const mapStoreToForm = (store, ratingAverage = null, user = null) => {
     phone: store?.phone || '',
     email: resolveStoreEmail(store, user),
     zoneId: String(store?.zone_id ?? store?.zone?.id ?? ''),
-    location: store?.zone?.name ?? store?.zone_name ?? '',
+    location: resolveStoreLocation(store, zones),
+    googleMapUrl: store?.google_map_url ?? '',
+    storeCode: store?.store_code ?? '',
+    typeLabel: STORE_TYPE_LABELS[storeType] ?? storeType,
+    entityTypeLabel: ENTITY_TYPE_LABELS[entityType] ?? entityType,
+    commercialRegisterNumber: store?.commercial_register_number ?? '',
+    merchantData: store?.merchant_data ?? null,
+    notes: store?.notes ?? '',
     rating,
     statusRaw,
     statusLabel: STORE_STATUS_LABELS[statusRaw] ?? store?.status ?? '—',
@@ -62,6 +86,7 @@ const formatMoney = (value) =>
 const Dashboard = () => {
   const { user, store, storeId, updateStoreInSession } = useAuth();
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [storeData, setStoreData] = useState(() => mapStoreToForm(store, null, user));
   const [toast, setToast] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -73,14 +98,18 @@ const Dashboard = () => {
   const loadStoreProfile = useCallback(async () => {
     if (!storeId) return;
     try {
-      const [storeDetails, ratings] = await Promise.all([
+      const [storeDetails, ratings, zones] = await Promise.all([
         fetchStore(storeId),
         fetchStoreRatings(storeId),
+        fetchZones().catch(() => []),
       ]);
       const merged = mergeStoreProfile(storeDetails, store, user);
-      setStoreData(mapStoreToForm(merged, ratings.average, user));
+      setStoreData(mapStoreToForm(merged, ratings.average, user, zones));
     } catch {
-      if (store) setStoreData(mapStoreToForm(store, null, user));
+      if (store) {
+        const zones = await fetchZones().catch(() => []);
+        setStoreData(mapStoreToForm(store, null, user, zones));
+      }
     }
   }, [storeId, store, user]);
 
@@ -164,10 +193,6 @@ const Dashboard = () => {
     <div className="dashboard-page">
       <header className="page-header">
         <div className="header-actions">
-          <button className="edit-store-btn" onClick={() => setIsEditModalOpen(true)}>
-            <Edit size={16} />
-            تعديل بيانات المتجر
-          </button>
           <ChatBadge />
           <SupportBadge />
         </div>
@@ -178,7 +203,7 @@ const Dashboard = () => {
       </header>
 
       <div className="dashboard-grid store-section">
-        <StoreCard store={storeData} />
+        <StoreCard store={storeData} onViewDetails={() => setIsDetailsModalOpen(true)} />
       </div>
 
       {statsError && <div className="dashboard-error">{statsError}</div>}
@@ -234,6 +259,16 @@ const Dashboard = () => {
         store={storeData}
         onSave={handleSaveStoreData}
         saving={saving}
+      />
+
+      <StoreDetailsModal
+        isOpen={isDetailsModalOpen}
+        onClose={() => setIsDetailsModalOpen(false)}
+        store={storeData}
+        onEdit={() => {
+          setIsDetailsModalOpen(false);
+          setIsEditModalOpen(true);
+        }}
       />
 
       {toast && (

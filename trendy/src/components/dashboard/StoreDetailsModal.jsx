@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, ExternalLink } from 'lucide-react';
+import { X, ExternalLink, Edit } from 'lucide-react';
 import './StoreDetailsModal.css';
 
 const DetailRow = ({ label, value, children }) => {
@@ -14,7 +14,7 @@ const DetailRow = ({ label, value, children }) => {
   );
 };
 
-const StoreDetailsModal = ({ isOpen, onClose, store }) => {
+const StoreDetailsModal = ({ isOpen, onClose, store, onEdit }) => {
   if (!isOpen || !store) return null;
 
   const mapUrl = store.googleMapUrl?.trim();
@@ -75,7 +75,13 @@ const StoreDetailsModal = ({ isOpen, onClose, store }) => {
           <DetailRow label="ملاحظات" value={store.notes} />
         </div>
 
-        <div className="modal-footer">
+        <div className="modal-footer store-details-footer">
+          {onEdit && (
+            <button type="button" className="edit-store-details-btn" onClick={onEdit}>
+              <Edit size={16} />
+              تعديل بيانات المتجر
+            </button>
+          )}
           <button type="button" className="cancel-button" onClick={onClose}>
             إغلاق
           </button>

@@ -97,6 +97,27 @@ export async function fetchZones() {
   return [];
 }
 
+/**
+ * استخراج اسم موقع/منطقة المتجر دون ترك الحقل فارغاً
+ */
+export function resolveStoreLocation(store, zones = []) {
+  const direct = store?.zone?.name ?? store?.zone_name ?? store?.location;
+  if (direct && String(direct).trim()) return String(direct).trim();
+
+  const zoneId = store?.zone_id ?? store?.zone?.id;
+  if (zoneId != null && zoneId !== '') {
+    const match = zones.find((zone) => String(zone.id) === String(zoneId));
+    if (match?.name?.trim()) return match.name.trim();
+    if (match?.title?.trim()) return match.title.trim();
+  }
+
+  if (store?.google_map_url?.trim()) {
+    return 'موقع على الخريطة';
+  }
+
+  return 'غير محدد';
+}
+
 const translateValidationMessage = (message, field) => {
   const label = FIELD_LABELS[field] || field;
   if (/required/i.test(message)) return `${label} مطلوب`;

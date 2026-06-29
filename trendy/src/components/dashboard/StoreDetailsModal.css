@@ -119,7 +119,32 @@
 .store-details-modal .modal-footer {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
   padding: 16px 24px 24px;
+}
+
+.store-details-footer {
+  flex-wrap: wrap;
+}
+
+.edit-store-details-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border-radius: 10px;
+  background: var(--gradient-primary);
+  color: white;
+  border: none;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.edit-store-details-btn:hover {
+  opacity: 0.92;
 }
 
 .store-details-modal .cancel-button {
