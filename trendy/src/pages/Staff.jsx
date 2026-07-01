@@ -12,7 +12,6 @@ import {
   buildEmployeePayload,
   buildEmployeeUpdatePayload,
   buildRoleOptions,
-  EMPLOYEE_ROLE_OPTIONS,
 } from '../api/employees';
 import { getApiErrorMessage } from '../api/stores';
 import { useAuth } from '../context/AuthContext';
@@ -38,10 +37,7 @@ const Staff = () => {
     setTimeout(() => setToast(null), 2800);
   };
 
-  const formRoleOptions = useMemo(
-    () => (buildRoleOptions(staff).length ? buildRoleOptions(staff) : EMPLOYEE_ROLE_OPTIONS),
-    [staff],
-  );
+  const formRoleOptions = useMemo(() => buildRoleOptions(), []);
 
   const roleOptions = useMemo(
     () => [
