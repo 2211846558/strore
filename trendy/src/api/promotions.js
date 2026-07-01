@@ -108,40 +108,40 @@ function mapTypeToApi(type) {
   return type === 'قيمة ثابتة' ? 'fixed' : 'percentage';
 }
 
-function localTodayYmd() {
-  const now = new Date();
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-}
-
-function isOnOrBeforeLocalDay(dateStr, ref = new Date()) {
-  const [y, m, d] = dateStr.split('-').map(Number);
-  const selected = new Date(y, m - 1, d);
-  const refDay = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate());
-  return selected.getTime() <= refDay.getTime();
-}
-
-function formatUtcDateTime(date) {
+function formatLocalDateTime(date) {
   const pad = (n) => String(n).padStart(2, '0');
   return (
-    `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())} ` +
-    `${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}:${pad(date.getUTCSeconds())}`
+    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ` +
+    `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
   );
 }
 
-/** الباك يستخدم UTC — نرسل start_at بتوقيت UTC مع هامش بسيط */
-function formatPromotionStartAt(dateStr, { forCreate = false } = {}) {
+/** الباك يقارن start_at مع now — نضمن ألا يُرسل وقت في الماضي أبداً */
+function formatPromotionStartAt(dateStr) {
   if (!dateStr) return dateStr;
-  if (!forCreate) {
-    return dateStr.includes(' ') ? dateStr : `${dateStr} 00:00:00`;
-  }
+  if (dateStr.includes(' ')) return dateStr;
 
   const now = new Date();
-  if (isOnOrBeforeLocalDay(dateStr, now)) {
-    return formatUtcDateTime(new Date(now.getTime() + 120_000));
-  }
+  const bufferMs = 5 * 60 * 1000;
+  const earliest = now.getTime() + bufferMs;
 
-  return `${dateStr} 00:00:00`;
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const startOfSelected = new Date(y, m - 1, d, 0, 0, 0, 0).getTime();
+
+  return formatLocalDateTime(new Date(Math.max(startOfSelected, earliest)));
+}
+
+export function bumpPromotionStartToNow() {
+  return formatLocalDateTime(new Date(Date.now() + 5 * 60 * 1000));
+}
+
+export function isPromotionStartAtError(error) {
+  const startErrors = error?.errors?.start_at;
+  if (startErrors) {
+    const msg = Array.isArray(startErrors) ? startErrors[0] : startErrors;
+    return /after or equal to now|after:now/i.test(String(msg));
+  }
+  return /start at field must be a date after or equal to now/i.test(String(error?.message || ''));
 }
 
 function formatPromotionEndAt(dateStr) {
@@ -149,12 +149,12 @@ function formatPromotionEndAt(dateStr) {
   return `${dateStr} 23:59:59`;
 }
 
-export function buildPromotionPayload(form, { storeId, forCreate = false } = {}) {
+export function buildPromotionPayload(form, { storeId } = {}) {
   const body = {
     name: form.name.trim(),
     type: mapTypeToApi(form.type),
     value: Number(form.value),
-    start_at: formatPromotionStartAt(form.startDate, { forCreate }),
+    start_at: formatPromotionStartAt(form.startDate),
     end_at: formatPromotionEndAt(form.endDate),
     product_ids: form.productIds.map(Number),
   };

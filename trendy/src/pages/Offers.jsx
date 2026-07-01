@@ -10,6 +10,8 @@ import {
   togglePromotion,
   buildPromotionPayload,
   buildPromotionUpdatePayload,
+  bumpPromotionStartToNow,
+  isPromotionStartAtError,
 } from '../api/promotions';
 import { fetchStoreProducts } from '../api/products';
 import { getApiErrorMessage } from '../api/stores';
@@ -72,8 +74,17 @@ const Offers = () => {
         await updatePromotion(editingOffer.id, payload);
         showToast('تم تحديث الحملة');
       } else {
-        await createPromotion(payload);
-        showToast('تم إنشاء الحملة بنجاح');
+        try {
+          await createPromotion(payload);
+          showToast('تم إنشاء الحملة بنجاح');
+        } catch (createErr) {
+          if (isPromotionStartAtError(createErr)) {
+            await createPromotion({ ...payload, start_at: bumpPromotionStartToNow() });
+            showToast('تم إنشاء الحملة — ستبدأ من الآن لأن تاريخ البداية السابق غير متاح');
+          } else {
+            throw createErr;
+          }
+        }
       }
       setIsModalOpen(false);
       setEditingOffer(null);

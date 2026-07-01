@@ -16,6 +16,10 @@ function localTodayYmd() {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 }
 
+function isStartDateInPast(startDate) {
+  return Boolean(startDate && startDate < localTodayYmd());
+}
+
 const OfferModal = ({
   isOpen,
   onClose,
@@ -103,6 +107,11 @@ const OfferModal = ({
     !isSaving;
 
   const handleSubmit = async () => {
+    if (!isEdit && isStartDateInPast(form.startDate)) {
+      setError('تاريخ البداية في الماضي. اختر اليوم أو تاريخاً لاحقاً.');
+      return;
+    }
+
     if (!canSubmit) {
       if (form.startDate && !isEdit && form.startDate < localTodayYmd()) {
         setError('تاريخ البداية لا يمكن أن يكون في الماضي');
@@ -181,6 +190,9 @@ const OfferModal = ({
                 min={localTodayYmd()}
                 onChange={(e) => handleChange('startDate', e.target.value)}
               />
+              {!isEdit && isStartDateInPast(form.startDate) && (
+                <p className="offer-date-hint warn">تاريخ البداية في الماضي — اختر اليوم أو تاريخاً لاحقاً.</p>
+              )}
             </div>
             <div className="form-group">
               <label>تاريخ النهاية</label>

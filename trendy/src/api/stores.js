@@ -25,6 +25,8 @@ const FIELD_LABELS = {
   unit_cost: 'سعر التكلفة',
   role_id: 'الدور الوظيفي',
   job_title: 'المسمى الوظيفي',
+  start_at: 'تاريخ البداية',
+  end_at: 'تاريخ النهاية',
   status: 'حالة الطلب',
   reason: 'سبب الإلغاء',
   cancellation_reason: 'سبب الإلغاء',
@@ -134,6 +136,12 @@ const translateValidationMessage = (message, field) => {
   if (/max/i.test(message) && field === 'logo') return 'حجم اللوقo يجب ألا يتجاوز 2 ميغابايت';
   if (/must be an image/i.test(message) && field === 'logo') {
     return 'يجب رفع صورة بصيغة مدعومة (JPEG, PNG, WEBP)';
+  }
+  if (/after or equal to now|after:now/i.test(message)) {
+    return `${label} يجب أن يكون اليوم أو تاريخاً لاحقاً`;
+  }
+  if (/after or equal to start|after:start_at/i.test(message)) {
+    return `${label} يجب أن يكون بعد تاريخ البداية أو مساوياً له`;
   }
   return message.replace(/^\./, '').trim();
 };

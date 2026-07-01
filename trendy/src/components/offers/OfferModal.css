@@ -209,6 +209,17 @@
   text-align: right;
 }
 
+.offer-date-hint {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: right;
+}
+
+.offer-date-hint.warn {
+  color: #fbbf24;
+}
+
 .offer-catalog-empty {
   color: var(--text-secondary);
 }
