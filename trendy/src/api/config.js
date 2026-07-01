@@ -39,6 +39,7 @@ export const API_ENDPOINTS = {
   storeSubscribe: '/stores/subscribe',
   storePlanRenew: (storeId) => `/stores/${storeId}/renew`,
   storePlanChange: (storeId, planId) => `/stores/${storeId}/change-plan/${planId}`,
+  storeSubscriptions: (storeId) => `/stores/${storeId}/subscriptions`,
   storeShow: (storeId) => `/stores/${storeId}`,
   storePublicProducts: (storeId) => `/stores/${storeId}/products`,
   storeCampaignSubscribe: (storeId) => `/stores/${storeId}/campaigns/subscribe`,

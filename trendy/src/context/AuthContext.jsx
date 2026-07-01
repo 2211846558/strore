@@ -12,6 +12,7 @@ import {
   persistAuthSession,
   AUTH_UNAUTHORIZED_EVENT,
 } from '../api/auth';
+import { enrichUserWithSubscription } from '../api/plans';
 
 const AuthContext = createContext(null);
 
@@ -36,11 +37,12 @@ export const AuthProvider = ({ children }) => {
     }
 
     fetchCurrentUser()
-      .then((freshUser) => {
+      .then(async (freshUser) => {
         if (!freshUser) return;
-        persistAuthSession({ token, user: freshUser });
-        setUser(freshUser);
-        const id = resolveManagedStoreId(freshUser);
+        const enrichedUser = await enrichUserWithSubscription(freshUser);
+        persistAuthSession({ token, user: enrichedUser });
+        setUser(enrichedUser);
+        const id = resolveManagedStoreId(enrichedUser);
         if (id) setStoreId(id);
       })
       .catch(() => {
@@ -68,12 +70,13 @@ export const AuthProvider = ({ children }) => {
     setIsLoading(true);
     try {
       const data = await apiStoreLogin({ email, password, storeCode });
-      const authUser = data.user;
+      const authUser = await enrichUserWithSubscription(data.user);
       const store = getActiveStore(authUser);
+      persistAuthSession({ token: data.token, user: authUser });
       setUser(authUser);
       setStoreId(resolveManagedStoreId(authUser) ?? store?.id ?? null);
       setIsAuthenticated(true);
-      return data;
+      return { ...data, user: authUser };
     } finally {
       setIsLoading(false);
     }
@@ -123,13 +126,14 @@ export const AuthProvider = ({ children }) => {
     const freshUser = await fetchCurrentUser();
     if (!freshUser) return null;
 
-    persistAuthSession({ token, user: freshUser });
-    setUser(freshUser);
+    const enrichedUser = await enrichUserWithSubscription(freshUser);
+    persistAuthSession({ token, user: enrichedUser });
+    setUser(enrichedUser);
 
-    const id = resolveManagedStoreId(freshUser);
+    const id = resolveManagedStoreId(enrichedUser);
     if (id) setStoreId(id);
 
-    return freshUser;
+    return enrichedUser;
   }, []);
 
   const store = useMemo(() => getActiveStore(user), [user]);

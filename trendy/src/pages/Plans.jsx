@@ -9,7 +9,12 @@ import {
   mapPlanFromApi,
   mapStoreSubscription,
   extractStoreFromSubscriptionResponse,
+  fetchStoreSubscriptions,
+  mapSubscriptionFromApi,
+  pickActiveStoreSubscription,
+  pickLatestStoreSubscription,
 } from '../api/plans';
+import { storeHasActivePlan } from '../api/auth';
 import { getApiErrorMessage } from '../api/stores';
 import { useAuth } from '../context/AuthContext';
 import './Plans.css';
@@ -23,6 +28,7 @@ const Plans = ({ onboarding = false }) => {
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [subscribeAction, setSubscribeAction] = useState('subscribe');
   const [availablePlans, setAvailablePlans] = useState([]);
+  const [subscriptionHistory, setSubscriptionHistory] = useState([]);
   const [loadingPlans, setLoadingPlans] = useState(true);
   const [plansError, setPlansError] = useState('');
   const [toast, setToast] = useState(null);
@@ -33,9 +39,13 @@ const Plans = ({ onboarding = false }) => {
       setLoadingPlans(true);
       setPlansError('');
       try {
-        const plans = await fetchPlans();
+        const [plans, subscriptions] = await Promise.all([
+          fetchPlans(),
+          storeId ? fetchStoreSubscriptions(storeId).catch(() => []) : Promise.resolve([]),
+        ]);
         if (!cancelled) {
           setAvailablePlans(plans.map(mapPlanFromApi));
+          setSubscriptionHistory(subscriptions);
         }
       } catch (err) {
         if (!cancelled) {
@@ -48,14 +58,32 @@ const Plans = ({ onboarding = false }) => {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [storeId]);
 
-  const currentSubscription = useMemo(
-    () => mapStoreSubscription(store, availablePlans),
-    [store, availablePlans],
-  );
+  const currentSubscription = useMemo(() => {
+    const activeApiSub = pickActiveStoreSubscription(subscriptionHistory);
+    const latestApiSub = pickLatestStoreSubscription(subscriptionHistory);
+    const apiSub = activeApiSub ?? latestApiSub;
+
+    if (apiSub) {
+      return mapSubscriptionFromApi(apiSub, availablePlans);
+    }
+
+    return mapStoreSubscription(store, availablePlans);
+  }, [store, availablePlans, subscriptionHistory]);
 
   const mySubscriptions = currentSubscription ? [currentSubscription] : [];
+  const hasLivePlan = storeHasActivePlan(store);
+
+  useEffect(() => {
+    if (onboarding || !hasLivePlan) {
+      setActiveTab('available');
+      return;
+    }
+    if (!onboarding && hasLivePlan) {
+      setActiveTab('my-subscriptions');
+    }
+  }, [onboarding, hasLivePlan]);
 
   const showToast = (message) => {
     setToast(message);
@@ -103,6 +131,8 @@ const Plans = ({ onboarding = false }) => {
     try {
       await refreshSession();
       if (storeId) {
+        const subscriptions = await fetchStoreSubscriptions(storeId).catch(() => []);
+        setSubscriptionHistory(subscriptions);
         updateStoreInSession({
           id: storeId,
           status: 'active',
@@ -209,7 +239,11 @@ const Plans = ({ onboarding = false }) => {
                   key={sub.id}
                   title={sub.title}
                   price={sub.price}
+                  pricePaid={sub.pricePaid}
                   status={sub.status}
+                  durationDays={sub.durationDays}
+                  remainingDays={sub.remainingDays}
+                  featuresText={sub.featuresText}
                   dateRange={sub.dateRange}
                   statusText={sub.statusText}
                   isExpired={sub.isExpired}

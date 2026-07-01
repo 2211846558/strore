@@ -25,9 +25,21 @@ export const getStoredStoreId = () => {
 
 export const getActiveStore = (user) => {
   if (!user) return null;
-  if (user.store) return user.store;
+
+  const managedId = resolveManagedStoreId(user);
   const owned = user.owned_stores || user.ownedStores || [];
+
+  if (managedId != null) {
+    const matched = owned.find((store) => Number(store?.id) === Number(managedId));
+    if (matched) return matched;
+  }
+
+  if (user.store && (!managedId || Number(user.store.id) === Number(managedId))) {
+    return user.store;
+  }
+
   if (owned.length > 0) return owned[0];
+
   if (user.store_id) {
     return {
       id: user.store_id,
@@ -169,23 +181,41 @@ function mergeUserSession(freshUser) {
   };
 }
 
-export function storeHasActivePlan(store) {
-  if (!store) return false;
-  if (store.status === 'active') return true;
+export function getStorePlanId(store) {
+  if (!store) return null;
+  const nestedPlan = store.plan ?? store.current_plan ?? store.subscription?.plan ?? null;
+  return store.plan_id ?? nestedPlan?.id ?? store.subscription?.plan_id ?? null;
+}
 
-  const planId = store.plan_id ?? store.plan?.id ?? store.subscription?.plan_id;
-  if (!planId) return false;
-
+export function getStoreSubscriptionEnd(store) {
+  if (!store) return null;
   const endRaw =
     store.subscription_ends_at ??
     store.plan_expires_at ??
     store.subscription?.ends_at ??
     store.subscription?.end_date ??
+    store.expires_at ??
     null;
+  return endRaw ? new Date(endRaw) : null;
+}
 
-  if (endRaw) return new Date(endRaw).getTime() > Date.now();
+const INACTIVE_SUBSCRIPTION_STATUSES = new Set(['expired', 'cancelled', 'inactive']);
 
-  return store.status !== 'inactive';
+export function storeHasActivePlan(store) {
+  if (!store) return false;
+
+  const planId = getStorePlanId(store);
+  if (!planId) return false;
+
+  const subscriptionStatus = String(
+    store.subscription?.status ?? store.subscription_status ?? '',
+  ).toLowerCase();
+  if (INACTIVE_SUBSCRIPTION_STATUSES.has(subscriptionStatus)) return false;
+
+  const endDate = getStoreSubscriptionEnd(store);
+  if (!endDate) return false;
+
+  return endDate.getTime() > Date.now();
 }
 
 export const persistAuthSession = ({ token, user }) => {

@@ -1,13 +1,15 @@
 import React from 'react';
-import { CreditCard } from 'lucide-react';
 import './SubscriptionCard.css';
 
 const SubscriptionCard = ({
   title,
   price,
+  pricePaid,
   status,
   durationDays,
   remainingDays,
+  featuresText,
+  dateRange,
   statusText,
   isExpired,
   onRenew,
@@ -21,21 +23,51 @@ const SubscriptionCard = ({
         </span>
       </div>
       <div className="sub-date">
-        <span>مدة الخطة: {durationDays} يوم</span>
+        {durationDays != null && durationDays > 0 && (
+          <span>مدة الخطة: {durationDays} يوم</span>
+        )}
         {!isExpired && remainingDays != null && (
           <span className="sub-remaining">متبقي {remainingDays} يوم</span>
         )}
       </div>
     </div>
 
+    {dateRange && (
+      <div className="sub-period">
+        <div className="sub-period-item">
+          <span className="sub-period-label">تاريخ البداية</span>
+          <span className="sub-period-value">{dateRange.start}</span>
+        </div>
+        <div className="sub-period-item">
+          <span className="sub-period-label">تاريخ الانتهاء</span>
+          <span className="sub-period-value">{dateRange.end}</span>
+        </div>
+      </div>
+    )}
+
     <div className="sub-price">
-      <span className="amount">{price}</span>
-      <span className="currency">د.ل</span>
+      {price ? (
+        <>
+          <span className="amount">{price}</span>
+          <span className="currency">د.ل</span>
+        </>
+      ) : (
+        <span className="amount">—</span>
+      )}
+      {pricePaid && pricePaid !== price && (
+        <span className="sub-price-paid">المبلغ المدفوع: {pricePaid} د.ل</span>
+      )}
     </div>
+
+    {featuresText && (
+      <div className="sub-features">
+        <p>{featuresText}</p>
+      </div>
+    )}
 
     <div className="sub-footer">
       {isExpired ? (
-        <button className="renew-btn" onClick={onRenew}>
+        <button className="renew-btn" type="button" onClick={onRenew}>
           تجديد الاشتراك
         </button>
       ) : (
