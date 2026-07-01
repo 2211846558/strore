@@ -91,7 +91,7 @@ const mapStoreToForm = (store, ratingAverage = null, user = null, zones = []) =>
 };
 
 const navMenuItems = [
-  { title: 'لوحة التحكم', icon: LayoutDashboard, path: '/' },
+  { title: 'نظرة عامة', icon: LayoutDashboard, path: '/' },
   { title: 'خطط الاشتراك', icon: CreditCard, path: '/plans' },
   { title: 'التسويق والمحتوى', icon: Megaphone, path: '/marketing' },
   { title: 'المنتجات', icon: Package, path: '/products' },

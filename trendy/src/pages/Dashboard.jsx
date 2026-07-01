@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import StatCard from '../components/dashboard/StatCard';
 import StoreCard from '../components/dashboard/StoreCard';
 import EditStoreModal from '../components/dashboard/EditStoreModal';
 import StoreDetailsModal from '../components/dashboard/StoreDetailsModal';
 import ChartsSection from '../components/dashboard/ChartsSection';
-import { Package, ShoppingCart, DollarSign, TrendingUp, Users } from 'lucide-react';
+import { Package, ShoppingCart, DollarSign, Users } from 'lucide-react';
 import ChatBadge from '../components/chat/ChatBadge';
 import SupportBadge from '../components/chat/SupportBadge';
 import { useAuth } from '../context/AuthContext';
@@ -85,6 +86,7 @@ const formatMoney = (value) =>
 
 const Dashboard = () => {
   const { user, store, storeId, updateStoreInSession } = useAuth();
+  const navigate = useNavigate();
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [storeData, setStoreData] = useState(() => mapStoreToForm(store, null, user));
@@ -186,9 +188,6 @@ const Dashboard = () => {
     }
   };
 
-  const growthValue =
-    stats?.salesGrowth != null ? `${stats.salesGrowth}%` : statsLoading ? '...' : '—';
-
   return (
     <div className="dashboard-page">
       <header className="page-header">
@@ -227,6 +226,7 @@ const Dashboard = () => {
           icon={DollarSign}
           colorClass="revenue"
           trend={stats?.trends?.revenue}
+          onClick={() => navigate('/finance')}
         />
         <StatCard
           title="المنتجات النشطة"
@@ -242,14 +242,6 @@ const Dashboard = () => {
           subtitle="إجمالي موظفي المتجر"
           icon={Users}
           colorClass="growth"
-        />
-        <StatCard
-          title="نمو المبيعات"
-          value={growthValue}
-          subtitle="معدل الزيادة"
-          icon={TrendingUp}
-          colorClass="growth"
-          trend={stats?.trends?.growth}
         />
       </div>
 

@@ -1,9 +1,9 @@
 import React from 'react';
 import './StatCard.css';
 
-const StatCard = ({ title, value, subtitle, icon: Icon, colorClass, highlightValue, trend }) => {
+const StatCard = ({ title, value, subtitle, icon: Icon, colorClass, highlightValue, trend, onClick }) => {
   return (
-    <div className={`stat-card ${colorClass || ''}`}>
+    <div className={`stat-card ${colorClass || ''} ${onClick ? 'clickable' : ''}`} onClick={onClick}>
       <div className="stat-card-content">
         <div className="stat-header">
           <h3 className="stat-title">{title}</h3>

@@ -1,6 +1,6 @@
 import { apiRequest } from './client';
 import { API_ENDPOINTS } from './config';
-import { fetchRevenueOverview, fetchProfitOverview } from './finance';
+import { fetchRevenueOverview, fetchProfitOverview, resolveStoreNetRevenue } from './finance';
 
 const AR_MONTHS = [
   'يناير',
@@ -100,12 +100,7 @@ export async function fetchStoreMonthlyRevenueChart(monthCount = 5) {
         });
         return {
           name: AR_MONTHS[monthStart.getMonth()],
-          revenue: pickNumber(
-            overview?.total_revenue,
-            overview?.revenue,
-            overview?.net_revenue,
-            overview?.amount,
-          ) ?? 0,
+          revenue: resolveStoreNetRevenue(overview),
         };
       } catch {
         return {
@@ -139,12 +134,7 @@ export async function fetchDashboardStats({ storeId } = {}) {
       safeDashboardCall(fetchTotalEmployees, 0),
     ]);
 
-  const totalRevenue = pickNumber(
-    revenueOverview?.total_revenue,
-    revenueOverview?.revenue,
-    revenueOverview?.net_revenue,
-    revenueOverview?.amount,
-  ) ?? 0;
+  const totalRevenue = resolveStoreNetRevenue(revenueOverview);
 
   const salesGrowth = pickNumber(
     profitOverview?.growth_rate,

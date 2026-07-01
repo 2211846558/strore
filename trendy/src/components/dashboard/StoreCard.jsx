@@ -72,11 +72,11 @@ const StoreCard = ({ store, onViewDetails }) => {
           <div className="rating">
             <span className="rating-value">{store.rating}</span>
             <span className="rating-text">التقييم العام</span>
-            <Star size={20} className="star-icon filled" />
+            <Star size={16} className="star-icon filled" />
           </div>
           {onViewDetails && (
             <button type="button" className="view-details-btn" onClick={onViewDetails}>
-              <Eye size={16} />
+              <Eye size={14} />
               عرض التفاصيل
             </button>
           )}
