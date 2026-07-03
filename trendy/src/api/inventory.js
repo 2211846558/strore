@@ -149,18 +149,22 @@ export function enrichVariantsWithShipmentRemaining(variants, shipments) {
   });
 }
 
+function resolveShipmentStatusRaw(row) {
+  const dynamic = row?.dynamic_status;
+  if (dynamic === 'في الانتظار') return 'pending';
+  if (dynamic === 'حالية') return 'received';
+  if (dynamic === 'منتهية' || dynamic === 'مؤرشف' || dynamic === 'مؤرشفة') return 'archived';
+  if (dynamic === 'ملغاة') return 'cancelled';
+
+  const dbStatus = String(row?.status ?? 'pending').toLowerCase();
+  if (dbStatus === 'draft') return 'pending';
+  return dbStatus;
+}
+
 export function mapShipment(row) {
   const itemsRaw = row.items ?? row.lines ?? row.shipment_items ?? [];
   const items = (Array.isArray(itemsRaw) ? itemsRaw : []).map(mapShipmentItem);
-  
-  let statusRaw = String(row.status ?? 'pending').toLowerCase();
-  if (row.dynamic_status === 'في الانتظار') {
-    statusRaw = 'pending';
-  } else if (row.dynamic_status === 'حالية') {
-    statusRaw = 'received';
-  } else if (row.dynamic_status === 'مؤرشف' || row.dynamic_status === 'مؤرشفة') {
-    statusRaw = 'archived';
-  }
+  const statusRaw = resolveShipmentStatusRaw(row);
 
   return {
     id: row.id,
@@ -271,27 +275,51 @@ export async function fetchInventory({
   };
 }
 
+function normalizeShipmentStats(stats, shipments) {
+  if (!stats) {
+    return {
+      total: shipments.length,
+      pending: shipments.filter((s) => s.statusRaw === 'pending').length,
+      received: shipments.filter((s) => s.statusRaw === 'received').length,
+      totalQty: shipments.reduce((sum, s) => sum + Number(s.totalQuantity || 0), 0),
+    };
+  }
+
+  return {
+    total: Number(stats.total ?? 0),
+    pending: Number(stats.pending ?? 0),
+    received: Number(stats.received ?? 0),
+    totalQty: Number(stats.totalQty ?? stats.total_qty ?? 0),
+  };
+}
+
 /**
  * GET /api/inventory/shipments
  */
 export async function fetchShipments({ storeId, status = 'all', search } = {}) {
   const query = new URLSearchParams();
   if (storeId) query.set('store_id', String(storeId));
-  if (status && status !== 'all') query.set('status', String(status));
   if (search?.trim()) query.set('search', search.trim());
 
   const res = await apiRequest(`${API_ENDPOINTS.inventoryShipments}?${query}`);
-  const payload = res?.data ?? res;
+  const root = res ?? {};
+  const nested = root.data;
 
-  const shipmentsRaw = Array.isArray(payload.data) ? payload.data : (Array.isArray(payload) ? payload : []);
-  const shipments = shipmentsRaw.map(mapShipment);
+  const shipmentsRaw = Array.isArray(nested)
+    ? nested
+    : Array.isArray(nested?.data)
+      ? nested.data
+      : Array.isArray(root)
+        ? root
+        : [];
 
-  const stats = payload.stats || {
-    total: shipments.length,
-    pending: shipments.filter((s) => s.statusRaw === 'pending').length,
-    received: shipments.filter((s) => s.statusRaw === 'received').length,
-    totalQty: shipments.reduce((sum, s) => sum + Number(s.totalQuantity || 0), 0),
-  };
+  const allShipments = shipmentsRaw.map(mapShipment);
+  const shipments =
+    status && status !== 'all'
+      ? allShipments.filter((shipment) => shipment.statusRaw === status)
+      : allShipments;
+
+  const stats = normalizeShipmentStats(root.stats ?? nested?.stats, allShipments);
 
   return { shipments, stats };
 }
