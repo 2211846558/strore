@@ -8,7 +8,7 @@ import {
   isWeakVariantFullLabel,
   extractVariantAttributePairs,
 } from '../utils/variantLabel';
-import { fetchAllOrders } from './orders';
+import { fetchAllOrders, isOrderFullyReturned } from './orders';
 import { fetchStorePublicProducts, fetchProductVariants } from './products';
 import { fetchInventory, fetchInventoryVariant } from './inventory';
 
@@ -449,6 +449,7 @@ export function mapOrderViewToInvoice(order) {
     sku: item.sku ?? '',
     quantity: Number(item.quantity ?? 1),
     price: Number(item.price ?? 0),
+    variantLabel: item.variantLabel ?? null,
   }));
 
   const customer = order.isPos
@@ -469,6 +470,52 @@ export function mapOrderViewToInvoice(order) {
     phone: order.phone ?? '—',
     address: order.address ?? '—',
     items,
+    order,
+  };
+}
+
+function mapInvoiceLineToOrderProduct(item) {
+  return {
+    lineId: item.lineId ?? item.id ?? null,
+    variantId: item.variantId ?? item.variant_id ?? null,
+    name: item.name ?? item.product_name ?? '—',
+    quantity: Number(item.quantity ?? 1),
+    price: Number(item.price ?? item.unit_price ?? 0),
+    sku: item.sku ?? '',
+    variantLabel: item.variantLabel ?? item.color ?? null,
+  };
+}
+
+/** دمج تفاصيل الطلب مع بنود الفاتورة عند غياب items في GET /orders/{id} */
+export function resolveOrderForPosAction(invoice, detailOrder) {
+  const invoiceItems = Array.isArray(invoice?.items) ? invoice.items : [];
+  const invoiceOrder = invoice?.order;
+  const productsFromDetail = detailOrder?.products ?? [];
+  const productsFromList = invoiceOrder?.products ?? [];
+  const productsFromInvoice = invoiceItems.map(mapInvoiceLineToOrderProduct);
+
+  const products =
+    productsFromDetail.length
+      ? productsFromDetail
+      : productsFromList.length
+        ? productsFromList
+        : productsFromInvoice;
+
+  const base = detailOrder ?? invoiceOrder ?? {};
+
+  return {
+    ...base,
+    id: base.id ?? invoice?.id,
+    orderId: base.orderId ?? invoice?.orderId,
+    customerName: base.customerName ?? invoice?.customer ?? '—',
+    buyerName: base.buyerName ?? invoice?.customer ?? '—',
+    isPos: base.isPos ?? invoice?.isPos,
+    products,
+    productsCount: base.productsCount ?? invoice?.itemsCount ?? products.length,
+    total:
+      Number(base.total) > 0
+        ? Number(base.total)
+        : Number(invoiceOrder?.total ?? invoice?.total ?? 0),
   };
 }
 
@@ -770,4 +817,35 @@ export async function fetchReturnRequests({ page = 1, perPage = 20, actionType }
   if (actionType) query.set('action_type', actionType);
   const res = await apiRequest(`${API_ENDPOINTS.returnRequests}?${query}`);
   return res;
+}
+
+/** سجل الاسترجاع/الاستبدال لطلب محدد */
+export async function fetchReturnRequestsForOrder(orderId, { perPage = 50 } = {}) {
+  const numericId = Number(orderId);
+  if (!Number.isFinite(numericId) || numericId <= 0) return [];
+
+  const matches = [];
+  let page = 1;
+  let lastPage = 1;
+
+  do {
+    const res = await fetchReturnRequests({ page, perPage });
+    const rows = res?.data ?? [];
+    matches.push(...rows.filter((row) => Number(row.order_id) === numericId));
+    lastPage = Number(res?.last_page ?? 1);
+    page += 1;
+  } while (page <= lastPage && page <= 5);
+
+  return matches;
+}
+
+export function describeEmptyOrderReason(order, invoice) {
+  const raw = order?.raw ?? invoice?.order?.raw ?? {};
+  if (isOrderFullyReturned(raw, order?.products ?? [])) {
+    return 'تم استرجاع أو استبدال جميع منتجات هذا الطلب — لا توجد قطع نشطة للاختيار.';
+  }
+  if (Number(order?.total ?? invoice?.total ?? 0) === 0) {
+    return 'هذا الطلب فارغ (إجمالي ٠) — لا توجد منتجات مسجّلة فيه.';
+  }
+  return 'لا توجد قطع مرتبطة بهذا الطلب.';
 }

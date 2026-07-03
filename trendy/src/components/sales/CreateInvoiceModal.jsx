@@ -26,6 +26,11 @@ const CreateInvoiceModal = ({ isOpen, onClose, cart, onConfirm, isSaving = false
       return;
     }
 
+    if (!cart.length || totalQty <= 0) {
+      setError('لا يمكن إنشاء فاتورة بدون منتجات — أضف منتجات إلى السلة أولاً');
+      return;
+    }
+
     try {
       await onConfirm();
       onClose();
@@ -71,7 +76,11 @@ const CreateInvoiceModal = ({ isOpen, onClose, cart, onConfirm, isSaving = false
           </div>
           {error && <p className="sales-form-error">{error}</p>}
           <div className="sales-modal-footer">
-            <button type="submit" className="sales-btn-primary" disabled={!staffId || isSaving}>
+            <button
+              type="submit"
+              className="sales-btn-primary"
+              disabled={!staffId || isSaving || !cart.length || totalQty <= 0}
+            >
               {isSaving ? 'جاري الإنشاء...' : 'إنشاء الفاتورة'}
             </button>
             <button type="button" className="sales-btn-secondary" onClick={onClose} disabled={isSaving}>

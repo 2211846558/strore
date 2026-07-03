@@ -7,6 +7,9 @@ import {
   fetchVariantStockPrice,
   fetchPosProductVariantsEnriched,
   getCatalogVariantDisplay,
+  resolveOrderForPosAction,
+  fetchReturnRequestsForOrder,
+  describeEmptyOrderReason,
 } from '../../api/pos';
 import { buildVariantFullLabel, isWeakVariantFullLabel } from '../../utils/variantLabel';
 import { getApiErrorMessage } from '../../api/stores';
@@ -56,12 +59,15 @@ const PosOrderActionModal = ({
   const [exchangeQty, setExchangeQty] = useState('1');
   const [refundQty, setRefundQty] = useState('1');
   const [selectedNewItems, setSelectedNewItems] = useState([]);
+  const [pickerProductId, setPickerProductId] = useState('');
   const [pickerVariantId, setPickerVariantId] = useState('');
   const [addItemQty, setAddItemQty] = useState('1');
   const [liveVariantPrice, setLiveVariantPrice] = useState(null);
   const [loadingVariantPrice, setLoadingVariantPrice] = useState(false);
   const [exchangeVariants, setExchangeVariants] = useState([]);
   const [loadingExchangeVariants, setLoadingExchangeVariants] = useState(false);
+  const [orderHistory, setOrderHistory] = useState([]);
+  const [loadingOrderHistory, setLoadingOrderHistory] = useState(false);
 
   const isExchange = mode === 'exchange';
   const title = isExchange ? 'استبدال منتج' : 'استرجاع منتج';
@@ -83,10 +89,12 @@ const PosOrderActionModal = ({
     setExchangeQty('1');
     setRefundQty('1');
     setSelectedNewItems([]);
+    setPickerProductId('');
     setPickerVariantId('');
     setAddItemQty('1');
     setLiveVariantPrice(null);
     setExchangeVariants([]);
+    setOrderHistory([]);
   }, [isOpen, mode]);
 
   useEffect(() => {
@@ -119,7 +127,30 @@ const PosOrderActionModal = ({
     setLoadingOrder(true);
     setOrdersError('');
     try {
-      const order = await fetchOrder(invoice.orderId);
+      let detailOrder = null;
+      try {
+        detailOrder = await fetchOrder(invoice.orderId);
+      } catch {
+        detailOrder = null;
+      }
+
+      const order = resolveOrderForPosAction(invoice, detailOrder);
+
+      if (!order.products?.length) {
+        setOrdersError(describeEmptyOrderReason(order, invoice));
+        setLoadingOrderHistory(true);
+        try {
+          const history = await fetchReturnRequestsForOrder(order.orderId ?? invoice.orderId);
+          setOrderHistory(history);
+        } catch {
+          setOrderHistory([]);
+        } finally {
+          setLoadingOrderHistory(false);
+        }
+      } else {
+        setOrderHistory([]);
+      }
+
       setSelectedOrder(order);
       setStep('items');
     } catch (err) {
@@ -136,9 +167,11 @@ const PosOrderActionModal = ({
     setExchangeQty(String(line.quantity || 1));
     setRefundQty(String(line.quantity || 1));
     setSelectedNewItems([]);
+    setPickerProductId('');
     setPickerVariantId('');
     setAddItemQty('1');
     setLiveVariantPrice(null);
+    setExchangeVariants([]);
     setStep('confirm');
   };
 
@@ -146,28 +179,32 @@ const PosOrderActionModal = ({
     ? findCatalogProductByVariantId(products, selectedLine.variantId)
     : null;
 
+  const pickerProduct = products.find((p) => String(p.id) === String(pickerProductId)) ?? null;
+
   const variantOptions = exchangeVariants.length
     ? exchangeVariants
-    : (catalogProduct?.variants ?? []);
+    : (pickerProduct?.variants ?? []);
 
   useEffect(() => {
-    if (!isOpen || step !== 'confirm' || !isExchange || !catalogProduct?.id) {
+    if (!isOpen || step !== 'confirm' || !isExchange || !pickerProductId) {
       setExchangeVariants([]);
       return;
     }
 
     let cancelled = false;
     setLoadingExchangeVariants(true);
+    setPickerVariantId('');
+    setLiveVariantPrice(null);
 
-    fetchPosProductVariantsEnriched(catalogProduct.id, {
-      productName: catalogProduct.name,
-      catalogProduct,
+    fetchPosProductVariantsEnriched(pickerProductId, {
+      productName: pickerProduct?.name,
+      catalogProduct: pickerProduct,
     })
       .then((variants) => {
         if (!cancelled) setExchangeVariants(variants);
       })
       .catch(() => {
-        if (!cancelled) setExchangeVariants(catalogProduct.variants ?? []);
+        if (!cancelled) setExchangeVariants(pickerProduct?.variants ?? []);
       })
       .finally(() => {
         if (!cancelled) setLoadingExchangeVariants(false);
@@ -176,7 +213,7 @@ const PosOrderActionModal = ({
     return () => {
       cancelled = true;
     };
-  }, [isOpen, step, isExchange, catalogProduct?.id, catalogProduct?.name]);
+  }, [isOpen, step, isExchange, pickerProductId, pickerProduct?.name]);
 
   const resolveLineDisplay = (line) => {
     if (!line) return '—';
@@ -192,11 +229,11 @@ const PosOrderActionModal = ({
     return isWeakVariantFullLabel(fallback, line.name) ? line.name : fallback;
   };
 
-  const resolveVariantCardLabel = (variant) => {
-    if (variant.fullLabel && !isWeakVariantFullLabel(variant.fullLabel, catalogProduct?.name)) {
+  const resolveVariantCardLabel = (variant, product = pickerProduct) => {
+    if (variant.fullLabel && !isWeakVariantFullLabel(variant.fullLabel, product?.name)) {
       return variant.fullLabel;
     }
-    return buildVariantFullLabel(catalogProduct?.name, variant.label ?? variant, { variant });
+    return buildVariantFullLabel(product?.name, variant.label ?? variant, { variant });
   };
   const pickerVariant = variantOptions.find(
     (variant) => String(variant.id) === String(pickerVariantId),
@@ -256,7 +293,7 @@ const PosOrderActionModal = ({
     && (pickerVariant.stockUnknown || pickerVariant.stock > 0);
 
   const handleAddVariant = () => {
-    if (!canAddPickerVariant || !catalogProduct) return;
+    if (!canAddPickerVariant || !pickerProduct) return;
 
     const price = pickerPrice;
     const stock = pickerVariant.stockUnknown ? null : pickerVariant.stock;
@@ -280,6 +317,7 @@ const PosOrderActionModal = ({
         {
           id: pickerVariant.id,
           variant: pickerVariant,
+          product: pickerProduct,
           label: resolveVariantCardLabel(pickerVariant),
           price,
           quantity: pickerVariant.stockUnknown ? addItemQtyNum : Math.min(addItemQtyNum, stock),
@@ -290,6 +328,14 @@ const PosOrderActionModal = ({
     });
 
     setPickerVariantId('');
+    setAddItemQty('1');
+    setLiveVariantPrice(null);
+  };
+
+  const handlePickerProductChange = (productId) => {
+    setPickerProductId(productId);
+    setPickerVariantId('');
+    setExchangeVariants([]);
     setAddItemQty('1');
     setLiveVariantPrice(null);
   };
@@ -344,7 +390,7 @@ const PosOrderActionModal = ({
             <p className="pos-action-step-label">
               {step === 'search' && 'ابحث عن طلب أونلاين أو مبيعات مباشرة'}
               {step === 'items' && `اختر القطعة من الطلب ${selectedOrder?.id ?? ''}`}
-              {step === 'confirm' && (isExchange ? 'اختر التنوع البديل' : 'تأكيد الاسترجاع')}
+              {step === 'confirm' && (isExchange ? 'اختر المنتج البديل من المتجر' : 'تأكيد الاسترجاع')}
             </p>
           </div>
           <button
@@ -462,7 +508,29 @@ const PosOrderActionModal = ({
                   </button>
                 ))
               ) : (
-                <p className="pos-action-empty">لا توجد قطع في هذا الطلب</p>
+                <div className="pos-action-empty-block">
+                  <p className="pos-action-empty">
+                    {ordersError || 'لا توجد قطع في هذا الطلب'}
+                  </p>
+                  {loadingOrderHistory ? (
+                    <p className="pos-action-empty-hint">جاري تحميل سجل العمليات...</p>
+                  ) : orderHistory.length > 0 ? (
+                    <div className="pos-action-history">
+                      <p className="pos-action-empty-hint">سجل العمليات السابقة على هذا الطلب:</p>
+                      <ul className="pos-action-history-list">
+                        {orderHistory.map((entry) => {
+                          const name = entry.product_variant?.product?.name ?? '—';
+                          const actionLabel = entry.action_type === 'replacement' ? 'استبدال' : 'استرجاع';
+                          return (
+                            <li key={entry.id}>
+                              {actionLabel}: {name} (×{entry.quantity})
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  ) : null}
+                </div>
               )}
             </div>
           </>
@@ -599,12 +667,30 @@ const PosOrderActionModal = ({
               )}
             </div>
 
-            {!catalogProduct ? (
+            {products.length === 0 ? (
               <p className="pos-action-empty">
-                تعذّر العثور على تنوعات هذا المنتج في كتالوج المتجر الحالي.
+                لا توجد منتجات متاحة في المتجر حالياً.
               </p>
             ) : (
               <>
+                <div className="sales-form-group">
+                  <label htmlFor="picker-product-select">المنتج البديل</label>
+                  <select
+                    id="picker-product-select"
+                    className="sales-form-select"
+                    value={pickerProductId}
+                    onChange={(e) => handlePickerProductChange(e.target.value)}
+                    disabled={isSaving}
+                  >
+                    <option value="">اختر منتجاً من المتجر</option>
+                    {products.map((product) => (
+                      <option key={product.id} value={product.id}>
+                        {product.name} — {product.price} د.ل
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 <div className="sales-form-group">
                   <label className="pos-action-variants-title">
                     القطع البديلة المحددة ({totalNewQty} قطعة):
@@ -665,103 +751,113 @@ const PosOrderActionModal = ({
                   )}
                 </div>
 
-                <p className="pos-action-variants-title">اختر التنوع البديل:</p>
-                {loadingExchangeVariants ? (
-                  <p className="pos-action-empty">جاري تحميل تنوعات المنتج...</p>
-                ) : (
-                <div className="pos-action-variants-list">
-                  {variantOptions.map((variant) => {
-                    const isCurrent = String(variant.id) === String(selectedLine.variantId);
-                    const isSelected = String(variant.id) === String(pickerVariantId);
-                    const outOfStock = !variant.stockUnknown && variant.stock <= 0;
-
-                    return (
-                      <button
-                        key={variant.id}
-                        type="button"
-                        className={`pos-action-variant-card${isSelected ? ' selected' : ''}${isCurrent ? ' current' : ''}`}
-                        onClick={() => !isCurrent && !outOfStock && setPickerVariantId(String(variant.id))}
-                        disabled={isCurrent || outOfStock || isSaving}
-                      >
-                        <div className="pos-action-variant-label">
-                          {resolveVariantCardLabel(variant)}
-                        </div>
-                        <div className="pos-action-variant-meta">
-                          <span>{variant.price} د.ل</span>
-                          <span>
-                            {isCurrent
-                              ? 'التنوع الحالي'
-                              : outOfStock
-                                ? 'غير متوفر'
-                                : variant.stockUnknown
-                                  ? 'متوفر'
-                                  : `${variant.stock} قطعة`}
-                          </span>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-                )}
-
-                {pickerVariant && (
-                  <div className="pos-action-add-variant">
-                    {loadingVariantPrice ? (
-                      <p className="pos-action-variant-hint">جاري جلب السعر والمخزون...</p>
+                {pickerProductId ? (
+                  <>
+                    <p className="pos-action-variants-title">
+                      اختر تنوع «{pickerProduct?.name}»:
+                    </p>
+                    {loadingExchangeVariants ? (
+                      <p className="pos-action-empty">جاري تحميل تنوعات المنتج...</p>
+                    ) : variantOptions.length === 0 ? (
+                      <p className="pos-action-empty">لا توجد تنوعات متاحة لهذا المنتج.</p>
                     ) : (
-                      <p className="pos-action-variant-hint">
-                        الكمية المتوفرة:{' '}
-                        {pickerVariant.stockUnknown ? 'غير محددة' : `${pickerStock} قطعة`}
-                      </p>
+                      <div className="pos-action-variants-list">
+                        {variantOptions.map((variant) => {
+                          const isCurrent = String(variant.id) === String(selectedLine.variantId);
+                          const isSelected = String(variant.id) === String(pickerVariantId);
+                          const outOfStock = !variant.stockUnknown && variant.stock <= 0;
+
+                          return (
+                            <button
+                              key={variant.id}
+                              type="button"
+                              className={`pos-action-variant-card${isSelected ? ' selected' : ''}${isCurrent ? ' current' : ''}`}
+                              onClick={() => !isCurrent && !outOfStock && setPickerVariantId(String(variant.id))}
+                              disabled={isCurrent || outOfStock || isSaving}
+                            >
+                              <div className="pos-action-variant-label">
+                                {resolveVariantCardLabel(variant)}
+                              </div>
+                              <div className="pos-action-variant-meta">
+                                <span>{variant.price} د.ل</span>
+                                <span>
+                                  {isCurrent
+                                    ? 'التنوع الحالي'
+                                    : outOfStock
+                                      ? 'غير متوفر'
+                                      : variant.stockUnknown
+                                        ? 'متوفر'
+                                        : `${variant.stock} قطعة`}
+                                </span>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
                     )}
-                    <div className="pos-action-add-variant-row">
-                      <div className="sales-form-group pos-action-add-qty">
-                        <label htmlFor="pos-add-item-qty">كمية البديل:</label>
-                        <div className="pos-action-qty-controls">
+
+                    {pickerVariant && (
+                      <div className="pos-action-add-variant">
+                        {loadingVariantPrice ? (
+                          <p className="pos-action-variant-hint">جاري جلب السعر والمخزون...</p>
+                        ) : (
+                          <p className="pos-action-variant-hint">
+                            الكمية المتوفرة:{' '}
+                            {pickerVariant.stockUnknown ? 'غير محددة' : `${pickerStock} قطعة`}
+                          </p>
+                        )}
+                        <div className="pos-action-add-variant-row">
+                          <div className="sales-form-group pos-action-add-qty">
+                            <label htmlFor="pos-add-item-qty">كمية البديل:</label>
+                            <div className="pos-action-qty-controls">
+                              <button
+                                type="button"
+                                className="sales-btn-secondary"
+                                onClick={() => setAddItemQty(String(Math.max(1, addItemQtyNum - 1)))}
+                                disabled={addItemQtyNum <= 1 || isSaving}
+                              >
+                                -
+                              </button>
+                              <input
+                                id="pos-add-item-qty"
+                                type="text"
+                                inputMode="numeric"
+                                className="sales-form-input"
+                                value={addItemQty}
+                                onChange={(e) => {
+                                  if (isValidIntegerInput(e.target.value)) setAddItemQty(e.target.value);
+                                }}
+                                onBlur={() => setAddItemQty(clampIntegerInput(addItemQty, 1, pickerStock))}
+                                onWheel={preventWheelChange}
+                                disabled={isSaving}
+                              />
+                              <button
+                                type="button"
+                                className="sales-btn-secondary"
+                                onClick={() => setAddItemQty(String(Math.min(pickerStock, addItemQtyNum + 1)))}
+                                disabled={
+                                  isSaving
+                                  || (!pickerVariant.stockUnknown && addItemQtyNum >= pickerStock)
+                                }
+                              >
+                                +
+                              </button>
+                            </div>
+                          </div>
                           <button
                             type="button"
-                            className="sales-btn-secondary"
-                            onClick={() => setAddItemQty(String(Math.max(1, addItemQtyNum - 1)))}
-                            disabled={addItemQtyNum <= 1 || isSaving}
+                            className="sales-btn-primary"
+                            onClick={handleAddVariant}
+                            disabled={!canAddPickerVariant || isSaving || loadingVariantPrice}
                           >
-                            -
-                          </button>
-                          <input
-                            id="pos-add-item-qty"
-                            type="text"
-                            inputMode="numeric"
-                            className="sales-form-input"
-                            value={addItemQty}
-                            onChange={(e) => {
-                              if (isValidIntegerInput(e.target.value)) setAddItemQty(e.target.value);
-                            }}
-                            onBlur={() => setAddItemQty(clampIntegerInput(addItemQty, 1, pickerStock))}
-                            onWheel={preventWheelChange}
-                            disabled={isSaving}
-                          />
-                          <button
-                            type="button"
-                            className="sales-btn-secondary"
-                            onClick={() => setAddItemQty(String(Math.min(pickerStock, addItemQtyNum + 1)))}
-                            disabled={
-                              isSaving
-                              || (!pickerVariant.stockUnknown && addItemQtyNum >= pickerStock)
-                            }
-                          >
-                            +
+                            إضافة البديل
                           </button>
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        className="sales-btn-primary"
-                        onClick={handleAddVariant}
-                        disabled={!canAddPickerVariant || isSaving || loadingVariantPrice}
-                      >
-                        إضافة البديل
-                      </button>
-                    </div>
-                  </div>
+                    )}
+                  </>
+                ) : (
+                  <p className="pos-action-empty">اختر منتجاً من القائمة أعلاه لعرض تنوعاته.</p>
                 )}
               </>
             )}

@@ -72,13 +72,51 @@ export function mapStatusToApi(status) {
 }
 
 function extractOrderItems(row) {
-  const itemsRaw =
-    row.items ??
-    row.order_items ??
-    row.products ??
-    row.line_items ??
-    [];
-  return Array.isArray(itemsRaw) ? itemsRaw : [];
+  if (!row || typeof row !== 'object') return [];
+
+  const candidates = [
+    row.items,
+    row.order_items,
+    row.products,
+    row.line_items,
+    row.lines,
+    row.pos_items,
+    row.sale_items,
+    row.details?.items,
+    row.order?.items,
+    row.order?.order_items,
+    row.order?.products,
+  ];
+
+  for (const itemsRaw of candidates) {
+    if (Array.isArray(itemsRaw) && itemsRaw.length) return itemsRaw;
+  }
+
+  return [];
+}
+
+function mergeOrderRowWithPayload(payload) {
+  if (!payload || typeof payload !== 'object') return payload;
+
+  const order = payload.order && typeof payload.order === 'object' ? payload.order : payload;
+  const nestedItems = extractOrderItems(payload);
+  const orderItems = extractOrderItems(order);
+
+  if (!orderItems.length && nestedItems.length) {
+    return {
+      ...order,
+      items: nestedItems,
+      order_items: nestedItems,
+      products: nestedItems,
+    };
+  }
+
+  return order;
+}
+
+function extractOrderRow(res) {
+  const payload = res?.data?.data ?? res?.data ?? res;
+  return mergeOrderRowWithPayload(payload);
 }
 
 function mapOrderItem(item) {
@@ -92,7 +130,16 @@ function mapOrderItem(item) {
     variantId: item.variant_id ?? item.product_variant_id ?? variant.id ?? null,
     name: productName,
     quantity: Number(item.quantity ?? 1),
-    price: Number(item.unit_price ?? item.price ?? item.total ?? 0),
+    price: Number(
+      item.unit_price
+      ?? item.price
+      ?? item.selling_price
+      ?? item.total_price
+      ?? item.line_total
+      ?? item.subtotal
+      ?? item.total
+      ?? 0,
+    ),
     variantLabel: buildVariantDisplayLabel(
       productName,
       attrs,
@@ -126,14 +173,24 @@ function formatAddress(addr) {
 }
 
 function computeProductsCount(row, products) {
+  const fromItems = products.reduce((sum, product) => sum + (product.quantity || 0), 0);
+  if (fromItems > 0) return fromItems;
+  if (products.length > 0) return products.length;
+
   const quantity = Number(row.items_quantity ?? 0);
   if (quantity > 0) return quantity;
 
-  const lineCount = Number(row.items_count ?? 0);
-  if (lineCount > 0) return lineCount;
+  // items_count قد يحسب بنوداً بكمية 0 (بعد استرجاع/استبدال كامل)
+  return 0;
+}
 
-  const fromItems = products.reduce((sum, product) => sum + (product.quantity || 0), 0);
-  return fromItems || products.length;
+/** طلب بدون قطع نشطة — غالباً استُرجعت أو استُبدلت كل منتجاته */
+export function isOrderFullyReturned(row, products = []) {
+  if (!row || products.length > 0) return false;
+  const itemsQty = Number(row.items_quantity ?? 0);
+  const itemsCount = Number(row.items_count ?? 0);
+  const total = Number(row.total_amount ?? row.total ?? 0);
+  return itemsQty === 0 && (itemsCount > 0 || total === 0);
 }
 
 export function isPosOrder(row) {
@@ -162,10 +219,6 @@ function resolveStaffName(row) {
 
 function resolveBuyerName(row) {
   return row.customer_name ?? row.customer?.name ?? row.user?.name ?? row.buyer_name ?? '—';
-}
-
-function extractOrderRow(res) {
-  return res?.data?.data ?? res?.data ?? res;
 }
 
 export function mapOrder(row) {
@@ -197,7 +250,14 @@ export function mapOrder(row) {
     ),
     products,
     productsCount: computeProductsCount(row, products),
-    total: Number(row.total ?? row.total_amount ?? row.grand_total ?? 0),
+    total: Number(
+      row.total
+      ?? row.total_amount
+      ?? row.grand_total
+      ?? row.amount
+      ?? row.paid_total
+      ?? 0,
+    ),
     status,
     statusRaw,
     paymentMethod: row.payment_method ?? row.payment_method_name ?? null,
