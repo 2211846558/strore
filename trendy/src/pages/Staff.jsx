@@ -187,7 +187,6 @@ const Staff = () => {
               <th>رقم الهاتف</th>
               <th>الدور الوظيفي</th>
               <th>تاريخ الانضمام</th>
-              <th>آخر تسجيل دخول</th>
               <th>الحالة</th>
               <th>الإجراءات</th>
             </tr>
@@ -195,7 +194,7 @@ const Staff = () => {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan="8" className="no-results-cell">
+                <td colSpan="7" className="no-results-cell">
                   جاري تحميل الموظفين...
                 </td>
               </tr>
@@ -209,7 +208,6 @@ const Staff = () => {
                     <span className="role-badge">{member.role}</span>
                   </td>
                   <td>{member.joinDate}</td>
-                  <td>{member.lastLogin}</td>
                   <td>
                     <span className={`status-badge ${member.active ? 'active' : 'inactive'}`}>
                       {member.status}
@@ -251,7 +249,7 @@ const Staff = () => {
               ))
             ) : (
               <tr>
-                <td colSpan="8" className="no-results-cell">
+                <td colSpan="7" className="no-results-cell">
                   لا يوجد موظفون يطابقون بحثك.
                 </td>
               </tr>

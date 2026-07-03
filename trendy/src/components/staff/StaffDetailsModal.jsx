@@ -42,10 +42,6 @@ const StaffDetailsModal = ({ isOpen, onClose, member, loading }) => {
               <span className="staff-details-value">{member.joinDate}</span>
             </div>
             <div className="staff-details-row">
-              <span className="staff-details-label">آخر تسجيل دخول</span>
-              <span className="staff-details-value">{member.lastLogin}</span>
-            </div>
-            <div className="staff-details-row">
               <span className="staff-details-label">الحالة</span>
               <span className="staff-details-value">
                 <span className={`status-badge ${member.active ? 'active' : 'inactive'}`}>

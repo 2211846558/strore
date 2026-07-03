@@ -134,19 +134,6 @@ function formatDate(value) {
   return date.toISOString().slice(0, 10);
 }
 
-function formatDateTime(value) {
-  if (!value) return '—';
-  const date = new Date(String(value).replace(' ', 'T'));
-  if (Number.isNaN(date.getTime())) return String(value);
-  return date.toLocaleString('ar-LY', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
 function resolveActive(row) {
   if (typeof row.is_active === 'boolean') return row.is_active;
   if (typeof row.active === 'boolean') return row.active;
@@ -154,17 +141,6 @@ function resolveActive(row) {
   if (status === 'active' || status === 'نشط') return true;
   if (status === 'inactive' || status === 'disabled' || status === 'معطل') return false;
   return true;
-}
-
-function resolveLastLogin(row) {
-  const raw =
-    row.last_login_at
-    ?? row.last_login
-    ?? row.last_login_date
-    ?? row.user?.last_login_at
-    ?? row.user?.last_login
-    ?? null;
-  return formatDateTime(raw);
 }
 
 export function mapEmployee(row) {
@@ -181,7 +157,6 @@ export function mapEmployee(row) {
     roleSlug,
     role: resolveRoleLabel(roleSlug, row),
     joinDate: formatDate(row.joined_at ?? row.created_at ?? row.join_date),
-    lastLogin: resolveLastLogin(row),
     status: active ? 'نشط' : 'معطل',
     active,
     storeId: row.store_id ?? row.store?.id ?? null,

@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { X, Plus, Layers, Save, Trash2, AlertCircle } from 'lucide-react';
+import { X, Plus, Layers, Save, AlertCircle } from 'lucide-react';
 import {
   fetchAttributes,
   fetchProductVariants,
   createProductVariant,
-  deleteProductVariant,
 } from '../../api/products';
 import { getApiErrorMessage } from '../../api/stores';
 import './ProductVariantModal.css';
@@ -76,7 +75,7 @@ function PendingRow({
 
 
 /* ─── صف محفوظ ─── */
-function SavedRow({ variant, attributes, onDelete, disabled }) {
+function SavedRow({ variant, attributes }) {
   return (
     <tr className="vt-row vt-row--saved">
       {attributes.map((attr) => {
@@ -114,17 +113,7 @@ function SavedRow({ variant, attributes, onDelete, disabled }) {
           <span className="vt-dash">—</span>
         )}
       </td>
-      <td className="vt-cell vt-cell--action">
-        <button
-          type="button"
-          className="vt-delete-btn"
-          onClick={() => onDelete(variant.id)}
-          disabled={disabled}
-          title="حذف التنوع"
-        >
-          <Trash2 size={14} />
-        </button>
-      </td>
+      <td className="vt-cell vt-cell--action" aria-hidden="true" />
     </tr>
   );
 }
@@ -275,19 +264,6 @@ const ProductVariantModal = ({ isOpen, onClose, product, storeId, onVariantAdded
     setIsSaving(false);
   };
 
-  /* ─── حذف تنوع محفوظ ─── */
-  const handleDeleteSaved = async (variantId) => {
-    setIsSaving(true);
-    try {
-      await deleteProductVariant(product.id, variantId);
-      setSavedVariants((prev) => prev.filter((v) => v.id !== variantId));
-    } catch (err) {
-      setGlobalError(getApiErrorMessage(err, 'تعذّر حذف التنوع.'));
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
   /* ─── هل زر الحفظ مُفعَّل? ─── */
   const canSave = useMemo(
     () =>
@@ -362,8 +338,6 @@ const ProductVariantModal = ({ isOpen, onClose, product, storeId, onVariantAdded
                         key={variant.id}
                         variant={variant}
                         attributes={attributes}
-                        onDelete={handleDeleteSaved}
-                        disabled={isSaving}
                       />
                     ))}
 
