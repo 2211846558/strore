@@ -7,23 +7,29 @@ import {
 } from './media';
 
 function mapImageEntry(img, productId) {
-  const raw = typeof img === 'string' ? img : img?.url;
+  const raw =
+    typeof img === 'string'
+      ? img
+      : img?.url ?? img?.path ?? img?.image_url ?? img?.full_url ?? img?.src ?? null;
   const candidates = getProductImageCandidates(raw, productId);
   return {
     id: typeof img === 'object' ? img?.id ?? null : null,
     url: candidates[0] || productPlaceholderImage(),
-    candidates,
+    candidates: candidates.length ? candidates : [productPlaceholderImage()],
   };
 }
 
-function productImageFields(item) {
-  const rawList =
-    Array.isArray(item.images) && item.images.length
-      ? item.images
-      : item.thumbnail
-        ? [{ url: item.thumbnail }]
-        : [];
+function collectRawProductImages(item) {
+  if (Array.isArray(item.images) && item.images.length) return item.images;
+  if (item.thumbnail) return [item.thumbnail];
+  if (item.image_url) return [item.image_url];
+  if (item.image) return [item.image];
+  if (item.primary_image) return [item.primary_image];
+  return [];
+}
 
+function productImageFields(item) {
+  const rawList = collectRawProductImages(item);
   const images = rawList.map((img) => mapImageEntry(img, item.id));
   const primary = images[0];
 
@@ -286,12 +292,11 @@ export async function fetchProductDetails(id) {
 }
 
 /**
- * GET /api/my-store/products/{id} — تفاصيل المنتج في لوحة المتجر
+ * تفاصيل المنتج — GET /api/products/{id}
+ * ملاحظة: مسار my-store/products/{id} يدعم PUT فقط (تحديث) وليس GET.
  */
 export async function fetchManagedProductDetails(id) {
-  const res = await apiRequest(API_ENDPOINTS.myStoreProduct(id));
-  const item = res?.data ?? res;
-  return mapProductFromDetails(item);
+  return fetchProductDetails(id);
 }
 
 function buildProductFormData({ storeId, name, sku, description, price, categoryId, stock, imageFiles }) {

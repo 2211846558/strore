@@ -117,9 +117,7 @@ const PlanSubscribeActions = ({
           ? 'جاري المعالجة...'
           : action === 'renew'
             ? 'تأكيد التجديد'
-            : action === 'change'
-              ? 'تأكيد تغيير الخطة'
-              : 'تأكيد الاشتراك'}
+            : 'الاشتراك في الخطة'}
       </button>
       <button type="button" className="plan-wallet-btn back" onClick={onClose}>
         <ArrowRight size={18} />
@@ -148,6 +146,7 @@ const PlanSubscribeWalletForm = ({ plan, action = 'subscribe', onClose, onConfir
   const stripeFieldOptions = useMemo(() => getStripeFieldStyle(), []);
   const cardComplete = cardFields.number && cardFields.expiry && cardFields.cvc;
   const cardReady = readyCount >= 3;
+  const stripeLoaded = Boolean(stripe && elements);
 
   const handleFieldChange = (field) => (event) => {
     setCardFields((prev) => ({ ...prev, [field]: event.complete }));
@@ -166,8 +165,6 @@ const PlanSubscribeWalletForm = ({ plan, action = 'subscribe', onClose, onConfir
     if (plan?.price) {
       setAmount(String(plan.price));
     }
-    setReadyCount(0);
-    setCardFields({ number: false, expiry: false, cvc: false });
     setRechargeError('');
     setRechargeSuccess(false);
   }, [plan?.id, plan?.price]);
@@ -229,11 +226,14 @@ const PlanSubscribeWalletForm = ({ plan, action = 'subscribe', onClose, onConfir
           بيانات البطاقة
         </label>
         <div className="plan-wallet-stripe-fields">
+          {!stripeLoaded ? (
+            <p className="plan-wallet-stripe-loading">جاري تحميل بوابة الدفع...</p>
+          ) : (
+            <>
           <div className="plan-wallet-stripe-field">
             <label className="plan-wallet-stripe-label">رقم البطاقة</label>
             <div className="plan-wallet-stripe-card">
               <CardNumberElement
-                key={`card-number-${plan.id}`}
                 options={stripeFieldOptions}
                 onReady={handleFieldReady}
                 onChange={handleFieldChange('number')}
@@ -246,7 +246,6 @@ const PlanSubscribeWalletForm = ({ plan, action = 'subscribe', onClose, onConfir
               <label className="plan-wallet-stripe-label">تاريخ الانتهاء</label>
               <div className="plan-wallet-stripe-card">
                 <CardExpiryElement
-                  key={`card-expiry-${plan.id}`}
                   options={stripeFieldOptions}
                   onReady={handleFieldReady}
                   onChange={handleFieldChange('expiry')}
@@ -259,7 +258,6 @@ const PlanSubscribeWalletForm = ({ plan, action = 'subscribe', onClose, onConfir
               <label className="plan-wallet-stripe-label">رمز الأمان (CVV)</label>
               <div className="plan-wallet-stripe-card">
                 <CardCvcElement
-                  key={`card-cvc-${plan.id}`}
                   options={stripeFieldOptions}
                   onReady={handleFieldReady}
                   onChange={handleFieldChange('cvc')}
@@ -268,8 +266,10 @@ const PlanSubscribeWalletForm = ({ plan, action = 'subscribe', onClose, onConfir
               <span className="plan-wallet-stripe-hint">3 أرقام خلف البطاقة</span>
             </div>
           </div>
+            </>
+          )}
         </div>
-        {!cardReady && (
+        {stripeLoaded && !cardReady && (
           <p className="plan-wallet-stripe-loading">جاري تحميل حقول البطاقة...</p>
         )}
         <p className="plan-wallet-secure-note">
@@ -343,9 +343,15 @@ const PlanSubscribeWalletModal = ({
           <X size={22} />
         </button>
 
-        <div className="plan-wallet-icon-wrap">
-          <Wallet size={28} />
-        </div>
+        {plan.image ? (
+          <div className="plan-wallet-plan-image-wrap">
+            <img src={plan.image} alt={plan.title} className="plan-wallet-plan-image" />
+          </div>
+        ) : (
+          <div className="plan-wallet-icon-wrap">
+            <Wallet size={28} />
+          </div>
+        )}
         <h2>محفظة الاشتراك</h2>
         <p className="plan-wallet-subtitle">
           {action === 'renew' ? (
@@ -394,6 +400,7 @@ const PlanSubscribeWalletModal = ({
           </>
         ) : (
           <PlanSubscribeWalletForm
+            key={`wallet-form-${plan.id}-${isOpen}`}
             plan={plan}
             action={action}
             onClose={onClose}

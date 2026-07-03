@@ -1,11 +1,24 @@
 import React from 'react';
 import './PlanCard.css';
 
-const PlanCard = ({ title, price, featuresText, isPopular, status = 'available', onSubscribe }) => {
+const PlanCard = ({
+  title,
+  price,
+  image,
+  featuresText,
+  isPopular,
+  status = 'available',
+  onSubscribe,
+}) => {
   const isRecommended = isPopular;
 
   return (
     <div className={`plan-card ${isRecommended ? 'popular recommended' : ''} ${status === 'active' ? 'active' : ''} ${status === 'scheduled' ? 'scheduled' : ''}`} tabIndex={0}>
+      {image && (
+        <div className="plan-image-wrap">
+          <img src={image} alt={title} className="plan-image" />
+        </div>
+      )}
       <div className="plan-header">
         <div className="title-row">
           <h3 className="plan-title">{title}</h3>
@@ -25,14 +38,10 @@ const PlanCard = ({ title, price, featuresText, isPopular, status = 'available',
       </div>
 
       <button className={`subscribe-btn ${status}`} onClick={onSubscribe}>
-        {getButtonText(status)}
+        اشترك في الخطة
       </button>
     </div>
   );
-};
-
-const getButtonText = (status) => {
-  return 'اشترك في الخطة';
 };
 
 export default React.memo(PlanCard);

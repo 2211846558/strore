@@ -1,5 +1,6 @@
 import { apiRequest } from './client';
 import { API_ENDPOINTS } from './config';
+import { resolveMediaUrl } from './media';
 import {
   getStorePlanId,
   getStoreSubscriptionEnd,
@@ -19,6 +20,18 @@ function formatDisplayDate(date) {
   return `${pad(date.getDate())}-${pad(date.getMonth() + 1)}-${date.getFullYear()}`;
 }
 
+function resolvePlanImage(plan) {
+  const raw =
+    plan?.image ??
+    plan?.image_url ??
+    plan?.thumbnail ??
+    plan?.icon ??
+    plan?.banner ??
+    plan?.cover ??
+    null;
+  return raw ? resolveMediaUrl(raw) : null;
+}
+
 export function mapPlanFromApi(plan) {
   return {
     id: plan.id,
@@ -28,6 +41,7 @@ export function mapPlanFromApi(plan) {
     commissionRate: plan.commission_rate ?? 0,
     featuresText: `عمولة المنصة: ${plan.commission_rate ?? 0}% — مدة ${plan.duration_days ?? 30} يوم`,
     isPopular: Boolean(plan.is_popular ?? plan.is_featured ?? false),
+    image: resolvePlanImage(plan),
   };
 }
 
@@ -36,6 +50,35 @@ function calcRemainingDays(endDate) {
   const diff = endDate.getTime() - Date.now();
   if (diff <= 0) return 0;
   return Math.ceil(diff / (1000 * 60 * 60 * 24));
+}
+
+function resolveSubscriptionPhase(subscription) {
+  if (!subscription) return 'expired';
+
+  const status = String(subscription.status ?? '').toLowerCase();
+  if (status === 'expired' || status === 'cancelled' || status === 'inactive') {
+    return 'expired';
+  }
+
+  const now = Date.now();
+  const startAt = subscription.starts_at ? new Date(subscription.starts_at).getTime() : 0;
+  const endAt = subscription.ends_at ? new Date(subscription.ends_at).getTime() : 0;
+
+  if (endAt && endAt <= now) return 'expired';
+  if (startAt && startAt > now) return 'scheduled';
+  if (endAt && endAt > now) return 'active';
+  if (status === 'scheduled') return 'scheduled';
+  if (status === 'active') return 'active';
+
+  return 'expired';
+}
+
+function isSubscriptionCurrentlyActive(subscription) {
+  return resolveSubscriptionPhase(subscription) === 'active';
+}
+
+function isSubscriptionScheduled(subscription) {
+  return resolveSubscriptionPhase(subscription) === 'scheduled';
 }
 
 function subscriptionEndTimestamp(subscription) {
@@ -49,14 +92,8 @@ function subscriptionStartTimestamp(subscription) {
 }
 
 function isSubscriptionLive(subscription) {
-  if (!subscription) return false;
-  const status = String(subscription.status ?? '').toLowerCase();
-  if (status === 'expired' || status === 'cancelled' || status === 'inactive') return false;
-
-  const endDate = subscription.ends_at ? new Date(subscription.ends_at) : null;
-  if (!endDate) return status === 'active' || status === 'scheduled';
-
-  return endDate.getTime() > Date.now();
+  const phase = resolveSubscriptionPhase(subscription);
+  return phase === 'active' || phase === 'scheduled';
 }
 
 function resolveSubscriptionPrice(plan, subscription, storePrice) {
@@ -83,27 +120,37 @@ function resolveDurationDays(plan, subscription, startDate, endDate) {
 }
 
 export function pickActiveStoreSubscription(subscriptions = []) {
-  const now = Date.now();
   const list = Array.isArray(subscriptions) ? subscriptions : [];
 
-  const active = list.find(
-    (sub) =>
-      sub.status === 'active' &&
-      sub.ends_at &&
-      new Date(sub.ends_at).getTime() > now,
-  );
-  if (active) return active;
+  return list.find(isSubscriptionCurrentlyActive) ?? null;
+}
 
-  return (
-    list.find(
-      (sub) =>
-        sub.status === 'scheduled' &&
-        sub.starts_at &&
-        sub.ends_at &&
-        new Date(sub.starts_at).getTime() > now &&
-        new Date(sub.ends_at).getTime() > now,
-    ) ?? null
-  );
+export function pickScheduledStoreSubscriptions(subscriptions = []) {
+  const list = Array.isArray(subscriptions) ? subscriptions : [];
+
+  return list
+    .filter(isSubscriptionScheduled)
+    .sort(
+      (a, b) => subscriptionStartTimestamp(a) - subscriptionStartTimestamp(b),
+    );
+}
+
+export function mapStoreSubscriptionsForDisplay(subscriptions = [], plans = []) {
+  const list = Array.isArray(subscriptions) ? subscriptions : [];
+
+  const relevant = list.filter((sub) => {
+    const phase = resolveSubscriptionPhase(sub);
+    return phase === 'active' || phase === 'scheduled';
+  });
+
+  return relevant
+    .map((sub) => mapSubscriptionFromApi(sub, plans))
+    .sort((a, b) => {
+      const aScheduled = a.isScheduled;
+      const bScheduled = b.isScheduled;
+      if (aScheduled !== bScheduled) return aScheduled ? 1 : -1;
+      return 0;
+    });
 }
 
 export function pickLatestStoreSubscription(subscriptions = []) {
@@ -143,8 +190,14 @@ export function mapSubscriptionFromApi(subscription, plans = []) {
     (subscription.plan ? mapPlanFromApi(subscription.plan) : null);
   const endDate = subscription.ends_at ? new Date(subscription.ends_at) : null;
   const startDate = subscription.starts_at ? new Date(subscription.starts_at) : null;
-  const isExpired = !isSubscriptionLive(subscription);
-  const remainingDays = !isExpired ? calcRemainingDays(endDate) : 0;
+  const phase = resolveSubscriptionPhase(subscription);
+  const isExpired = phase === 'expired';
+  const isScheduled = phase === 'scheduled';
+  const remainingDays = !isExpired
+    ? isScheduled && startDate
+      ? calcRemainingDays(startDate)
+      : calcRemainingDays(endDate)
+    : 0;
   const durationDays = resolveDurationDays(plan, subscription, startDate, endDate);
   const displayPrice = resolveSubscriptionPrice(plan, subscription);
   const planPrice = plan?.price ?? (subscription.plan?.price != null ? String(subscription.plan.price) : '');
@@ -160,13 +213,14 @@ export function mapSubscriptionFromApi(subscription, plans = []) {
     featuresText:
       plan?.featuresText ??
       (subscription.plan ? mapPlanFromApi(subscription.plan).featuresText : ''),
-    status:
-      isExpired ? 'منتهي' : subscription.status === 'scheduled' ? 'مجدول' : 'نشط',
+    image: plan?.image ?? resolvePlanImage(subscription.plan),
+    status: isExpired ? 'منتهي' : isScheduled ? 'مجدول' : 'نشط',
     isExpired,
+    isScheduled,
     statusText: isExpired
       ? 'انتهى الاشتراك — جدّد الآن'
-      : subscription.status === 'scheduled'
-        ? 'اشتراك مجدول — سيبدأ قريباً'
+      : isScheduled
+        ? 'اشتراك مجدول — يبدأ تلقائياً بعد انتهاء خطتك الحالية'
         : 'الاشتراك نشط حالياً',
     dateRange: {
       start: startDate ? formatDisplayDate(startDate) : '—',
@@ -222,6 +276,7 @@ export function mapStoreSubscription(store, plans = []) {
     featuresText:
       matchedPlan?.featuresText ??
       (nestedPlan ? mapPlanFromApi(nestedPlan).featuresText : ''),
+    image: matchedPlan?.image ?? resolvePlanImage(nestedPlan),
     status: isExpired ? 'منتهي' : 'نشط',
     isExpired,
     statusText: isExpired ? 'انتهى الاشتراك — جدّد الآن' : 'الاشتراك نشط حالياً',

@@ -1,7 +1,35 @@
 import React, { useState, useEffect } from 'react';
 import { X, Upload, ImageIcon, Layers } from 'lucide-react';
 import { getApiErrorMessage } from '../../api/stores';
+import { productPlaceholderImage } from '../../api/media';
 import './ProductModal.css';
+
+const GalleryImage = ({ img, index, isEdit }) => {
+  const candidates = img.candidates?.length ? img.candidates : img.url ? [img.url] : [];
+  const [candidateIndex, setCandidateIndex] = useState(0);
+
+  useEffect(() => {
+    setCandidateIndex(0);
+  }, [img.url, img.candidates]);
+
+  const src =
+    candidateIndex < candidates.length
+      ? candidates[candidateIndex]
+      : productPlaceholderImage();
+
+  const handleError = () => {
+    if (candidateIndex < candidates.length - 1) {
+      setCandidateIndex((prev) => prev + 1);
+    }
+  };
+
+  return (
+    <div className="gallery-item existing">
+      <img src={src} alt={`صورة ${index + 1}`} onError={handleError} />
+      {isEdit && <span className="gallery-item-tag">حالية</span>}
+    </div>
+  );
+};
 
 const ProductModal = ({
   isOpen,
@@ -18,9 +46,7 @@ const ProductModal = ({
     name: '',
     sku: '',
     description: '',
-    price: '',
     categoryId: '',
-    stock: '',
   });
   const [existingImages, setExistingImages] = useState([]);
   const [newImages, setNewImages] = useState([]);
@@ -44,14 +70,12 @@ const ProductModal = ({
         name: product.name || '',
         sku: product.sku || '',
         description: product.description || '',
-        price: product.price || '',
         categoryId: product.categoryId ? String(product.categoryId) : '',
-        stock: product.stock || '',
       });
       const imgs = product.images?.length
         ? product.images
         : product.image
-          ? [{ url: product.image }]
+          ? [{ url: product.image, candidates: product.imageCandidates }]
           : [];
       setExistingImages(imgs);
     } else {
@@ -59,9 +83,7 @@ const ProductModal = ({
         name: '',
         sku: '',
         description: '',
-        price: '',
         categoryId: '',
-        stock: '',
       });
       setExistingImages([]);
     }
@@ -113,9 +135,7 @@ const ProductModal = ({
         name: form.name.trim(),
         sku: form.sku.trim(),
         description: form.description.trim(),
-        price: form.price,
         categoryId: form.categoryId,
-        stock: form.stock,
         imageFiles: newImages.map((img) => img.file),
       });
       if (!isEdit && result) {
@@ -161,10 +181,12 @@ const ProductModal = ({
             {totalImages > 0 ? (
               <div className="images-gallery">
                 {existingImages.map((img, index) => (
-                  <div key={img.id ?? `existing-${index}`} className="gallery-item existing">
-                    <img src={img.url} alt={`صورة ${index + 1}`} />
-                    {isEdit && <span className="gallery-item-tag">حالية</span>}
-                  </div>
+                  <GalleryImage
+                    key={img.id ?? `existing-${index}`}
+                    img={img}
+                    index={index}
+                    isEdit={isEdit}
+                  />
                 ))}
                 {newImages.map((img, index) => (
                   <div key={img.id} className="gallery-item new">
@@ -229,44 +251,19 @@ const ProductModal = ({
             />
           </div>
 
-          <div className="form-row">
-            <div className="form-group">
-              <label>التصنيف</label>
-              <select
-                value={form.categoryId}
-                onChange={(e) => handleChange('categoryId', e.target.value)}
-              >
-                <option value="">اختر التصنيف</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={String(c.id)}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="form-group">
-              <label>السعر (د.ل)</label>
-              <input
-                type="number"
-                min="0"
-                value={form.price}
-                readOnly
-                className="readonly-field"
-              />
-              <span className="field-hint">تلقائي من سعر بيع الشحنة الحالية</span>
-            </div>
-          </div>
-
           <div className="form-group">
-            <label>الكمية الإجمالية</label>
-            <input
-              type="number"
-              min="0"
-              value={form.stock}
-              readOnly
-              className="readonly-field"
-            />
-            <span className="field-hint">تلقائي من مجموع كميات التنوعات</span>
+            <label>التصنيف</label>
+            <select
+              value={form.categoryId}
+              onChange={(e) => handleChange('categoryId', e.target.value)}
+            >
+              <option value="">اختر التصنيف</option>
+              {categories.map((c) => (
+                <option key={c.id} value={String(c.id)}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
           </div>
 
           {error && <p className="form-error">{error}</p>}

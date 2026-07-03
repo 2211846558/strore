@@ -7,10 +7,30 @@
   gap: 20px;
   position: relative;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
+  overflow: hidden;
+}
+
+.sub-image-wrap {
+  width: calc(100% + 60px);
+  height: 140px;
+  margin: -30px -30px 0;
+  overflow: hidden;
+  background: var(--bg-input);
+}
+
+.sub-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .subscription-card.active {
   border: 1px solid var(--success);
+}
+
+.subscription-card.scheduled {
+  border: 1px solid #8b3dff;
 }
 
 .subscription-card.expired {
@@ -57,6 +77,11 @@
   color: white;
 }
 
+.scheduled-badge {
+  background: #8b3dff;
+  color: white;
+}
+
 .expired-badge {
   background-color: var(--bg-input);
   color: var(--text-secondary);
@@ -76,6 +101,10 @@
   font-size: 13px;
   color: var(--success);
   font-weight: 600;
+}
+
+.subscription-card.scheduled .sub-remaining {
+  color: #8b3dff;
 }
 
 .sub-period {
@@ -134,7 +163,7 @@
 .sub-price .amount {
   font-size: 32px;
   font-weight: 800;
-  color: var(--primary); /* Matching design image 5, price is blue */
+  color: var(--primary);
 }
 
 .sub-price .currency {

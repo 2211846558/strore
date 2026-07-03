@@ -10,6 +10,7 @@ import {
   fetchCategories,
   fetchStoreProducts,
   fetchProductDetails,
+  fetchManagedProductDetails,
   createProduct,
   updateProduct,
   archiveProduct,
@@ -93,9 +94,9 @@ const Products = () => {
         name: formData.name,
         sku: formData.sku,
         description: formData.description,
-        price: formData.price,
+        price: editingProduct?.price ?? '0',
         categoryId: formData.categoryId,
-        stock: formData.stock,
+        stock: editingProduct?.stock ?? '0',
         imageFiles: formData.imageFiles,
       };
 

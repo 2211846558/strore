@@ -45,8 +45,13 @@ export function resolveMediaUrl(url) {
 
 function extractStorageFilename(url) {
   if (!url) return null;
-  const match = String(url).match(/\/storage\/(?:products\/\d+\/)?([^/]+)$/);
-  return match ? match[1] : null;
+  const str = String(url);
+  const nested = str.match(/\/storage\/products\/\d+\/([^/?#]+)/);
+  if (nested) return nested[1];
+  const plain = str.match(/\/products\/\d+\/([^/?#]+)/);
+  if (plain) return plain[1];
+  const legacy = str.match(/\/storage\/(?:products\/\d+\/)?([^/?#]+)$/);
+  return legacy ? legacy[1] : null;
 }
 
 export function resolveProductImageUrl(url, productId) {
@@ -60,21 +65,58 @@ export function resolveProductImageUrl(url, productId) {
 export function getProductImageCandidates(url, productId) {
   if (!url) return [];
 
+  const trimmed = String(url).trim();
+  if (!trimmed) return [];
+  if (trimmed.startsWith('data:') || trimmed.startsWith('blob:')) return [trimmed];
+
   const origin = getBackendOrigin();
-  const resolved = resolveMediaUrl(url);
+  const candidates = [];
+
+  const pushPath = (path) => {
+    if (!path) return;
+    if (import.meta.env.DEV && path.startsWith('/')) {
+      candidates.push(path);
+    }
+    candidates.push(path.startsWith('http') ? path : `${origin}${path}`);
+  };
+
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    pushPath(resolveMediaUrl(trimmed));
+    const filename = extractStorageFilename(trimmed);
+    if (productId && filename) {
+      pushPath(`/storage/products/${productId}/${filename}`);
+    }
+    return [...new Set(candidates.filter(Boolean))];
+  }
+
+  if (trimmed.startsWith('/storage/')) {
+    pushPath(trimmed);
+    return [...new Set(candidates.filter(Boolean))];
+  }
+
+  if (trimmed.startsWith('/')) {
+    pushPath(`/storage${trimmed}`);
+    pushPath(trimmed);
+    return [...new Set(candidates.filter(Boolean))];
+  }
 
   if (productId) {
-    const filename = extractStorageFilename(resolved || url);
+    const filename = extractStorageFilename(trimmed) || trimmed.split('/').pop();
     if (filename) {
-      const correctPath = `/storage/products/${productId}/${filename}`;
-      const absolute = `${origin}${correctPath}`;
-      const proxied = correctPath;
-      return [...new Set([absolute, proxied, resolved, url].filter(Boolean))];
+      pushPath(`/storage/products/${productId}/${filename}`);
+    }
+    if (trimmed.startsWith('products/')) {
+      pushPath(`/storage/${trimmed}`);
     }
   }
 
-  if (resolved) return [resolved];
-  return [url];
+  pushPath(`/storage/${trimmed.replace(/^\/+/, '')}`);
+
+  const resolved = resolveMediaUrl(trimmed);
+  if (resolved) candidates.push(resolved);
+  candidates.push(trimmed);
+
+  return [...new Set(candidates.filter(Boolean))];
 }
 
 /**

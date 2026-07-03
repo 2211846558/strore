@@ -11,6 +11,7 @@ import {
   extractStoreFromSubscriptionResponse,
   fetchStoreSubscriptions,
   mapSubscriptionFromApi,
+  mapStoreSubscriptionsForDisplay,
   pickActiveStoreSubscription,
   pickLatestStoreSubscription,
 } from '../api/plans';
@@ -72,7 +73,10 @@ const Plans = ({ onboarding = false }) => {
     return mapStoreSubscription(store, availablePlans);
   }, [store, availablePlans, subscriptionHistory]);
 
-  const mySubscriptions = currentSubscription ? [currentSubscription] : [];
+  const mySubscriptions = useMemo(
+    () => mapStoreSubscriptionsForDisplay(subscriptionHistory, availablePlans),
+    [subscriptionHistory, availablePlans],
+  );
   const hasLivePlan = storeHasActivePlan(store);
 
   useEffect(() => {
@@ -146,11 +150,15 @@ const Plans = ({ onboarding = false }) => {
 
     const messages = {
       renew: `تم تجديد اشتراك ${plan.title} بنجاح`,
-      change: `تم الانتقال إلى ${plan.title} بنجاح`,
+      change: `تم جدولة الاشتراك في ${plan.title} — سيبدأ تلقائياً بعد انتهاء خطتك الحالية`,
       subscribe: `تم الاشتراك في ${plan.title} بنجاح`,
     };
     showToast(messages[subscribeAction] || messages.subscribe);
     setIsWalletModalOpen(false);
+
+    if (subscribeAction === 'change' || subscribeAction === 'subscribe') {
+      setActiveTab('my-subscriptions');
+    }
 
     if (onboarding) {
       navigate('/', { replace: true });
@@ -219,9 +227,10 @@ const Plans = ({ onboarding = false }) => {
                   key={plan.id}
                   title={plan.title}
                   price={plan.price}
+                  image={plan.image}
                   featuresText={plan.featuresText}
                   isPopular={plan.isPopular}
-                  isActive={isPlanActive(plan.id)}
+                  status={isPlanActive(plan.id) ? 'active' : 'available'}
                   onSubscribe={() => handleSubscribeClick(plan)}
                 />
               ))
@@ -240,6 +249,7 @@ const Plans = ({ onboarding = false }) => {
                   title={sub.title}
                   price={sub.price}
                   pricePaid={sub.pricePaid}
+                  image={sub.image}
                   status={sub.status}
                   durationDays={sub.durationDays}
                   remainingDays={sub.remainingDays}
@@ -247,6 +257,7 @@ const Plans = ({ onboarding = false }) => {
                   dateRange={sub.dateRange}
                   statusText={sub.statusText}
                   isExpired={sub.isExpired}
+                  isScheduled={sub.isScheduled}
                   onRenew={() => {
                     const plan =
                       availablePlans.find((p) => p.id === sub.planId) ?? {

@@ -52,6 +52,22 @@
   padding: 4px;
 }
 
+.plan-wallet-plan-image-wrap {
+  width: 100%;
+  height: 120px;
+  border-radius: 14px;
+  overflow: hidden;
+  margin: 0 auto 16px;
+  background: var(--bg-input);
+}
+
+.plan-wallet-plan-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
 .plan-wallet-icon-wrap {
   width: 64px;
   height: 64px;
@@ -200,6 +216,7 @@
 .plan-wallet-stripe-card iframe {
   width: 100% !important;
   min-height: 24px;
+  height: 24px !important;
   pointer-events: auto !important;
 }
 
