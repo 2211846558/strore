@@ -119,10 +119,25 @@ function resolveDurationDays(plan, subscription, startDate, endDate) {
   return null;
 }
 
-export function pickActiveStoreSubscription(subscriptions = []) {
+export function pickActiveStoreSubscription(subscriptions = [], store = null) {
   const list = Array.isArray(subscriptions) ? subscriptions : [];
+  const activeOnes = list.filter(isSubscriptionCurrentlyActive);
+  if (activeOnes.length === 0) return null;
+  if (activeOnes.length === 1) return activeOnes[0];
 
-  return list.find(isSubscriptionCurrentlyActive) ?? null;
+  const storePlanId = store ? getStorePlanId(store) : null;
+  if (storePlanId != null) {
+    const matched = activeOnes.find(
+      (sub) => Number(sub.plan_id ?? sub.plan?.id) === Number(storePlanId),
+    );
+    if (matched) return matched;
+  }
+
+  return [...activeOnes].sort((a, b) => {
+    const startDiff = subscriptionStartTimestamp(b) - subscriptionStartTimestamp(a);
+    if (startDiff !== 0) return startDiff;
+    return Number(b.id ?? 0) - Number(a.id ?? 0);
+  })[0];
 }
 
 export function pickScheduledStoreSubscriptions(subscriptions = []) {
@@ -135,22 +150,36 @@ export function pickScheduledStoreSubscriptions(subscriptions = []) {
     );
 }
 
-export function mapStoreSubscriptionsForDisplay(subscriptions = [], plans = []) {
+export function mapStoreSubscriptionsForDisplay(subscriptions = [], plans = [], store = null) {
   const list = Array.isArray(subscriptions) ? subscriptions : [];
+  const primaryActive = pickActiveStoreSubscription(list, store);
+  const primaryActiveId = primaryActive?.id ?? null;
 
   const relevant = list.filter((sub) => {
     const phase = resolveSubscriptionPhase(sub);
-    return phase === 'active' || phase === 'scheduled';
+    if (phase === 'scheduled' || phase === 'expired') return true;
+    if (phase === 'active') {
+      return primaryActiveId != null && Number(sub.id) === Number(primaryActiveId);
+    }
+    return false;
   });
 
   return relevant
-    .map((sub) => mapSubscriptionFromApi(sub, plans))
     .sort((a, b) => {
-      const aScheduled = a.isScheduled;
-      const bScheduled = b.isScheduled;
-      if (aScheduled !== bScheduled) return aScheduled ? 1 : -1;
+      const phaseA = resolveSubscriptionPhase(a);
+      const phaseB = resolveSubscriptionPhase(b);
+      const rank = { active: 0, scheduled: 1, expired: 2 };
+      const orderDiff = rank[phaseA] - rank[phaseB];
+      if (orderDiff !== 0) return orderDiff;
+      if (phaseA === 'expired') {
+        return subscriptionEndTimestamp(b) - subscriptionEndTimestamp(a);
+      }
+      if (phaseA === 'scheduled') {
+        return subscriptionStartTimestamp(a) - subscriptionStartTimestamp(b);
+      }
       return 0;
-    });
+    })
+    .map((sub) => mapSubscriptionFromApi(sub, plans));
 }
 
 export function pickLatestStoreSubscription(subscriptions = []) {
@@ -313,7 +342,12 @@ export async function enrichUserWithSubscription(user) {
     return user;
   }
 
-  const active = pickActiveStoreSubscription(subscriptions);
+  const matchedStore =
+    (user.owned_stores || user.ownedStores || []).find(
+      (item) => Number(item.id) === Number(storeId),
+    ) ?? user.store;
+
+  const active = pickActiveStoreSubscription(subscriptions, matchedStore);
   const latest = pickLatestStoreSubscription(subscriptions);
   const sourceSubscription = active ?? latest;
   const patch = subscriptionToStorePatch(sourceSubscription);

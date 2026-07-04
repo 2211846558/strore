@@ -62,7 +62,7 @@ const Plans = ({ onboarding = false }) => {
   }, [storeId]);
 
   const currentSubscription = useMemo(() => {
-    const activeApiSub = pickActiveStoreSubscription(subscriptionHistory);
+    const activeApiSub = pickActiveStoreSubscription(subscriptionHistory, store);
     const latestApiSub = pickLatestStoreSubscription(subscriptionHistory);
     const apiSub = activeApiSub ?? latestApiSub;
 
@@ -74,8 +74,8 @@ const Plans = ({ onboarding = false }) => {
   }, [store, availablePlans, subscriptionHistory]);
 
   const mySubscriptions = useMemo(
-    () => mapStoreSubscriptionsForDisplay(subscriptionHistory, availablePlans),
-    [subscriptionHistory, availablePlans],
+    () => mapStoreSubscriptionsForDisplay(subscriptionHistory, availablePlans, store),
+    [subscriptionHistory, availablePlans, store],
   );
   const hasLivePlan = storeHasActivePlan(store);
 
@@ -272,7 +272,7 @@ const Plans = ({ onboarding = false }) => {
               ))
             ) : (
               <p className="no-results">
-                لا يوجد اشتراك نشط. انتقل إلى «الخطط المتاحة» للاشتراك في خطة.
+                لا توجد اشتراكات مسجّلة. انتقل إلى «الخطط المتاحة» للاشتراك في خطة.
               </p>
             )}
           </div>
