@@ -66,6 +66,13 @@ export function buildStoreJoinFormData(form, logoFile) {
   if (isLocalStoreType(form.storeType)) {
     fd.append('zone_id', String(Number(form.zoneId)));
     fd.append('google_map_url', form.googleMapUrl.trim());
+  } else {
+    if (form.zoneId) {
+      fd.append('zone_id', String(Number(form.zoneId)));
+    }
+    if (form.googleMapUrl?.trim()) {
+      fd.append('google_map_url', form.googleMapUrl.trim());
+    }
   }
 
   if (logoFile) {

@@ -439,9 +439,11 @@ const Join = () => {
             </div>
           )}
 
-          {formData.storeType && isLocalType(formData.storeType) && (
+          {formData.storeType && (
             <div className="input-group">
-              <label htmlFor="googleMapUrl">رابط خريطة Google</label>
+              <label htmlFor="googleMapUrl">
+                رابط خريطة Google {!isLocalType(formData.storeType) && <span className="optional-mark">(اختياري)</span>}
+              </label>
               <div className="input-wrapper">
                 <input
                   id="googleMapUrl"
@@ -450,7 +452,7 @@ const Join = () => {
                   placeholder="https://maps.google.com/..."
                   value={formData.googleMapUrl}
                   onChange={handleChange}
-                  required
+                  required={isLocalType(formData.storeType)}
                   dir="ltr"
                   className={inputClass}
                 />
