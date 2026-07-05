@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X, Box, Layers, BarChart2, Pencil } from 'lucide-react';
+import { X, Box, Layers, BarChart2, Pencil, ChevronDown, ChevronUp } from 'lucide-react';
 import { fetchManagedProductDetails, fetchProductVariants } from '../../api/products';
-import { loadRecentShipments } from '../../api/inventory';
+import { fetchShipments } from '../../api/inventory';
 import { getApiErrorMessage } from '../../api/stores';
 import './ProductDetailModal.css';
 
@@ -11,6 +11,14 @@ const ProductDetailModal = ({ isOpen, onClose, product, storeId, onEdit }) => {
   const [shipmentsLog, setShipmentsLog] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [expandedShipments, setExpandedShipments] = useState({});
+
+  const toggleShipmentExpanded = (code) => {
+    setExpandedShipments((prev) => ({
+      ...prev,
+      [code]: !prev[code],
+    }));
+  };
 
   useEffect(() => {
     if (!isOpen || !product?.id) return;
@@ -21,6 +29,7 @@ const ProductDetailModal = ({ isOpen, onClose, product, storeId, onEdit }) => {
     setDetails(null);
     setVariants([]);
     setShipmentsLog([]);
+    setExpandedShipments({});
 
     fetchManagedProductDetails(product.id)
       .then((data) => {
@@ -31,36 +40,45 @@ const ProductDetailModal = ({ isOpen, onClose, product, storeId, onEdit }) => {
           if (cancelled) return;
           setVariants(variantData);
 
-          const recent = loadRecentShipments(storeId);
-          const productShipments = [];
+          return fetchShipments({ storeId }).then((result) => {
+            if (cancelled) return;
+            const shipmentsList = result?.shipments || [];
+            const productShipments = [];
+            shipmentsList.forEach((shipment) => {
+              const matchingItems = shipment.items?.filter((item) =>
+                variantData.some((v) => String(v.id) === String(item.variantId)),
+              ) || [];
 
-          recent.forEach((shipment) => {
-            const matchingItems = shipment.items?.filter((item) =>
-              variantData.some((v) => String(v.id) === String(item.variantId)),
-            ) || [];
+              if (matchingItems.length > 0) {
+                const totalQuantity = matchingItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+                const totalRemaining = matchingItems.reduce((sum, item) => sum + Number(item.remainingQuantity ?? Math.max(0, item.quantity - 10)), 0);
+                const prices = matchingItems.map(item => Number(item.sellingPrice || data.price));
+                const minPrice = Math.min(...prices);
+                const maxPrice = Math.max(...prices);
+                const priceDisplay = minPrice === maxPrice ? String(minPrice) : `${minPrice} - ${maxPrice}`;
 
-            if (matchingItems.length > 0) {
-              matchingItems.forEach((item) => {
                 productShipments.push({
                   code: shipment.code,
-                  quantity: item.quantity,
-                  remaining: Math.max(0, item.quantity - 10),
-                  price: item.sellingPrice || data.price,
-                  status: shipment.statusRaw === 'received' ? '✅ منتهية' : '🟢 حالية',
+                  quantity: totalQuantity,
+                  remaining: totalRemaining,
+                  price: priceDisplay,
+                  status:
+                    shipment.statusRaw === 'received'
+                      ? '✅ منتهية'
+                      : shipment.statusRaw === 'pending' || shipment.statusRaw === 'draft'
+                        ? '🟢 حالية'
+                        : '🔒 في الانتظار',
+                  matchingItems: matchingItems.map(item => ({
+                    ...item,
+                    variantLabel: item.variantLabel || item.name,
+                    price: item.sellingPrice || data.price,
+                  })),
                 });
-              });
-            }
+              }
+            });
+
+            setShipmentsLog(productShipments);
           });
-
-          if (productShipments.length === 0) {
-            productShipments.push(
-              { code: 'SH-001', quantity: 50, remaining: 0, price: Number(data.price || 25), status: '✅ منتهية' },
-              { code: 'SH-002', quantity: 30, remaining: 30, price: Number(data.price || 25) + 3, status: '🟢 حالية' },
-              { code: 'SH-003', quantity: 20, remaining: 20, price: Number(data.price || 25) + 10, status: '🔒 في الانتظار' },
-            );
-          }
-
-          setShipmentsLog(productShipments);
         });
       })
       .catch((err) => {
@@ -185,32 +203,64 @@ const ProductDetailModal = ({ isOpen, onClose, product, storeId, onEdit }) => {
                         <th>الكمية المتبقية</th>
                         <th>سعر البيع</th>
                         <th>الحالة</th>
+                        <th>التفاصيل</th>
                       </tr>
                     </thead>
                     <tbody>
                       {loading ? (
                         <tr>
-                          <td colSpan="5" className="no-results-cell">جاري تحميل سجل الشحنات...</td>
+                          <td colSpan="6" className="no-results-cell">جاري تحميل سجل الشحنات...</td>
                         </tr>
                       ) : shipmentsLog.length > 0 ? (
                         shipmentsLog.map((sh, idx) => (
-                          <tr key={idx}>
-                            <td className="sh-code">{sh.code}</td>
-                            <td>{sh.quantity} قطعة</td>
-                            <td>{sh.remaining} قطعة</td>
-                            <td>{sh.price} د.ل</td>
-                            <td>
-                              <span className={`status-badge-indicator ${
-                                sh.status.includes('منتهية') ? 'finished' : sh.status.includes('حالية') ? 'current' : 'waiting'
-                              }`}>
-                                {sh.status}
-                              </span>
-                            </td>
-                          </tr>
+                          <React.Fragment key={sh.code || idx}>
+                            <tr>
+                              <td className="sh-code">{sh.code}</td>
+                              <td>{sh.quantity} قطعة</td>
+                              <td>{sh.remaining} قطعة</td>
+                              <td>{sh.price} د.ل</td>
+                              <td>
+                                <span className={`status-badge-indicator ${
+                                  sh.status.includes('منتهية') ? 'finished' : sh.status.includes('حالية') ? 'current' : 'waiting'
+                                }`}>
+                                  {sh.status}
+                                </span>
+                              </td>
+                              <td>
+                                <button
+                                  type="button"
+                                  className="toggle-details-btn"
+                                  onClick={() => toggleShipmentExpanded(sh.code)}
+                                  title="عرض التنوعات"
+                                >
+                                  {expandedShipments[sh.code] ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                                </button>
+                              </td>
+                            </tr>
+                            {expandedShipments[sh.code] && (
+                              <tr className="expanded-details-row">
+                                <td colSpan="6">
+                                  <div className="expanded-details-container">
+                                    <div className="details-header-title">التنوعات التي تحملها الشحنة:</div>
+                                    <div className="details-variants-list">
+                                      {sh.matchingItems.map((item, itemIdx) => (
+                                        <div key={itemIdx} className="details-variant-item">
+                                          <span className="variant-label-name">{item.variantLabel || item.name}</span>
+                                          <span className="variant-qty-info">
+                                            الكمية: {item.quantity} قطعة | المتبقي: {item.remainingQuantity ?? Math.max(0, item.quantity - 10)} قطعة | السعر: {item.price} د.ل
+                                          </span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
                         ))
                       ) : (
                         <tr>
-                          <td colSpan="5" className="no-results-cell">لا توجد شحنات مسجلة لهذا المنتج.</td>
+                          <td colSpan="6" className="no-results-cell">لا توجد شحنات مسجلة لهذا المنتج.</td>
                         </tr>
                       )}
                     </tbody>

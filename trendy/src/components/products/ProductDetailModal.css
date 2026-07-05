@@ -295,3 +295,73 @@
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+/* ── Shipment Log Details Expansion ── */
+.toggle-details-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  margin: 0 auto;
+}
+
+.toggle-details-btn:hover {
+  background-color: var(--bg-main);
+  color: var(--primary);
+}
+
+.expanded-details-row td {
+  background-color: var(--bg-main);
+  padding: 12px 20px !important;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.expanded-details-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  text-align: right;
+  border-left: 3px solid var(--primary);
+  padding-left: 12px;
+  padding-right: 12px;
+}
+
+.details-header-title {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text-secondary);
+}
+
+.details-variants-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.details-variant-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.variant-label-name {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.variant-qty-info {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
