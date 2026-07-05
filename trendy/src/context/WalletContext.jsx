@@ -43,18 +43,22 @@ export const WalletProvider = ({ children }) => {
     refreshWallet();
   }, [refreshWallet, storeId]);
 
-  const withdrawFromWallet = useCallback(async ({ amount, cardNumber }) => {
+  const withdrawFromWallet = useCallback(async ({ amount, paymentMethodId }) => {
     const value = Number(amount);
     if (!value || value <= 0) {
       throw new Error('يرجى إدخال مبلغ صالح');
     }
-    if (!cardNumber?.trim()) {
-      throw new Error('يرجى إدخال رقم البطاقة');
+    if (!paymentMethodId) {
+      throw new Error('تعذّر الحصول على معرّف الدفع من Stripe');
     }
     const chargeContext = await resolveWalletChargeContext(storeId);
     const targetStoreId = chargeContext.storeId;
 
-    await withdrawStoreWallet({ storeId: targetStoreId, amount: value, cardNumber: cardNumber.trim() });
+    await withdrawStoreWallet({
+      storeId: targetStoreId,
+      amount: value,
+      paymentMethodId,
+    });
     await refreshWallet();
     return value;
   }, [storeId, refreshWallet]);

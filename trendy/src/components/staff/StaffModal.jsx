@@ -94,6 +94,8 @@ const StaffModal = ({ isOpen, onClose, onSave, member, roles, isSaving = false }
               <label>البريد الإلكتروني</label>
               <input
                 type="email"
+                name="staff-email"
+                autoComplete="email"
                 value={form.email}
                 onChange={(e) => handleChange('email', e.target.value)}
                 placeholder="email@trendy.com"
@@ -103,10 +105,13 @@ const StaffModal = ({ isOpen, onClose, onSave, member, roles, isSaving = false }
             <div className="form-group">
               <label>رقم الهاتف</label>
               <input
-                type="text"
+                type="tel"
+                inputMode="tel"
+                name="staff-phone"
+                autoComplete="off"
                 value={form.phone}
                 onChange={(e) => handleChange('phone', e.target.value)}
-                placeholder="09XXXXXXXX"
+                placeholder="أدخل رقم الهاتف"
                 disabled={isSaving}
               />
             </div>

@@ -122,15 +122,17 @@ export async function chargeStoreWallet({ storeId, amount, paymentMethodId }) {
 }
 
 /**
- * POST /api/stores/wallet/withdraw — body: { store_id, amount, card_number }
+ * POST /api/stores/wallet/withdraw — body: { store_id, amount, payment_method_id }
  */
-export async function withdrawStoreWallet({ storeId, amount, cardNumber }) {
+export async function withdrawStoreWallet({ storeId, amount, paymentMethodId }) {
+  const { storeId: resolvedStoreId } = await resolveWalletChargeContext(storeId);
+
   return apiRequest(API_ENDPOINTS.storeWalletWithdraw, {
     method: 'POST',
     body: {
-      store_id: Number(storeId),
+      store_id: Number(resolvedStoreId),
       amount: Number(amount),
-      card_number: String(cardNumber).replace(/\s/g, ''),
+      payment_method_id: paymentMethodId,
     },
   });
 }

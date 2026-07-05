@@ -25,6 +25,7 @@ const FIELD_LABELS = {
   unit_cost: 'سعر التكلفة',
   role_id: 'الدور الوظيفي',
   job_title: 'المسمى الوظيفي',
+  payment_method_id: 'طريقة الدفع',
   start_at: 'تاريخ البداية',
   end_at: 'تاريخ النهاية',
   status: 'حالة الطلب',

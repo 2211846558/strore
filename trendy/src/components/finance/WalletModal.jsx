@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Wallet, Plus, ArrowDownLeft, ArrowUpRight, Minus } from 'lucide-react';
 import SadadRechargeModal from './SadadRechargeModal';
+import WalletTransferModal from './WalletTransferModal';
 import { useWallet } from '../../context/WalletContext';
 import { getApiErrorMessage } from '../../api/stores';
 import './WalletModal.css';
@@ -9,10 +10,7 @@ const WalletModal = ({ isOpen, onClose, onToast }) => {
   const { balance, status, transactions, loading, rechargeViaStripe, withdrawFromWallet, refreshWallet } =
     useWallet();
   const [rechargeOpen, setRechargeOpen] = useState(false);
-  const [withdrawOpen, setWithdrawOpen] = useState(false);
-  const [withdrawAmount, setWithdrawAmount] = useState('');
-  const [cardNumber, setCardNumber] = useState('');
-  const [withdrawing, setWithdrawing] = useState(false);
+  const [transferOpen, setTransferOpen] = useState(false);
 
   useEffect(() => {
     if (isOpen) refreshWallet();
@@ -20,21 +18,12 @@ const WalletModal = ({ isOpen, onClose, onToast }) => {
 
   if (!isOpen) return null;
 
-  const handleWithdraw = async () => {
-    setWithdrawing(true);
+  const handleTransferConfirm = async ({ paymentMethodId, amount }) => {
     try {
-      const amount = await withdrawFromWallet({
-        amount: withdrawAmount,
-        cardNumber,
-      });
-      setWithdrawOpen(false);
-      setWithdrawAmount('');
-      setCardNumber('');
-      onToast?.(`تم سحب ${amount.toLocaleString()} د.ل بنجاح`);
+      const transferred = await withdrawFromWallet({ paymentMethodId, amount });
+      onToast?.(`تم تحويل ${transferred.toLocaleString()} د.ل بنجاح`);
     } catch (err) {
-      onToast?.(getApiErrorMessage(err, 'تعذّر إتمام عملية السحب'));
-    } finally {
-      setWithdrawing(false);
+      throw new Error(getApiErrorMessage(err, 'تعذّر إتمام عملية التحويل'));
     }
   };
 
@@ -73,41 +62,13 @@ const WalletModal = ({ isOpen, onClose, onToast }) => {
               <button
                 type="button"
                 className="wallet-withdraw-btn"
-                onClick={() => setWithdrawOpen((v) => !v)}
+                onClick={() => setTransferOpen(true)}
               >
                 <Minus size={18} />
-                سحب الرصيد
+                تحويل الرصيد
               </button>
             </div>
           </div>
-
-          {withdrawOpen && (
-            <div className="wallet-withdraw-form">
-              <input
-                type="number"
-                min="1"
-                placeholder="المبلغ (د.ل)"
-                value={withdrawAmount}
-                onChange={(e) => setWithdrawAmount(e.target.value)}
-                dir="ltr"
-              />
-              <input
-                type="text"
-                placeholder="رقم البطاقة"
-                value={cardNumber}
-                onChange={(e) => setCardNumber(e.target.value)}
-                dir="ltr"
-              />
-              <button
-                type="button"
-                className="wallet-recharge-btn"
-                onClick={handleWithdraw}
-                disabled={withdrawing || !withdrawAmount || !cardNumber}
-              >
-                {withdrawing ? 'جاري السحب...' : 'تأكيد السحب'}
-              </button>
-            </div>
-          )}
 
           <div className="wallet-transactions">
             <h3>آخر المعاملات</h3>
@@ -144,7 +105,7 @@ const WalletModal = ({ isOpen, onClose, onToast }) => {
             <div>
               <p className="wallet-info-title">معلومات المحفظة</p>
               <p className="wallet-info-text">
-                يمكنك شحن المحفظة ببطاقة بنكية (Stripe) واستخدام الرصيد للاشتراك في الخطط ودفع رسوم المنصة.
+                يمكنك شحن المحفظة أو تحويل الرصيد ببطاقة بنكية (Stripe) واستخدام الرصيد للاشتراك في الخطط ودفع رسوم المنصة.
               </p>
             </div>
           </div>
@@ -155,6 +116,12 @@ const WalletModal = ({ isOpen, onClose, onToast }) => {
         isOpen={rechargeOpen}
         onClose={() => setRechargeOpen(false)}
         onConfirm={handleRechargeConfirm}
+      />
+
+      <WalletTransferModal
+        isOpen={transferOpen}
+        onClose={() => setTransferOpen(false)}
+        onConfirm={handleTransferConfirm}
       />
     </>
   );
