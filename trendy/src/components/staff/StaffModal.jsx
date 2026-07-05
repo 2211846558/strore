@@ -28,16 +28,17 @@ const StaffModal = ({ isOpen, onClose, onSave, member, roles, isSaving = false }
           password: '',
         });
       } else {
+        const staffRole = roles?.find((r) => r.slug === 'store_staff')?.value || '';
         setForm({
           name: '',
           email: '',
           phone: '',
-          role: '',
+          role: staffRole,
           password: '',
         });
       }
     }
-  }, [isOpen, member]);
+  }, [isOpen, member, roles]);
 
   if (!isOpen) return null;
 
@@ -116,7 +117,7 @@ const StaffModal = ({ isOpen, onClose, onSave, member, roles, isSaving = false }
             <select
               value={form.role}
               onChange={(e) => handleChange('role', e.target.value)}
-              disabled={isSaving}
+              disabled={true}
             >
               <option value="">اختر الدور الوظيفي</option>
               {roles.map((r) => (

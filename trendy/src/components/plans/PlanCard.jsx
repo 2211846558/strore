@@ -38,7 +38,7 @@ const PlanCard = ({
       </div>
 
       <button className={`subscribe-btn ${status}`} onClick={onSubscribe}>
-        اشترك في الخطة
+        {status === 'active' ? 'تجديد الاشتراك' : 'اشترك في الخطة'}
       </button>
     </div>
   );

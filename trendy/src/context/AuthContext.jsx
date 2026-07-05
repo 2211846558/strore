@@ -6,6 +6,7 @@ import {
   getActiveStore,
   resolveManagedStoreId,
   storeHasActivePlan,
+  userIsStoreStaff,
   storeLogin as apiStoreLogin,
   storeLogout as apiStoreLogout,
   fetchCurrentUser,
@@ -137,7 +138,12 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const store = useMemo(() => getActiveStore(user), [user]);
-  const hasActivePlan = useMemo(() => storeHasActivePlan(store), [store]);
+  const hasActivePlan = useMemo(() => {
+    if (userIsStoreStaff(user)) {
+      return true;
+    }
+    return storeHasActivePlan(store);
+  }, [store, user]);
 
   const value = useMemo(
     () => ({

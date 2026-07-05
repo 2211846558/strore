@@ -153,11 +153,16 @@
   font-weight: bold;
 }
 
-.subscribe-btn.active {
+.plan-card .subscribe-btn.active {
   background: #10b981 !important;
   color: white !important;
-  cursor: not-allowed;
+  cursor: pointer;
   opacity: 1;
+  transition: all 0.3s ease;
+}
+
+.plan-card .subscribe-btn.active:hover {
+  background: #059669 !important;
 }
 
 .subscribe-btn.scheduled {

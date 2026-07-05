@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import TrendyBrandLogo from '../brand/TrendyBrandLogo';
 import { useAuth } from '../../context/AuthContext';
-import { userHasRole, userCanAccessFinance } from '../../api/auth';
+import { userHasRole, userCanAccessFinance, userIsStoreStaff } from '../../api/auth';
 import EditStoreModal from '../dashboard/EditStoreModal';
 import StoreDetailsModal from '../dashboard/StoreDetailsModal';
 import {
@@ -185,7 +185,9 @@ const Sidebar = ({ onLogout }) => {
 
   const activeMenuItems = [
     ...navMenuItems.filter(
-      (item) => item.path !== '/finance' || userCanAccessFinance(user),
+      (item) =>
+        (item.path !== '/finance' || userCanAccessFinance(user)) &&
+        (item.path !== '/plans' || !userIsStoreStaff(user)),
     ),
     ...(user && userHasRole(user, 'super_admin')
       ? [{ title: 'إدارة الخصائص', icon: Sliders, path: '/attributes' }]

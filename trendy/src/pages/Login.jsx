@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, ArrowRight, Hash } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { getActiveStore, storeHasActivePlan } from '../api/auth';
+import { getActiveStore, storeHasActivePlan, userIsStoreStaff } from '../api/auth';
 import { getApiErrorMessage } from '../api/stores';
 import './Login.css';
 
@@ -24,7 +24,8 @@ const Login = () => {
         storeCode: storeCode.trim(),
       });
       const store = getActiveStore(data.user);
-      navigate(storeHasActivePlan(store) ? '/' : '/plans');
+      const shouldGoToDashboard = userIsStoreStaff(data.user) || storeHasActivePlan(store);
+      navigate(shouldGoToDashboard ? '/' : '/plans');
     } catch (err) {
       setError(getApiErrorMessage(err, 'فشل تسجيل الدخول. تحقق من البيانات.'));
     }

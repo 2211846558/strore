@@ -97,7 +97,7 @@ const Plans = ({ onboarding = false }) => {
   const resolveSubscribeAction = (plan) => {
     if (!currentSubscription) return 'subscribe';
     if (currentSubscription.isExpired && currentSubscription.planId === plan.id) return 'renew';
-    if (!currentSubscription.isExpired && currentSubscription.planId === plan.id) return null;
+    if (!currentSubscription.isExpired && currentSubscription.planId === plan.id) return 'renew';
     if (currentSubscription.planId) return 'change';
     return 'subscribe';
   };
