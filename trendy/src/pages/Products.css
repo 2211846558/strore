@@ -311,7 +311,8 @@
   color: var(--text-secondary);
 }
 
-.row-btn.btn-edit:hover {
+.row-btn.btn-edit:hover,
+.row-btn.btn-details:hover {
   background: var(--primary-light);
   border-color: var(--primary);
   color: var(--primary);

@@ -179,19 +179,24 @@
   font-weight: 700;
 }
 
-.status-badge-indicator.finished {
-  background-color: rgba(34, 197, 94, 0.1);
-  color: #22c55e;
+.status-badge-indicator.received {
+  background: var(--gradient-primary);
+  color: white;
 }
 
-.status-badge-indicator.current {
-  background-color: rgba(59, 130, 246, 0.1);
-  color: #3b82f6;
+.status-badge-indicator.pending {
+  background-color: var(--bg-input);
+  color: var(--text-secondary);
 }
 
-.status-badge-indicator.waiting {
-  background-color: rgba(156, 163, 175, 0.1);
-  color: #9ca3af;
+.status-badge-indicator.cancelled {
+  background-color: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+.status-badge-indicator.archived {
+  background-color: rgba(251, 191, 36, 0.15);
+  color: #fbbf24;
 }
 
 .pd-images-section {

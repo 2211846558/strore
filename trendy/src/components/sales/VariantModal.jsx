@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import {
   getVariantStock,
@@ -7,6 +7,8 @@ import {
 } from '../../api/pos';
 import ExchangePriceDiff from './ExchangePriceDiff';
 import SalesProductThumb from './SalesProductThumb';
+import { buildCandidates } from '../../utils/salesImageHelper';
+import ProductImageLightbox from './ProductImageLightbox';
 import './SalesModals.css';
 
 const VariantModal = ({ isOpen, onClose, product, onAdd, isSaving, exchangeFrom, storeId, storeProducts = [] }) => {
@@ -16,6 +18,8 @@ const VariantModal = ({ isOpen, onClose, product, onAdd, isSaving, exchangeFrom,
   const [liveStock, setLiveStock] = useState(null);
   const [livePrice, setLivePrice] = useState(null);
   const [loadingStock, setLoadingStock] = useState(false);
+  const [isLightboxOpen, setIsLightboxOpen] = useState(false);
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
 
   const activeProduct = product;
   const useDirectSelection = false;
@@ -28,6 +32,7 @@ const VariantModal = ({ isOpen, onClose, product, onAdd, isSaving, exchangeFrom,
       setSelectedVariantId('');
       setLiveStock(null);
       setLivePrice(null);
+      setActiveImageIndex(0);
       return;
     }
 
@@ -138,6 +143,10 @@ const VariantModal = ({ isOpen, onClose, product, onAdd, isSaving, exchangeFrom,
             storeProducts={storeProducts}
             wrapperClassName="sales-modal-product-preview-image"
             alt={activeProduct?.name ?? product?.name}
+            onClick={() => setIsLightboxOpen(true)}
+            enableNavigation={true}
+            currentIndex={activeImageIndex}
+            onIndexChange={setActiveImageIndex}
           />
           <p className="sales-modal-product-name">{activeProduct?.name ?? product.name}</p>
           {selectedAttrsLabel && (
@@ -229,6 +238,17 @@ const VariantModal = ({ isOpen, onClose, product, onAdd, isSaving, exchangeFrom,
           </button>
         </div>
       </div>
+
+      {isLightboxOpen && (
+        <ProductImageLightbox
+          isOpen={isLightboxOpen}
+          onClose={() => setIsLightboxOpen(false)}
+          images={activeProduct ? buildCandidates(activeProduct, storeProducts) : []}
+          productName={activeProduct?.name ?? product?.name}
+          initialIndex={activeImageIndex}
+          onIndexChange={setActiveImageIndex}
+        />
+      )}
     </div>
   );
 };

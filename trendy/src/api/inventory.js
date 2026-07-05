@@ -47,6 +47,8 @@ function formatDate(value) {
 
 function readShipmentItemRemaining(item) {
   for (const field of [
+    'current_stock',
+    'currentStock',
     'remaining_quantity',
     'remaining_qty',
     'remaining',

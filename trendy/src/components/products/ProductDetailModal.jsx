@@ -51,7 +51,7 @@ const ProductDetailModal = ({ isOpen, onClose, product, storeId, onEdit }) => {
 
               if (matchingItems.length > 0) {
                 const totalQuantity = matchingItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
-                const totalRemaining = matchingItems.reduce((sum, item) => sum + Number(item.remainingQuantity ?? Math.max(0, item.quantity - 10)), 0);
+                const totalRemaining = matchingItems.reduce((sum, item) => sum + Number(item.remainingQuantity ?? 0), 0);
                 const prices = matchingItems.map(item => Number(item.sellingPrice || data.price));
                 const minPrice = Math.min(...prices);
                 const maxPrice = Math.max(...prices);
@@ -64,10 +64,15 @@ const ProductDetailModal = ({ isOpen, onClose, product, storeId, onEdit }) => {
                   price: priceDisplay,
                   status:
                     shipment.statusRaw === 'received'
-                      ? '✅ منتهية'
+                      ? 'مستلمة'
                       : shipment.statusRaw === 'pending' || shipment.statusRaw === 'draft'
-                        ? '🟢 حالية'
-                        : '🔒 في الانتظار',
+                        ? 'قيد الانتظار'
+                        : shipment.statusRaw === 'cancelled'
+                          ? 'ملغاة'
+                          : shipment.statusRaw === 'archived'
+                            ? 'مؤرشف'
+                            : 'قيد الانتظار',
+                  statusRaw: shipment.statusRaw,
                   matchingItems: matchingItems.map(item => ({
                     ...item,
                     variantLabel: item.variantLabel || item.name,
@@ -220,9 +225,7 @@ const ProductDetailModal = ({ isOpen, onClose, product, storeId, onEdit }) => {
                               <td>{sh.remaining} قطعة</td>
                               <td>{sh.price} د.ل</td>
                               <td>
-                                <span className={`status-badge-indicator ${
-                                  sh.status.includes('منتهية') ? 'finished' : sh.status.includes('حالية') ? 'current' : 'waiting'
-                                }`}>
+                                <span className={`status-badge-indicator ${sh.statusRaw || 'pending'}`}>
                                   {sh.status}
                                 </span>
                               </td>
@@ -247,7 +250,7 @@ const ProductDetailModal = ({ isOpen, onClose, product, storeId, onEdit }) => {
                                         <div key={itemIdx} className="details-variant-item">
                                           <span className="variant-label-name">{item.variantLabel || item.name}</span>
                                           <span className="variant-qty-info">
-                                            الكمية: {item.quantity} قطعة | المتبقي: {item.remainingQuantity ?? Math.max(0, item.quantity - 10)} قطعة | السعر: {item.price} د.ل
+                                            الكمية: {item.quantity} قطعة | المتبقي: {item.remainingQuantity} قطعة | السعر: {item.price} د.ل
                                           </span>
                                         </div>
                                       ))}

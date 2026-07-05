@@ -306,11 +306,11 @@ const Products = () => {
                         )}
                         <button
                           type="button"
-                          className="row-btn btn-edit"
-                          onClick={() => openEdit(product)}
-                          title="تعديل"
+                          className="row-btn btn-details"
+                          onClick={() => setDetailProduct(product)}
+                          title="تفاصيل"
                         >
-                          تعديل
+                          تفاصيل
                         </button>
                         <button
                           type="button"
@@ -375,6 +375,10 @@ const Products = () => {
         onClose={() => setDetailProduct(null)}
         product={detailProduct}
         storeId={storeId}
+        onEdit={(prod) => {
+          setDetailProduct(null);
+          openEdit(prod);
+        }}
       />
 
       <MostOrderedProductsModal

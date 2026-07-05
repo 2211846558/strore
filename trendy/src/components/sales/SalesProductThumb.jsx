@@ -1,39 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { productPlaceholderImage } from '../../api/media';
-import { findStoreProductForImage } from '../../api/posImages';
-
-function isPlaceholder(url) {
-  return typeof url === 'string' && url.startsWith('data:image/svg+xml');
-}
-
-function buildCandidates(item, storeProducts) {
-  const list = [];
-
-  const push = (url) => {
-    if (url && !isPlaceholder(url) && !list.includes(url)) list.push(url);
-  };
-
-  // صور مدمجة مباشرة من قائمة المنتجات (الأولوية)
-  push(item?.image);
-  (item?.imageCandidates ?? []).forEach(push);
-  (item?.images ?? []).forEach((img) => {
-    push(img?.url);
-    (img?.candidates ?? []).forEach(push);
-  });
-
-  const itemId = Number(item?.id);
-  const matched = findStoreProductForImage(item, storeProducts);
-  if (matched && Number(matched.id) !== itemId) {
-    push(matched.image);
-    (matched.imageCandidates ?? []).forEach(push);
-    (matched.images ?? []).forEach((img) => {
-      push(img?.url);
-      (img?.candidates ?? []).forEach(push);
-    });
-  }
-
-  return list;
-}
+import { buildCandidates } from '../../utils/salesImageHelper';
 
 /**
  * يعرض صورة المنتج بنفس روابط صفحة «المنتجات» مع تجربة بدائل عند فشل التحميل
@@ -45,20 +13,39 @@ const SalesProductThumb = ({
   wrapperClassName,
   alt,
   loading = 'lazy',
+  onClick,
+  enableNavigation = false,
+  currentIndex,
+  onIndexChange,
 }) => {
   const candidates = useMemo(
     () => buildCandidates(item, storeProducts),
     [item, storeProducts],
   );
 
-  const [index, setIndex] = useState(0);
+  const [localIndex, setLocalIndex] = useState(0);
+
+  const index = currentIndex !== undefined ? currentIndex : localIndex;
+  const setIndex = onIndexChange !== undefined ? onIndexChange : setLocalIndex;
 
   useEffect(() => {
-    setIndex(0);
-  }, [item?.id, item?.name, item?.sku, candidates]);
+    if (currentIndex === undefined) {
+      setIndex(0);
+    }
+  }, [item?.id, item?.name, item?.sku, candidates, currentIndex, setIndex]);
 
   const src =
     index < candidates.length ? candidates[index] : productPlaceholderImage();
+
+  const handlePrev = (e) => {
+    e.stopPropagation();
+    setIndex(index === 0 ? candidates.length - 1 : index - 1);
+  };
+
+  const handleNext = (e) => {
+    e.stopPropagation();
+    setIndex(index === candidates.length - 1 ? 0 : index + 1);
+  };
 
   const image = (
     <img
@@ -66,12 +53,50 @@ const SalesProductThumb = ({
       src={src}
       alt={alt ?? item?.name ?? ''}
       loading={loading}
-      onError={() => setIndex((prev) => prev + 1)}
+      onError={() => {
+        if (index < candidates.length - 1) {
+          setIndex(index + 1);
+        }
+      }}
+      onClick={wrapperClassName ? undefined : onClick}
+      style={onClick ? { cursor: 'pointer' } : undefined}
     />
   );
 
   if (wrapperClassName) {
-    return <div className={wrapperClassName}>{image}</div>;
+    return (
+      <div
+        className={`${wrapperClassName} ${onClick ? 'clickable-thumb' : ''}`}
+        onClick={onClick}
+        style={onClick ? { cursor: 'pointer' } : undefined}
+      >
+        {image}
+
+        {enableNavigation && candidates.length > 1 && (
+          <>
+            <button
+              type="button"
+              className="image-nav-btn prev"
+              onClick={handlePrev}
+              aria-label="الصورة السابقة"
+            >
+              <ChevronRight size={16} />
+            </button>
+            <button
+              type="button"
+              className="image-nav-btn next"
+              onClick={handleNext}
+              aria-label="الصورة التالية"
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <span className="image-count-label">
+              {index + 1}/{candidates.length}
+            </span>
+          </>
+        )}
+      </div>
+    );
   }
 
   return image;
