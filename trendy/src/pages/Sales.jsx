@@ -38,6 +38,7 @@ import { useAuth } from '../context/AuthContext';
 import OrderDetailModal from '../components/orders/OrderDetailModal';
 import VariantModal from '../components/sales/VariantModal';
 import CreateInvoiceModal from '../components/sales/CreateInvoiceModal';
+import SalesProductThumb from '../components/sales/SalesProductThumb';
 import RefundModal from '../components/sales/RefundModal';
 import ExchangeModal from '../components/sales/ExchangeModal';
 import PosOrderActionModal from '../components/sales/PosOrderActionModal';
@@ -629,31 +630,22 @@ const Sales = () => {
                       onClick={() => !outOfStock && openProduct(product)}
                       onKeyDown={(e) => e.key === 'Enter' && !outOfStock && openProduct(product)}
                     >
-                      <img
+                      <SalesProductThumb
+                        item={product}
+                        storeProducts={products}
                         className="sales-product-image"
-                        src={product.image}
+                        wrapperClassName="sales-product-image-wrap"
                         alt={product.name}
-                        loading="lazy"
-                      />
-                      <div className="sales-product-body">
-                        <p className="sales-product-name">{product.name}</p>
-                        <div className="sales-product-colors">
-                          {product.colors.map((c) => (
-                            <span key={c} className="sales-color-dot">
-                              <span
-                                className="sales-color-circle"
-                                style={{ background: colorDots[c] || '#ccc' }}
-                              />
-                              {c}
-                            </span>
-                          ))}
+                        enableNavigation={true}
+                      >
+                        <div className="sales-product-name-overlay">
+                          {product.name}
                         </div>
-                        <div className="sales-product-sizes">
-                          {product.sizes.map((s) => (
-                            <span key={s} className="sales-size-pill">
-                              {s}
-                            </span>
-                          ))}
+                      </SalesProductThumb>
+                      <div className="sales-product-body">
+                        <div className="sales-product-sku">
+                          <span className="sales-sku-label">SKU:</span>
+                          <span className="sales-sku-value">{product.sku || '—'}</span>
                         </div>
                         <div className="sales-product-footer">
                           <span className="sales-product-stock">
@@ -685,7 +677,6 @@ const Sales = () => {
                 <table className="sales-invoices-table">
                   <thead>
                     <tr>
-                      <th>#</th>
                       <th>رقم الطلب</th>
                       <th>المنتج</th>
                       <th>الكمية</th>
@@ -700,7 +691,6 @@ const Sales = () => {
                       const variantInfo = rr.product_variant?.sku ?? '';
                       return (
                         <tr key={rr.id}>
-                          <td className="sales-invoices-cell-number">{rr.id}</td>
                           <td className="sales-invoices-cell-number">
                             {rr.order?.order_number ?? `#${rr.order_id}`}
                           </td>
@@ -772,7 +762,6 @@ const Sales = () => {
                 <table className="sales-invoices-table">
                   <thead>
                     <tr>
-                      <th>#</th>
                       <th>رقم الطلب</th>
                       <th>المنتج المستبدل</th>
                       <th>الكمية</th>
@@ -791,7 +780,6 @@ const Sales = () => {
                       const priceDiff = rr.replacement?.price_difference;
                       return (
                         <tr key={rr.id}>
-                          <td className="sales-invoices-cell-number">{rr.id}</td>
                           <td className="sales-invoices-cell-number">
                             {rr.order?.order_number ?? `#${rr.order_id}`}
                           </td>

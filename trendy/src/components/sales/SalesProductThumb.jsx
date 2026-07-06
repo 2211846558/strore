@@ -17,6 +17,7 @@ const SalesProductThumb = ({
   enableNavigation = false,
   currentIndex,
   onIndexChange,
+  children,
 }) => {
   const candidates = useMemo(
     () => buildCandidates(item, storeProducts),
@@ -95,6 +96,7 @@ const SalesProductThumb = ({
             </span>
           </>
         )}
+        {children}
       </div>
     );
   }

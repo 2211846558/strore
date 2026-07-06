@@ -155,8 +155,11 @@ export function mapPosCatalogProduct(raw, inventoryStock = null) {
   return {
     id: Number(raw.id),
     name: raw.name ?? raw.product_name ?? '—',
+    sku: raw.sku ?? variants[0]?.sku ?? '',
     price: Math.min(...variants.map((v) => v.price)),
     image: resolveProductImage(raw),
+    images: raw.images ?? raw.product_images ?? [],
+    imageCandidates: raw.imageCandidates ?? raw.image_candidates ?? [],
     colors,
     sizes,
     variants,

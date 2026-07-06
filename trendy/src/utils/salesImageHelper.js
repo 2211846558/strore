@@ -19,13 +19,34 @@ export function buildCandidates(item, storeProducts) {
     (img?.candidates ?? []).forEach(push);
   });
 
+  // صور المتغيرات التابعة للمنتج
+  (item?.variants ?? []).forEach((v) => {
+    push(v?.image);
+    (v?.imageCandidates ?? []).forEach(push);
+    (v?.images ?? []).forEach((img) => {
+      push(img?.url);
+      (img?.candidates ?? []).forEach(push);
+    });
+  });
+
+  const itemId = Number(item?.id);
   const matched = findStoreProductForImage(item, storeProducts);
-  if (matched) {
+  if (matched && Number(matched.id) !== itemId) {
     push(matched.image);
     (matched.imageCandidates ?? []).forEach(push);
     (matched.images ?? []).forEach((img) => {
       push(img?.url);
       (img?.candidates ?? []).forEach(push);
+    });
+
+    // صور المتغيرات التابعة للمنتج المطابق
+    (matched.variants ?? []).forEach((v) => {
+      push(v?.image);
+      (v?.imageCandidates ?? []).forEach(push);
+      (v?.images ?? []).forEach((img) => {
+        push(img?.url);
+        (img?.candidates ?? []).forEach(push);
+      });
     });
   }
 
