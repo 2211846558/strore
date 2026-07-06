@@ -161,14 +161,22 @@ const OrderDetailModal = ({
                         <div key={idx} className="order-product-item">
                           <div className="order-product-item-main">
                             <div className="order-product-info">
-                              <span className="order-product-name">
-                                {p.name}
-                                {getProductAttributes(p).length ? (
-                                  ` — ${getProductAttributes(p).map(attr => formatVariantAttribute(attr)).join(' / ')}`
-                                ) : getVariantLabel(p) && getVariantLabel(p) !== '—' ? (
-                                  ` — ${getVariantLabel(p)}`
-                                ) : ''}
-                              </span>
+                              <span className="order-product-name">{p.name}</span>
+                              {hasVariantDetails(p) && (
+                                <div className="order-product-variant">
+                                  {getProductAttributes(p).length ? (
+                                    getProductAttributes(p).map((attr, attrIdx) => (
+                                      <span key={attrIdx} className="order-product-variant-tag">
+                                        {formatVariantAttribute(attr)}
+                                      </span>
+                                    ))
+                                  ) : getVariantLabel(p) && getVariantLabel(p) !== '—' ? (
+                                    <span className="order-product-variant-tag">
+                                      {getVariantLabel(p)}
+                                    </span>
+                                  ) : null}
+                                </div>
+                              )}
                             </div>
                             <span className="order-product-meta">
                               {p.quantity > 1 ? `× ${p.quantity}` : ''}

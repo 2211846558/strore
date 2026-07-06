@@ -20,7 +20,9 @@ export function resolvePromotionDisplayStatus(row) {
   if (end && end < now) {
     return { status: 'منتهي', active: false };
   }
-  if (start && start > now) {
+  const todayEnd = new Date();
+  todayEnd.setHours(23, 59, 59, 999);
+  if (start && start > todayEnd) {
     return { status: 'مجدول', active: true };
   }
   return { status: 'نشط', active: row.status === 'active' || Boolean(row.is_active) };
