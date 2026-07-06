@@ -162,21 +162,21 @@ const OrderDetailModal = ({
                           <div className="order-product-item-main">
                             <div className="order-product-info">
                               <span className="order-product-name">{p.name}</span>
-                              {hasVariantDetails(p) && (
+                              {getProductAttributes(p).length ? (
                                 <div className="order-product-variant">
-                                  {getProductAttributes(p).length ? (
-                                    getProductAttributes(p).map((attr, attrIdx) => (
-                                      <span key={attrIdx} className="order-product-variant-tag">
-                                        {formatVariantAttribute(attr)}
-                                      </span>
-                                    ))
-                                  ) : getVariantLabel(p) && getVariantLabel(p) !== '—' ? (
-                                    <span className="order-product-variant-tag">
-                                      {getVariantLabel(p)}
+                                  {getProductAttributes(p).map((attr, aIdx) => (
+                                    <span key={aIdx} className="order-product-variant-tag">
+                                      {formatVariantAttribute(attr)}
                                     </span>
-                                  ) : null}
+                                  ))}
                                 </div>
-                              )}
+                              ) : getVariantLabel(p) && getVariantLabel(p) !== '—' ? (
+                                <div className="order-product-variant">
+                                  <span className="order-product-variant-tag">
+                                    {getVariantLabel(p)}
+                                  </span>
+                                </div>
+                              ) : null}
                             </div>
                             <span className="order-product-meta">
                               {p.quantity > 1 ? `× ${p.quantity}` : ''}
