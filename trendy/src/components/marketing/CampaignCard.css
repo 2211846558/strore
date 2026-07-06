@@ -5,21 +5,46 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s ease;
   height: 100%;
   overflow: hidden;
+  position: relative;
+}
+
+/* Card Glow Themes based on Tiers */
+.campaign-card.platinum {
+  border-color: rgba(139, 61, 255, 0.2);
+}
+.campaign-card.platinum:hover {
+  border-color: rgba(139, 61, 255, 0.6);
+  box-shadow: 0 12px 30px rgba(139, 61, 255, 0.15), var(--shadow-lg);
+}
+
+.campaign-card.golden {
+  border-color: rgba(251, 191, 36, 0.2);
+}
+.campaign-card.golden:hover {
+  border-color: rgba(251, 191, 36, 0.6);
+  box-shadow: 0 12px 30px rgba(251, 191, 36, 0.15), var(--shadow-lg);
+}
+
+.campaign-card.silver {
+  border-color: rgba(148, 163, 184, 0.2);
+}
+.campaign-card.silver:hover {
+  border-color: rgba(148, 163, 184, 0.6);
+  box-shadow: 0 12px 30px rgba(148, 163, 184, 0.15), var(--shadow-lg);
 }
 
 .campaign-card:hover {
-  transform: translateY(-4px);
-  box-shadow: var(--shadow-md);
+  transform: translateY(-6px);
 }
 
 .campaign-banner {
   position: relative;
   width: 100%;
-  height: 180px;
-  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  height: 190px;
+  background: linear-gradient(135deg, #1e1b4b 0%, #311042 100%);
   overflow: hidden;
 }
 
@@ -28,99 +53,201 @@
   height: 100%;
   object-fit: cover;
   display: block;
+  transition: transform 0.5s ease;
+}
+
+.campaign-card:hover .campaign-banner-img {
+  transform: scale(1.06);
+}
+
+.campaign-banner-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.65) 0%, rgba(0, 0, 0, 0) 60%);
+  pointer-events: none;
+}
+
+/* Badges styling */
+.campaign-badges {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  right: 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 2;
 }
 
 .campaign-status-badge {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  padding: 4px 12px;
+  padding: 5px 12px;
   border-radius: 999px;
-  background: rgba(34, 197, 94, 0.95);
-  color: #14532d;
-  font-size: 12px;
+  background: #10b981;
+  color: #ffffff;
+  font-size: 11px;
   font-weight: 700;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+}
+
+.campaign-tier-badge {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(4px);
+}
+
+.campaign-tier-badge.platinum {
+  background: rgba(139, 61, 255, 0.85);
+  border: 1px solid rgba(139, 61, 255, 0.4);
+}
+
+.campaign-tier-badge.golden {
+  background: rgba(245, 158, 11, 0.85);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+.campaign-tier-badge.silver {
+  background: rgba(100, 116, 139, 0.85);
+  border: 1px solid rgba(100, 116, 139, 0.4);
 }
 
 .campaign-info {
-  background: #1e293b;
-  padding: 16px 20px;
+  background-color: var(--bg-input);
+  padding: 20px;
   text-align: right;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .campaign-title {
   font-size: 18px;
   font-weight: 800;
-  color: #fff;
-  margin: 0 0 6px;
+  color: var(--text-primary);
+  margin: 0 0 8px;
+  line-height: 1.4;
 }
 
 .campaign-desc {
-  font-size: 14px;
-  color: rgba(255, 255, 255, 0.75);
+  font-size: 13.5px;
+  color: var(--text-secondary);
   margin: 0;
-  line-height: 1.5;
+  line-height: 1.6;
+  height: 48px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .campaign-body {
   flex-grow: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 20px 24px 0;
+  padding: 20px;
+  background-color: var(--bg-card);
 }
 
-.campaign-stats {
-  display: flex;
-  justify-content: center;
-  gap: 20px;
+.campaign-stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
 }
 
-.stat {
+.campaign-stat-item {
   display: flex;
   align-items: center;
-  gap: 6px;
-  color: var(--text-secondary);
-  font-size: 14px;
+  gap: 10px;
+  background: var(--bg-input);
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+}
+
+.campaign-stat-item .stat-icon {
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+.campaign-stat-item .stat-details {
+  display: flex;
+  flex-direction: column;
+  text-align: right;
+}
+
+.campaign-stat-item .stat-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+
+.campaign-stat-item .stat-value {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
 }
 
 .campaign-footer {
   display: flex;
-  flex-direction: column;
+  justify-content: space-between;
   align-items: center;
-  gap: 20px;
-  padding: 20px 24px 24px;
+  padding: 16px 20px;
+  background-color: rgba(255, 255, 255, 0.01);
+  border-top: 1px solid var(--border-color);
+  gap: 16px;
+}
+
+.campaign-price-wrapper {
+  display: flex;
+  flex-direction: column;
+  text-align: right;
+}
+
+.price-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 2px;
 }
 
 .campaign-price {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  align-items: baseline;
+  gap: 4px;
 }
 
 .campaign-price .amount {
-  font-size: 32px;
+  font-size: 26px;
   font-weight: 800;
   color: var(--text-primary);
+  line-height: 1;
 }
 
 .campaign-price .currency {
-  font-size: 18px;
+  font-size: 13px;
   font-weight: 700;
-  color: var(--text-primary);
+  color: var(--text-muted);
 }
 
 .campaign-subscribe-btn {
-  width: 100%;
-  padding: 14px;
-  border-radius: 8px;
-  background-color: var(--primary);
+  padding: 12px 20px;
+  border-radius: 10px;
+  background: var(--gradient-primary);
   color: white;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 700;
-  transition: background-color 0.2s ease;
+  transition: all 0.2s ease;
+  box-shadow: var(--shadow-sm);
+  white-space: nowrap;
 }
 
 .campaign-subscribe-btn:hover {
-  background-color: var(--primary-hover);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-primary);
 }
+

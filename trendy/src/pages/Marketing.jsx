@@ -164,7 +164,7 @@ const Marketing = () => {
             {!loadingCampaigns && !campaignsError && visibleCampaigns.length === 0 && (
               <p className="no-results">لا توجد حملات متاحة حالياً.</p>
             )}
-            <div className="plans-grid">
+            <div className="marketing-grid">
               {visibleCampaigns.map((campaign) => (
                 <CampaignCard
                   key={campaign.id}
@@ -184,7 +184,7 @@ const Marketing = () => {
         )}
 
         {activeTab === 'my-campaigns' && (
-          <div className="plans-grid">
+          <div className="marketing-grid">
             {myCampaigns.length > 0 ? (
               myCampaigns.map((campaign) => (
                 <SubscribedCampaignCard

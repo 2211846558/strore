@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Package } from 'lucide-react';
+import { Calendar, Package, Clock } from 'lucide-react';
 import {
   campaignPlaceholderImage,
   getCampaignBannerCandidates,
@@ -54,6 +54,7 @@ const SubscribedCampaignCard = ({
         <span className={`sub-campaign-status ${isActive ? 'active' : 'expired'}`}>
           {status}
         </span>
+        <div className="sub-campaign-banner-overlay" />
       </div>
 
       <div className="sub-campaign-info">
@@ -61,35 +62,51 @@ const SubscribedCampaignCard = ({
         <p className="sub-campaign-desc">{description}</p>
       </div>
 
-      <div className="sub-campaign-header">
-        <div className="sub-campaign-date">
-          من {dateRange.start} إلى {dateRange.end}
+      <div className="sub-campaign-body">
+        <div className="sub-campaign-stats-grid">
+          <div className="sub-campaign-stat-item">
+            <Calendar size={16} className="stat-icon" />
+            <div className="stat-details">
+              <span className="stat-label">تاريخ الحملة</span>
+              <span className="stat-value">من {dateRange.start} إلى {dateRange.end}</span>
+            </div>
+          </div>
+          <div className="sub-campaign-stat-item duration-item">
+            <Clock size={16} className="stat-icon" />
+            <div className="stat-details">
+              <span className="stat-label">المدة الزمنية</span>
+              <span className="stat-value">{duration} أيام</span>
+            </div>
+          </div>
         </div>
+
+        {selectedProducts.length > 0 && (
+          <div className="sub-campaign-products">
+            <div className="sub-campaign-products-header">
+              <Package size={16} />
+              <span>المنتجات المختارة للحملة</span>
+              <span className="sub-campaign-products-count">
+                {selectedProducts.length} منتجات
+              </span>
+            </div>
+            <div className="sub-campaign-products-list">
+              {selectedProducts.map((product) => (
+                <span key={product.id} className="sub-campaign-product-tag">
+                  {product.name}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
-      {selectedProducts.length > 0 && (
-        <div className="sub-campaign-products">
-          <div className="sub-campaign-products-header">
-            <Package size={18} />
-            <span>المنتجات المختارة للحملة</span>
-          </div>
-          <div className="sub-campaign-products-list">
-            {selectedProducts.map((product) => (
-              <span key={product.id} className="sub-campaign-product-tag">
-                {product.name}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-
       <div className="sub-campaign-footer">
-        <div className="sub-campaign-price">
-          <span className="amount">{price}</span>
-          <span className="currency">د.ل</span>
-        </div>
-        <div className="sub-campaign-stats">
-          <span>{duration} أيام</span>
+        <div className="sub-campaign-price-wrapper">
+          <span className="price-label">الرسوم المدفوعة</span>
+          <div className="sub-campaign-price">
+            <span className="amount">{price}</span>
+            <span className="currency">د.ل</span>
+          </div>
         </div>
       </div>
     </div>
@@ -97,3 +114,4 @@ const SubscribedCampaignCard = ({
 };
 
 export default SubscribedCampaignCard;
+
