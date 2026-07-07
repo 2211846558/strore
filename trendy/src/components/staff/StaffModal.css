@@ -96,6 +96,12 @@
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
+.staff-form .form-group select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+}
+
 .staff-form .form-group input:focus,
 .staff-form .form-group select:focus {
   border-color: var(--primary);
