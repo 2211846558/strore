@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   Search,
   Eye,
@@ -26,7 +26,7 @@ import {
   fetchProfitOverview,
   fetchMonthlyRevenueChart,
   exportFinanceReport,
-  filterTransactionsByType,
+  filterFinanceTransactions,
   resolveStoreNetRevenue,
   resolveStoreNetProfit,
   FINANCE_TYPE_OPTIONS,
@@ -77,11 +77,7 @@ const Finance = () => {
     setError('');
     try {
       const [txResult, revenue, profit, chart, custody, logs] = await Promise.all([
-        fetchAllTransactions({
-          search: debouncedSearch,
-          status: statusFilter !== 'all' ? statusFilter : undefined,
-          perPage: 100,
-        }),
+        fetchAllTransactions({ perPage: 100 }),
         fetchRevenueOverview(),
         fetchProfitOverview(),
         fetchMonthlyRevenueChart(5),
@@ -101,13 +97,21 @@ const Finance = () => {
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, statusFilter]);
+  }, []);
 
   useEffect(() => {
     loadFinanceData();
   }, [loadFinanceData]);
 
-  const filteredTransactions = filterTransactionsByType(transactions, typeFilter);
+  const filteredTransactions = useMemo(
+    () =>
+      filterFinanceTransactions(transactions, {
+        search: debouncedSearch,
+        status: statusFilter,
+        type: typeFilter,
+      }),
+    [transactions, debouncedSearch, statusFilter, typeFilter],
+  );
 
   const totalTransactions = transactions.length;
   const successfulTransactions = transactions.filter((t) => t.status === 'ناجح').length;

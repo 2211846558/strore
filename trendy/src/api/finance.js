@@ -107,7 +107,8 @@ export function mapTransaction(row) {
     net,
     fee,
     sign: isCredit ? '+' : '-',
-    status: 'ناجح',
+    status: resolveTransactionStatus(row),
+    statusRaw: String(row.status ?? row.payment_status ?? row.transaction_status ?? 'completed').toLowerCase(),
     description: row.description ?? '',
     balanceAfter: row.balance_after ?? null,
     referenceDetails: row.reference_details ?? null,
@@ -299,9 +300,58 @@ export async function fetchMonthlyRevenueChart(monthCount = 5) {
   return results;
 }
 
+function resolveTransactionStatus(row) {
+  const raw = String(row.status ?? row.payment_status ?? row.transaction_status ?? 'completed').toLowerCase();
+  if (['completed', 'success', 'successful', 'paid', 'ناجح'].includes(raw)) return 'ناجح';
+  if (['pending', 'processing', 'معلق', 'قيد الانتظار'].includes(raw)) return 'معلق';
+  if (['failed', 'cancelled', 'canceled', 'rejected', 'فاشل'].includes(raw)) return 'فاشل';
+  return 'ناجح';
+}
+
+export function filterTransactionsBySearch(transactions, search) {
+  if (!search?.trim()) return transactions;
+  const query = search.trim().toLowerCase();
+
+  return transactions.filter((transaction) => {
+    const haystack = [
+      transaction.code,
+      transaction.client,
+      transaction.description,
+      transaction.type,
+      String(transaction.id),
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+
+    return haystack.includes(query);
+  });
+}
+
+export function filterTransactionsByStatus(transactions, statusFilter) {
+  if (!statusFilter || statusFilter === 'all') return transactions;
+
+  return transactions.filter((transaction) => {
+    if (statusFilter === 'completed') return transaction.status === 'ناجح';
+    if (statusFilter === 'pending') {
+      return transaction.status === 'معلق' || transaction.status === 'قيد الانتظار';
+    }
+    if (statusFilter === 'failed') return transaction.status === 'فاشل';
+    return true;
+  });
+}
+
 export function filterTransactionsByType(transactions, typeFilter) {
   if (!typeFilter || typeFilter === 'all') return transactions;
   return transactions.filter((t) => t.type === typeFilter);
+}
+
+export function filterFinanceTransactions(transactions, { search, status, type } = {}) {
+  let list = transactions;
+  list = filterTransactionsBySearch(list, search);
+  list = filterTransactionsByStatus(list, status);
+  list = filterTransactionsByType(list, type);
+  return list;
 }
 
 export function computeFinanceStats(transactions, profitOverview) {
