@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Search, Eye, X, CheckCircle2 } from 'lucide-react';
 import OrderDropdown from '../components/orders/OrderDropdown';
 import OrderDetailModal from '../components/orders/OrderDetailModal';
+import OrderCancelModal from '../components/orders/OrderCancelModal';
 import {
   fetchAllOrders,
   fetchOrder,
@@ -29,6 +30,7 @@ const Orders = () => {
   const [actionId, setActionId] = useState(null);
   const [error, setError] = useState('');
   const [detailModal, setDetailModal] = useState({ open: false, order: null, loading: false });
+  const [cancelTarget, setCancelTarget] = useState(null);
   const [toast, setToast] = useState(null);
 
   const showToast = (message) => {
@@ -63,19 +65,18 @@ const Orders = () => {
     loadOrders();
   }, [loadOrders]);
 
-  const handleCancel = async (order) => {
+  const handleCancelRequest = (order) => {
     if (!order || !canCancelOrderStatus(order.status)) return;
+    setCancelTarget(order);
+  };
+  const handleConfirmCancel = async (reason) => {
+    if (!cancelTarget) return;
 
-    const confirmed = window.confirm(`هل تريد إلغاء الطلب ${order.id}؟`);
-    if (!confirmed) return;
-
-    const reason = window.prompt('سبب الإلغاء:', 'إلغاء من المتجر');
-    if (reason === null) return;
-
-    setCancellingId(order.orderId);
+    setCancellingId(cancelTarget.orderId);
     try {
-      await cancelOrder(order.orderId, reason);
-      showToast(`تم إلغاء الطلب ${order.id} بنجاح`);
+      await cancelOrder(cancelTarget.orderId, reason);
+      showToast(`تم إلغاء الطلب ${cancelTarget.id} بنجاح`);
+      setCancelTarget(null);
       await loadOrders();
     } catch (err) {
       showToast(getApiErrorMessage(err, 'تعذّر إلغاء الطلب'));
@@ -201,7 +202,7 @@ const Orders = () => {
                 <button
                   type="button"
                   className="order-btn-cancel"
-                  onClick={() => handleCancel(order)}
+                  onClick={() => handleCancelRequest(order)}
                   disabled={
                     !canCancelOrderStatus(order.status) || cancellingId === order.orderId
                   }
@@ -222,6 +223,14 @@ const Orders = () => {
         onClose={() => setDetailModal({ open: false, order: null, loading: false })}
         order={detailModal.order}
         loading={detailModal.loading}
+      />
+
+      <OrderCancelModal
+        isOpen={!!cancelTarget}
+        onClose={() => !cancellingId && setCancelTarget(null)}
+        onConfirm={handleConfirmCancel}
+        order={cancelTarget}
+        isSaving={Boolean(cancellingId)}
       />
 
       {toast && (
