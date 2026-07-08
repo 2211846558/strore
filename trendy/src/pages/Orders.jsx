@@ -5,19 +5,15 @@ import OrderDetailModal from '../components/orders/OrderDetailModal';
 import {
   fetchAllOrders,
   fetchOrder,
-  updateOrderStatus,
   cancelOrder,
   prepareOrder,
-  confirmOrderDelivery,
   canCancelOrderStatus,
   canPrepareOrder,
-  canConfirmDelivery,
 } from '../api/orders';
 import { getApiErrorMessage } from '../api/stores';
 import { useAuth } from '../context/AuthContext';
 import {
   STATUS_FILTER_OPTIONS,
-  ORDER_STATUSES,
   getStatusBadgeClass,
 } from '../data/ordersData';
 import './Orders.css';
@@ -29,7 +25,6 @@ const Orders = () => {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [loading, setLoading] = useState(true);
-  const [updatingId, setUpdatingId] = useState(null);
   const [cancellingId, setCancellingId] = useState(null);
   const [actionId, setActionId] = useState(null);
   const [error, setError] = useState('');
@@ -68,21 +63,6 @@ const Orders = () => {
     loadOrders();
   }, [loadOrders]);
 
-  const handleStatusChange = async (order, newStatus) => {
-    if (!order || order.status === newStatus) return;
-
-    setUpdatingId(order.orderId);
-    try {
-      await updateOrderStatus(order.orderId, newStatus);
-      showToast(`تم تحديث حالة الطلب ${order.id} إلى «${newStatus}»`);
-      await loadOrders();
-    } catch (err) {
-      showToast(getApiErrorMessage(err, 'تعذّر تحديث حالة الطلب'));
-    } finally {
-      setUpdatingId(null);
-    }
-  };
-
   const handleCancel = async (order) => {
     if (!order || !canCancelOrderStatus(order.status)) return;
 
@@ -113,20 +93,6 @@ const Orders = () => {
       await loadOrders();
     } catch (err) {
       showToast(getApiErrorMessage(err, 'تعذّر تجهيز الطلب'));
-    } finally {
-      setActionId(null);
-    }
-  };
-
-  const handleConfirmDelivery = async (order) => {
-    if (!order || !canConfirmDelivery(order)) return;
-    setActionId(order.orderId);
-    try {
-      await confirmOrderDelivery(order.orderId);
-      showToast(`تم تأكيد تسليم الطلب ${order.id}`);
-      await loadOrders();
-    } catch (err) {
-      showToast(getApiErrorMessage(err, 'تعذّر تأكيد التسليم'));
     } finally {
       setActionId(null);
     }
@@ -221,13 +187,6 @@ const Orders = () => {
                   عرض التفاصيل
                 </button>
 
-                <OrderDropdown
-                  className="compact"
-                  value={order.status}
-                  options={ORDER_STATUSES}
-                  onChange={(status) => handleStatusChange(order, status)}
-                />
-
                 {canPrepareOrder(order) && (
                   <button
                     type="button"
@@ -236,17 +195,6 @@ const Orders = () => {
                     disabled={actionId === order.orderId}
                   >
                     تجهيز الطلب
-                  </button>
-                )}
-
-                {canConfirmDelivery(order) && (
-                  <button
-                    type="button"
-                    className="order-btn-view"
-                    onClick={() => handleConfirmDelivery(order)}
-                    disabled={actionId === order.orderId}
-                  >
-                    تأكيد التسليم
                   </button>
                 )}
 
