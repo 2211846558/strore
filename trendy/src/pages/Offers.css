@@ -202,8 +202,8 @@
   width: 48px;
   height: 26px;
   border-radius: 13px;
-  background-color: var(--bg-input);
-  border: none;
+  background-color: var(--border-color);
+  border: 1px solid var(--text-muted);
   position: relative;
   cursor: pointer;
   transition: background-color 0.2s ease;
@@ -227,6 +227,11 @@
 
 .toggle-switch.active .toggle-thumb {
   transform: translateX(-22px);
+}
+
+[data-theme='light'] .toggle-switch {
+  background-color: #d1d5db;
+  border-color: #9ca3af;
 }
 
 .offer-actions {
