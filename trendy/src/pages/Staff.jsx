@@ -12,6 +12,7 @@ import {
   buildEmployeePayload,
   buildEmployeeUpdatePayload,
   buildRoleOptions,
+  parseRoleSelection,
 } from '../api/employees';
 import { getApiErrorMessage } from '../api/stores';
 import { useAuth } from '../context/AuthContext';
@@ -45,10 +46,26 @@ const Staff = () => {
       ...formRoleOptions.map((r) => ({
         value: String(r.value),
         label: r.label,
+        slug: r.slug,
+        roleId: parseRoleSelection(r.value).roleId,
       })),
     ],
     [formRoleOptions],
   );
+
+  const filteredStaff = useMemo(() => {
+    if (roleFilter === 'all') return staff;
+
+    const selected = roleOptions.find((option) => option.value === roleFilter);
+    if (!selected) return staff;
+
+    return staff.filter((member) => {
+      if (selected.roleId && member.roleId === selected.roleId) return true;
+      if (selected.slug && member.roleSlug === selected.slug) return true;
+      if (selected.label && member.role === selected.label) return true;
+      return false;
+    });
+  }, [staff, roleFilter, roleOptions]);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(searchQuery), 400);
@@ -62,7 +79,6 @@ const Staff = () => {
       const employees = await fetchAllEmployees({
         storeId,
         search: debouncedSearch,
-        role: roleFilter,
       });
       setStaff(employees);
     } catch (err) {
@@ -71,7 +87,7 @@ const Staff = () => {
     } finally {
       setLoading(false);
     }
-  }, [storeId, debouncedSearch, roleFilter]);
+  }, [storeId, debouncedSearch]);
 
   useEffect(() => {
     loadStaff();
@@ -198,8 +214,8 @@ const Staff = () => {
                   جاري تحميل الموظفين...
                 </td>
               </tr>
-            ) : staff.length > 0 ? (
-              staff.map((member) => (
+            ) : filteredStaff.length > 0 ? (
+              filteredStaff.map((member) => (
                 <tr key={member.id}>
                   <td className="staff-name">{member.name}</td>
                   <td>{member.email}</td>
