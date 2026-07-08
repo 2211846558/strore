@@ -35,12 +35,30 @@ const FIELD_LABELS = {
 };
 
 const isLocalStoreType = (type) => type === 'محلي' || type === 'local';
+const GOOGLE_MAP_URL_MAX_LENGTH = 255;
+
+export function normalizeGoogleMapUrl(rawUrl) {
+  const value = String(rawUrl ?? '').trim();
+  if (!value) return '';
+
+  try {
+    const parsed = new URL(value);
+    // روابط الخرائط تحتوي أحياناً Query ضخم؛ نرسل رابطاً مختصراً ثابتاً
+    const compact = `${parsed.origin}${parsed.pathname}`.replace(/\/+$/, '');
+    if (compact.length <= GOOGLE_MAP_URL_MAX_LENGTH) return compact;
+    return compact.slice(0, GOOGLE_MAP_URL_MAX_LENGTH);
+  } catch {
+    // fallback آمن يمنع خطأ length من الباكند
+    return value.slice(0, GOOGLE_MAP_URL_MAX_LENGTH);
+  }
+}
 
 /**
  * تحويل بيانات النموذج إلى FormData مطابق لـ StoreJoinRequest في Laravel
  */
 export function buildStoreJoinFormData(form, logoFile) {
   const fd = new FormData();
+  const normalizedMapUrl = normalizeGoogleMapUrl(form.googleMapUrl);
 
   fd.append('user_name', form.managerName.trim());
   fd.append('email', form.managerEmail.trim());
@@ -66,13 +84,13 @@ export function buildStoreJoinFormData(form, logoFile) {
 
   if (isLocalStoreType(form.storeType)) {
     fd.append('zone_id', String(Number(form.zoneId)));
-    fd.append('google_map_url', form.googleMapUrl.trim());
+    fd.append('google_map_url', normalizedMapUrl);
   } else {
     if (form.zoneId) {
       fd.append('zone_id', String(Number(form.zoneId)));
     }
-    if (form.googleMapUrl?.trim()) {
-      fd.append('google_map_url', form.googleMapUrl.trim());
+    if (normalizedMapUrl) {
+      fd.append('google_map_url', normalizedMapUrl);
     }
   }
 

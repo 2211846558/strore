@@ -3,9 +3,9 @@
  * 1) POST /api/stores/join           → إرسال الطلب + OTP لإيميل المتجر
  * 2) POST /api/v1/auth/store/verify-join → التحقق من الرمز
  */
-import { getApiErrorMessage, submitStoreJoinRequest, fetchZones } from './stores';
+import { getApiErrorMessage, submitStoreJoinRequest, fetchZones, normalizeGoogleMapUrl } from './stores';
 
-export { submitStoreJoinRequest, fetchZones, getApiErrorMessage };
+export { submitStoreJoinRequest, fetchZones, getApiErrorMessage, normalizeGoogleMapUrl };
 export { verifyStoreJoin, clearAuthSession } from './auth';
 
 /** رسائل خطأ مخصصة لنموذج الانضمام (طلبات عامة بدون توكن) */

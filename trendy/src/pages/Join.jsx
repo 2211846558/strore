@@ -16,7 +16,12 @@ import {
   Building2,
   UserCircle,
 } from 'lucide-react';
-import { submitStoreJoinRequest, fetchZones, getApiErrorMessage } from '../api/join';
+import {
+  submitStoreJoinRequest,
+  fetchZones,
+  getApiErrorMessage,
+  normalizeGoogleMapUrl,
+} from '../api/join';
 import JoinEmailVerification, { JoinVerificationSuccess } from '../components/join/JoinEmailVerification';
 import './Login.css';
 
@@ -107,8 +112,18 @@ const Join = () => {
     if (!formData.zoneId) {
       return 'يرجى اختيار منطقة المتجر';
     }
-    if (isLocalType(formData.storeType) && !formData.googleMapUrl.trim()) {
+    const mapUrl = formData.googleMapUrl.trim();
+    if (isLocalType(formData.storeType) && !mapUrl) {
       return 'رابط خريطة Google مطلوب للمتجر المحلي';
+    }
+    if (mapUrl) {
+      try {
+        // التحقق من صحة الرابط قبل الإرسال
+        // eslint-disable-next-line no-new
+        new URL(mapUrl);
+      } catch {
+        return 'رابط خريطة Google غير صالح';
+      }
     }
     if (formData.notes.length > 2000) {
       return 'الملاحظات يجب ألا تتجاوز 2000 حرف';
@@ -128,7 +143,11 @@ const Join = () => {
 
     setIsLoading(true);
     try {
-      const res = await submitStoreJoinRequest(formData, logoFile);
+      const payload = {
+        ...formData,
+        googleMapUrl: normalizeGoogleMapUrl(formData.googleMapUrl),
+      };
+      const res = await submitStoreJoinRequest(payload, logoFile);
       setVerifyMessage(res?.message || '');
       setJoinStep('verify');
     } catch (err) {
