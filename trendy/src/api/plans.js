@@ -389,7 +389,8 @@ export function extractStoreFromSubscriptionResponse(response, plan) {
     (payload.id && (payload.name || payload.status) ? payload : null);
 
   const planId = store?.plan_id ?? subscription.plan_id ?? plan.id;
-  const startsAt =
+  
+  let startsAt =
     store?.subscription_starts_at ??
     store?.plan_starts_at ??
     subscription.starts_at ??
@@ -397,7 +398,8 @@ export function extractStoreFromSubscriptionResponse(response, plan) {
     payload.subscription_starts_at ??
     payload.starts_at ??
     null;
-  const endsAt =
+  
+  let endsAt =
     store?.subscription_ends_at ??
     store?.plan_expires_at ??
     subscription.ends_at ??
@@ -406,13 +408,31 @@ export function extractStoreFromSubscriptionResponse(response, plan) {
     payload.ends_at ??
     null;
 
+  if (!startsAt) {
+    startsAt = new Date().toISOString();
+  }
+  if (!endsAt) {
+    const durationDays = plan.durationDays ?? plan.duration_days ?? 30;
+    endsAt = new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000).toISOString();
+  }
+
+  const updatedSubscription = {
+    ...(store?.subscription ?? subscription ?? {}),
+    status: 'active',
+    starts_at: startsAt,
+    ends_at: endsAt,
+    plan_id: planId,
+  };
+
   if (store) {
     return {
       ...store,
       status: store.status === 'inactive' ? 'active' : (store.status ?? 'active'),
       plan_id: planId,
+      subscription_status: 'active',
       subscription_starts_at: startsAt,
       subscription_ends_at: endsAt,
+      subscription: updatedSubscription,
       plan: store.plan ?? {
         id: plan.id,
         name: plan.title,
@@ -425,14 +445,16 @@ export function extractStoreFromSubscriptionResponse(response, plan) {
   return {
     status: 'active',
     plan_id: planId,
+    subscription_status: 'active',
+    subscription_ends_at: endsAt,
+    subscription_starts_at: startsAt,
+    subscription: updatedSubscription,
     plan: {
       id: plan.id,
       name: plan.title,
       price: plan.price,
       duration_days: plan.durationDays,
     },
-    subscription_ends_at: endsAt,
-    subscription_starts_at: startsAt,
   };
 }
 

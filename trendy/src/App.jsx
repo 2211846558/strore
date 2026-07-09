@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import React, { useEffect, useRef } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { AuthProvider, useAuth, useStore, useAuthActions } from './context/AuthContext';
 import { WalletProvider } from './context/WalletContext';
 import { userCanManageEmployees, userCanAccessFinance } from './api/auth';
@@ -44,6 +44,18 @@ function AppRoutes() {
   const { isAuthenticated } = useAuth();
   const { hasActivePlan, planChecking } = useStore();
   const { logout } = useAuthActions();
+  const navigate = useNavigate();
+
+  const prevHasActivePlanRef = useRef(hasActivePlan);
+
+  useEffect(() => {
+    if (!prevHasActivePlanRef.current && hasActivePlan) {
+      if (window.location.pathname === '/plans' || window.location.pathname.includes('/plans')) {
+        navigate('/', { replace: true });
+      }
+    }
+    prevHasActivePlanRef.current = hasActivePlan;
+  }, [hasActivePlan, navigate]);
 
   const handleLogout = async () => {
     await logout();
