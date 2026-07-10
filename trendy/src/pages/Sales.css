@@ -1319,3 +1319,157 @@
   z-index: 3;
   direction: ltr;
 }
+
+/* Grouped Exchange / Return Log Styling */
+.sales-grouped-exchanges {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.sales-exchange-card {
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  background: var(--bg-card);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.sales-exchange-card:hover {
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+.sales-exchange-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  background: var(--bg-input);
+  border-bottom: 1px solid var(--border-color);
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.sales-exchange-card-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sales-exchange-order-num {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.sales-exchange-order-date {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.sales-exchange-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  font-size: 14px;
+}
+
+.sales-exchange-customer {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.sales-exchange-channel {
+  background: rgba(99, 102, 241, 0.08);
+  color: var(--primary);
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.sales-exchange-card-body {
+  padding: 0;
+  overflow-x: auto;
+}
+
+.sales-exchange-detail-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 700px;
+}
+
+.sales-exchange-detail-table th,
+.sales-exchange-detail-table td {
+  padding: 12px 20px;
+  text-align: right;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 14px;
+}
+
+.sales-exchange-detail-table th {
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  border-bottom: 2px solid var(--border-color);
+}
+
+.sales-exchange-detail-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.sales-exchange-detail-table tbody tr:hover {
+  background: rgba(99, 102, 241, 0.02);
+}
+
+.exchange-type-badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.exchange-type-badge.replacement {
+  background: rgba(245, 158, 11, 0.1);
+  color: #d97706;
+}
+
+.exchange-type-badge.refund {
+  background: rgba(16, 185, 129, 0.1);
+  color: #059669;
+}
+
+.sales-exchange-detail-table .item-name {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.sales-exchange-detail-table .item-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.price-diff-value {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.price-diff-value.positive {
+  color: #d97706;
+}
+
+.price-diff-value.negative,
+.price-diff-value.refund {
+  color: #059669;
+}
+
+.price-diff-value.zero {
+  color: var(--text-muted);
+}

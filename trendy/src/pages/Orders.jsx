@@ -157,7 +157,6 @@ const Orders = () => {
 
               <div className="order-card-details">
                 <div className="order-detail-item">
-                  <span className="label">العميل</span>
                   <span className="value">{order.customerName}</span>
                   <span
                     className="value"
