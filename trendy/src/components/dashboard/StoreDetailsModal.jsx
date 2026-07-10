@@ -39,40 +39,50 @@ const StoreDetailsModal = ({ isOpen, onClose, store, onEdit }) => {
             </div>
           )}
 
-          <DetailRow label="رقم كود المتجر" value={store.storeCode} />
-          <DetailRow label="اسم المتجر" value={store.name} />
-          <DetailRow label="الوصف" value={store.description} />
-          <DetailRow label="نوع المتجر" value={store.typeLabel} />
-          <DetailRow label="نوع الكيان" value={store.entityTypeLabel} />
-          <DetailRow label="رقم الهاتف" value={store.phone} />
-          <DetailRow label="البريد الإلكتروني" value={store.email} />
-          <DetailRow label="المنطقة / الموقع" value={store.location} />
-          <DetailRow label="رابط خريطة Google">
-            {mapUrl ? (
-              <a
-                href={mapUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="store-details-link"
-                dir="ltr"
-              >
-                {mapUrl}
-                <ExternalLink size={14} />
-              </a>
-            ) : null}
-          </DetailRow>
-          <DetailRow label="الرقم الضريبي" value={store.merchantData?.tax_number} />
-          <DetailRow
-            label="رقم السجل التجاري"
-            value={store.commercialRegisterNumber || store.merchantData?.commercial_register}
-          />
-          <DetailRow label="الحالة">
-            <span className={`store-details-status status-${store.statusRaw}`}>
-              {store.statusLabel}
-            </span>
-          </DetailRow>
-          <DetailRow label="التقييم العام" value={store.rating} />
-          <DetailRow label="ملاحظات" value={store.notes} />
+          <div className="store-details-section">
+            <h3 className="store-details-section-title">بيانات مدير المتجر</h3>
+            <DetailRow label="اسم المدير" value={store.managerName} />
+            <DetailRow label="البريد الإلكتروني للمدير" value={store.managerEmail} />
+            <DetailRow label="رقم هاتف المدير" value={store.managerPhone} />
+          </div>
+
+          <div className="store-details-section">
+            <h3 className="store-details-section-title">بيانات المتجر</h3>
+            <DetailRow label="رقم كود المتجر" value={store.storeCode} />
+            <DetailRow label="اسم المتجر" value={store.name} />
+            <DetailRow label="وصف المتجر" value={store.description} />
+            <DetailRow label="نوع المتجر" value={store.typeLabel} />
+            <DetailRow label="نوع الكيان" value={store.entityTypeLabel} />
+            <DetailRow label="رقم هاتف المتجر" value={store.phone} />
+            <DetailRow label="البريد الإلكتروني للمتجر" value={store.email} />
+            <DetailRow label="المنطقة / الموقع" value={store.location} />
+            <DetailRow label="رابط خريطة Google">
+              {mapUrl ? (
+                <a
+                  href={mapUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="store-details-link"
+                  dir="ltr"
+                >
+                  {mapUrl}
+                  <ExternalLink size={14} />
+                </a>
+              ) : null}
+            </DetailRow>
+            <DetailRow label="الرقم الضريبي" value={store.merchantData?.tax_number} />
+            <DetailRow
+              label="رقم السجل التجاري"
+              value={store.commercialRegisterNumber || store.merchantData?.commercial_register}
+            />
+            <DetailRow label="الحالة">
+              <span className={`store-details-status status-${store.statusRaw}`}>
+                {store.statusLabel}
+              </span>
+            </DetailRow>
+            <DetailRow label="التقييم العام" value={store.rating} />
+            <DetailRow label="ملاحظات" value={store.notes} />
+          </div>
         </div>
 
         <div className="modal-footer store-details-footer">

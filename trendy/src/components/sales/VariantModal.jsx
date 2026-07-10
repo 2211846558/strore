@@ -1,86 +1,103 @@
 import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import {
-  getVariantStock,
-  resolveVariant,
   fetchVariantStockPrice,
+  resolveVariantByAttributes,
 } from '../../api/pos';
 import ExchangePriceDiff from './ExchangePriceDiff';
 import SalesProductThumb from './SalesProductThumb';
 import { buildCandidates } from '../../utils/salesImageHelper';
 import ProductImageLightbox from './ProductImageLightbox';
+import {
+  clampInteger,
+  clampIntegerInput,
+  isValidIntegerInput,
+  parseIntegerInput,
+  preventWheelChange,
+} from '../../utils/numericInput';
 import './SalesModals.css';
 
 const VariantModal = ({ isOpen, onClose, product, onAdd, isSaving, exchangeFrom, storeId, storeProducts = [] }) => {
-  const [color, setColor] = useState('');
-  const [size, setSize] = useState('');
+  // selectedAttrs: { [attrName]: value }
+  const [selectedAttrs, setSelectedAttrs] = useState({});
   const [selectedVariantId, setSelectedVariantId] = useState('');
   const [liveStock, setLiveStock] = useState(null);
   const [livePrice, setLivePrice] = useState(null);
   const [loadingStock, setLoadingStock] = useState(false);
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [quantity, setQuantity] = useState('1');
 
   const activeProduct = product;
-  const useDirectSelection = false;
+  const useDirectSelection = Boolean(activeProduct?.useDirectSelection);
   const variantOptions = activeProduct?.variantOptions ?? [];
+  const attributeGroups = activeProduct?.attributeGroups ?? [];
 
+  // إعادة ضبط الحالة عند فتح المودال أو تغيير المنتج
   useEffect(() => {
     if (!isOpen || !product?.id) {
-      setColor('');
-      setSize('');
+      setSelectedAttrs({});
       setSelectedVariantId('');
       setLiveStock(null);
       setLivePrice(null);
       setActiveImageIndex(0);
+      setQuantity('1');
       return;
     }
 
-    if (product.useDirectSelection) {
+    setQuantity('1');
+    if (useDirectSelection) {
       setSelectedVariantId(
         product.variantOptions?.length === 1 ? String(product.variantOptions[0].id) : '',
       );
     } else {
-      setColor(product.colors?.length === 1 ? product.colors[0] : '');
-      setSize(product.sizes?.length === 1 ? product.sizes[0] : '');
+      // إذا كانت قيمة خاصية ما واحدة فقط، نختارها تلقائياً
+      const autoAttrs = {};
+      attributeGroups.forEach((group) => {
+        if (group.values.length === 1) {
+          autoAttrs[group.name] = group.values[0];
+        }
+      });
+      setSelectedAttrs(autoAttrs);
     }
-  }, [isOpen, product]);
+  }, [isOpen, product?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const hideSizeField =
-    !useDirectSelection &&
-    activeProduct?.sizes?.length === 1 &&
-    activeProduct.sizes[0] === 'واحد';
-  const effectiveSize = hideSizeField ? activeProduct?.sizes?.[0] || 'واحد' : size;
+  // إيجاد التنوع المطابق
   const variant = useDirectSelection
     ? activeProduct?.variants?.find((v) => String(v.id) === String(selectedVariantId)) ?? null
     : activeProduct
-      ? resolveVariant(activeProduct, color, effectiveSize || size)
+      ? resolveVariantByAttributes(activeProduct, selectedAttrs)
       : null;
-  const baseStock = useDirectSelection
-    ? Number(variant?.stock ?? 0)
-    : activeProduct
-      ? getVariantStock(activeProduct, color, effectiveSize || size)
-      : 0;
-  const stock =
-    liveStock != null && liveStock > 0
-      ? liveStock
-      : baseStock;
-  const price = livePrice ?? variant?.price ?? activeProduct?.price;
+
+  // التحقق من اكتمال الاختيار (جميع الخصائص محددة)
   const selectionReady = useDirectSelection
     ? Boolean(selectedVariantId)
-    : Boolean(color && (hideSizeField || size));
+    : attributeGroups.length > 0 &&
+      attributeGroups.every((g) => Boolean(selectedAttrs[g.name]));
+
+  const baseStock = selectionReady && variant ? Number(variant.stock ?? 0) : 0;
+  const stock = liveStock != null && liveStock > 0 ? liveStock : baseStock;
+  const price = livePrice ?? variant?.price ?? activeProduct?.price;
+
+  const isExchange = Boolean(exchangeFrom);
+  const maxQty = variant?.stockUnknown ? 9999 : stock;
+  const qtyNum = clampInteger(parseIntegerInput(quantity, 1), 1, maxQty);
+
   const canAdd =
     selectionReady &&
     variant &&
-    (stock > 0 || variant?.stockUnknown) &&
+    (stock >= qtyNum || variant?.stockUnknown) &&
+    qtyNum > 0 &&
     !isSaving;
-  const isExchange = Boolean(exchangeFrom);
+
+  // تسمية الاختيارات المحددة
   const selectedAttrsLabel = selectionReady
     ? useDirectSelection
       ? (variant?.label ?? '')
-      : [color, effectiveSize].filter((v) => v && v !== '—' && v !== 'واحد').join(' / ')
+      : Object.values(selectedAttrs).filter((v) => v && v !== '—' && v !== 'واحد').join(' / ')
     : '';
 
+  // جلب الكمية والسعر الحية
   useEffect(() => {
     if (!variant?.id || !selectionReady) {
       setLiveStock(null);
@@ -107,21 +124,25 @@ const VariantModal = ({ isOpen, onClose, product, onAdd, isSaving, exchangeFrom,
         if (!cancelled) setLoadingStock(false);
       });
 
-    return () => {
-      cancelled = true;
-    };
-  }, [variant?.id, selectionReady, useDirectSelection, color, size, hideSizeField]);
+    return () => { cancelled = true; };
+  }, [variant?.id, selectionReady]);
 
   if (!isOpen || !activeProduct) return null;
+
+  const handleAttrChange = (attrName, value) => {
+    setSelectedAttrs((prev) => ({ ...prev, [attrName]: value }));
+  };
 
   const handleAdd = async () => {
     if (!canAdd) return;
     await onAdd({
       product: activeProduct,
-      color: useDirectSelection ? variant?.color ?? '—' : color,
-      size: useDirectSelection ? variant?.size ?? '—' : effectiveSize,
+      color: variant?.color ?? '—',
+      size: variant?.size ?? '—',
+      attributes: useDirectSelection ? (variant?.attributes ?? {}) : selectedAttrs,
       price,
       variant,
+      quantity: qtyNum,
     });
     if (!isExchange) onClose();
   };
@@ -156,6 +177,7 @@ const VariantModal = ({ isOpen, onClose, product, onAdd, isSaving, exchangeFrom,
         </div>
 
         {useDirectSelection ? (
+          /* ─── اختيار مباشر (تنوع واحد أو لا خصائص متعددة) ───────────── */
           <div className="sales-form-group">
             <label htmlFor="variant-direct">التنوع</label>
             <select
@@ -174,43 +196,27 @@ const VariantModal = ({ isOpen, onClose, product, onAdd, isSaving, exchangeFrom,
             </select>
           </div>
         ) : (
+          /* ─── dropdown لكل خاصية ديناميكياً ─────────────────────────── */
           <>
-            <div className="sales-form-group">
-              <label htmlFor="variant-color">اللون</label>
-              <select
-                id="variant-color"
-                className="sales-form-select"
-                value={color}
-                onChange={(e) => setColor(e.target.value)}
-                disabled={!activeProduct?.colors?.length}
-              >
-                <option value="">اختر اللون</option>
-                {(activeProduct?.colors ?? []).map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-            </div>
-            {!hideSizeField && (
-              <div className="sales-form-group">
-                <label htmlFor="variant-size">المقاس</label>
+            {attributeGroups.map((group, idx) => (
+              <div className="sales-form-group" key={group.name}>
+                <label htmlFor={`variant-attr-${idx}`}>{group.name}</label>
                 <select
-                  id="variant-size"
+                  id={`variant-attr-${idx}`}
                   className="sales-form-select"
-                  value={size}
-                  onChange={(e) => setSize(e.target.value)}
-                  disabled={!activeProduct?.sizes?.length}
+                  value={selectedAttrs[group.name] ?? ''}
+                  onChange={(e) => handleAttrChange(group.name, e.target.value)}
+                  disabled={!group.values.length}
                 >
-                  <option value="">اختر المقاس</option>
-                  {(activeProduct?.sizes ?? []).map((s) => (
-                    <option key={s} value={s}>
-                      {s}
+                  <option value="">اختر {group.name}</option>
+                  {group.values.map((val) => (
+                    <option key={val} value={val}>
+                      {val}
                     </option>
                   ))}
                 </select>
               </div>
-            )}
+            ))}
           </>
         )}
 
@@ -219,6 +225,49 @@ const VariantModal = ({ isOpen, onClose, product, onAdd, isSaving, exchangeFrom,
             {loadingStock
               ? 'جاري جلب الكمية المتوفرة...'
               : `الكمية المتوفرة: ${variant?.stockUnknown && liveStock == null ? '—' : stock} قطعة`}
+          </div>
+        )}
+
+        {selectionReady && !isExchange && (stock > 0 || variant?.stockUnknown) && (
+          <div className="sales-form-group" style={{ marginTop: '12px' }}>
+            <label htmlFor="modal-qty" style={{ fontSize: '13px', fontWeight: 'bold' }}>
+              الكمية المطلوبة:
+            </label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
+              <button
+                type="button"
+                className="sales-btn-secondary"
+                style={{ padding: '6px 12px', minWidth: '40px', cursor: 'pointer' }}
+                onClick={() => setQuantity(String(Math.max(1, qtyNum - 1)))}
+                disabled={qtyNum <= 1 || isSaving}
+              >
+                -
+              </button>
+              <input
+                id="modal-qty"
+                type="text"
+                inputMode="numeric"
+                className="sales-form-input"
+                style={{ textAlign: 'center', width: '80px', padding: '6px 12px', cursor: 'default' }}
+                value={quantity}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  if (isValidIntegerInput(raw)) setQuantity(raw);
+                }}
+                onBlur={() => setQuantity(clampIntegerInput(quantity, 1, maxQty))}
+                onWheel={preventWheelChange}
+                disabled={isSaving}
+              />
+              <button
+                type="button"
+                className="sales-btn-secondary"
+                style={{ padding: '6px 12px', minWidth: '40px', cursor: 'pointer' }}
+                onClick={() => setQuantity(String(Math.min(maxQty, qtyNum + 1)))}
+                disabled={(qtyNum >= maxQty && !variant?.stockUnknown) || isSaving}
+              >
+                +
+              </button>
+            </div>
           </div>
         )}
 

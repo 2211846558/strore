@@ -299,7 +299,7 @@ export async function fetchManagedProductDetails(id) {
   return fetchProductDetails(id);
 }
 
-function buildProductFormData({ storeId, name, sku, description, price, categoryId, stock, imageFiles }) {
+function buildProductFormData({ storeId, name, sku, description, price, categoryId, stock, imageFiles, deletedImages }) {
   const fd = new FormData();
   if (storeId) fd.append('store_id', String(storeId));
   fd.append('name', name);
@@ -310,6 +310,9 @@ function buildProductFormData({ storeId, name, sku, description, price, category
   if (stock !== '' && stock != null) fd.append('total_quantity', String(stock));
   if (imageFiles?.length) {
     imageFiles.forEach((file, index) => fd.append(`images[${index}]`, file));
+  }
+  if (deletedImages?.length) {
+    deletedImages.forEach((imgId, index) => fd.append(`deleted_images[${index}]`, String(imgId)));
   }
   return fd;
 }

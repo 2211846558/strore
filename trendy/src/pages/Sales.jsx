@@ -45,16 +45,16 @@ import PosOrderActionModal from '../components/sales/PosOrderActionModal';
 import './Sales.css';
 
 const toSalesLine = (order, product) => ({
-  lineId: product.lineId,
-  orderId: order.orderId,
-  variantId: product.variantId,
-  name: product.name,
+  lineId: product.lineId ?? product.line_id ?? product.id,
+  orderId: order.orderId ?? order.id,
+  variantId: product.variantId ?? product.variant_id ?? product.product_variant_id ?? product.variant?.id,
+  name: product.name ?? product.product_name ?? '—',
   quantity: product.quantity,
-  price: product.price,
-  sku: product.sku,
+  price: product.price ?? product.unit_price ?? 0,
+  sku: product.sku ?? product.variant?.sku ?? '',
   isPos: Boolean(order.isPos),
-  color: product.variantLabel ?? product.sku ?? '—',
-  size: '—',
+  color: product.color ?? product.variantLabel ?? product.sku ?? '—',
+  size: product.size ?? '—',
 });
 
 const Sales = () => {
@@ -273,7 +273,7 @@ const Sales = () => {
     ? products.find((p) => p.id === selectedProduct.id) ?? selectedProduct
     : null;
 
-  const handleAddToCart = async ({ product, color, size, price, variant }) => {
+  const handleAddToCart = async ({ product, color, size, price, variant, quantity = 1 }) => {
     const resolved = variant ?? resolveVariant(product, color, size);
     if (!resolved) {
       showToast('تعذّر تحديد التنوع — اختر لوناً ومقاساً صحيحين');
@@ -312,20 +312,21 @@ const Sales = () => {
       return;
     }
 
-    if (getVariantStock(product, color, size) <= 0) {
-      showToast('الكمية غير متوفرة لهذا التنوع');
+    const stockAvailable = getVariantStock(product, color, size);
+    if (!resolved.stockUnknown && stockAvailable < quantity) {
+      showToast(`الكمية المطلوبة غير متوفرة لهذا التنوع (المتوفر: ${stockAvailable} قطعة)`);
       return;
     }
 
     setIsSaving(true);
     try {
-      const result = await addToPosCart({ variantId: resolved.id, quantity: 1 });
+      const result = await addToPosCart({ variantId: resolved.id, quantity });
       if (result?.cart) {
         applyCartResult(result);
       } else {
         await loadCart();
       }
-      showToast(`تمت إضافة «${product.name}» إلى السلة`);
+      showToast(`تمت إضافة «${product.name}» (${quantity} قطعة) إلى السلة`);
     } catch (err) {
       showToast(getApiErrorMessage(err, 'تعذّر إضافة المنتج للسلة'));
     } finally {
@@ -387,22 +388,42 @@ const Sales = () => {
     }
   };
 
-  const handleExchangeConfirm = async (selectedNewItems, chosenQty, lineOverride = null) => {
-    const sourceLine = lineOverride ?? exchangeTarget?.line;
-    if (!sourceLine) return;
+  const handleExchangeConfirm = async (selectedNewItems, oldItemsOrQty, lineOrOrderInfo = null) => {
+    const isMultiExchange = Array.isArray(oldItemsOrQty);
     setIsSaving(true);
     try {
+      let orderId, isPos, oldItemsPayload, oldTotal;
+
+      if (isMultiExchange) {
+        orderId = lineOrOrderInfo?.orderId;
+        isPos = lineOrOrderInfo?.isPos;
+        oldItemsPayload = oldItemsOrQty.map((item) => ({
+          variantId: item.variantId,
+          quantity: item.quantity,
+        }));
+        oldTotal = oldItemsOrQty.reduce((sum, item) => sum + item.price * item.quantity, 0);
+      } else {
+        const sourceLine = lineOrOrderInfo ?? exchangeTarget?.line;
+        if (!sourceLine) {
+          setIsSaving(false);
+          return;
+        }
+        orderId = sourceLine.orderId;
+        isPos = sourceLine.isPos;
+        oldItemsPayload = [{ variantId: sourceLine.variantId, quantity: oldItemsOrQty }];
+        oldTotal = sourceLine.price * oldItemsOrQty;
+      }
+
       await exchangeOrderItems({
-        orderId: sourceLine.orderId,
-        isPos: sourceLine.isPos,
-        oldItems: [{ variantId: sourceLine.variantId, quantity: chosenQty }],
+        orderId,
+        isPos,
+        oldItems: oldItemsPayload,
         newItems: selectedNewItems.map((item) => ({
           variantId: item.variant?.id ?? item.id,
           quantity: item.quantity,
         })),
       });
 
-      const oldTotal = sourceLine.price * chosenQty;
       const newTotal = selectedNewItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
       const diff = newTotal - oldTotal;
 

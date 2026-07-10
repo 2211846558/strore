@@ -24,17 +24,17 @@ import {
 import './SalesModals.css';
 
 const toSalesLine = (order, product) => ({
-  lineId: product.lineId,
-  orderId: order.orderId,
-  variantId: product.variantId,
-  name: product.name,
+  lineId: product.lineId ?? product.line_id ?? product.id,
+  orderId: order.orderId ?? order.id,
+  variantId: product.variantId ?? product.variant_id ?? product.product_variant_id ?? product.variant?.id,
+  name: product.name ?? product.product_name ?? '—',
   quantity: product.quantity,
-  price: product.price,
-  sku: product.sku,
+  price: product.price ?? product.unit_price ?? 0,
+  sku: product.sku ?? product.variant?.sku ?? '',
   isPos: Boolean(order.isPos),
-  variantLabel: product.variantLabel ?? product.sku ?? '',
-  color: product.variantLabel ?? product.sku ?? '—',
-  size: '—',
+  variantLabel: product.color ?? product.variantLabel ?? product.sku ?? '',
+  color: product.color ?? product.variantLabel ?? product.sku ?? '—',
+  size: product.size ?? '—',
 });
 
 const PosOrderActionModal = ({
@@ -56,6 +56,7 @@ const PosOrderActionModal = ({
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [loadingOrder, setLoadingOrder] = useState(false);
   const [selectedLine, setSelectedLine] = useState(null);
+  const [selectedOldItems, setSelectedOldItems] = useState([]);
   const [exchangeQty, setExchangeQty] = useState('1');
   const [refundQty, setRefundQty] = useState('1');
   const [selectedNewItems, setSelectedNewItems] = useState([]);
@@ -86,6 +87,7 @@ const PosOrderActionModal = ({
     setOrdersError('');
     setSelectedOrder(null);
     setSelectedLine(null);
+    setSelectedOldItems([]);
     setExchangeQty('1');
     setRefundQty('1');
     setSelectedNewItems([]);
@@ -266,9 +268,9 @@ const PosOrderActionModal = ({
 
   if (!isOpen) return null;
 
-  const exchangeQtyNum = selectedLine
-    ? clampInteger(parseIntegerInput(exchangeQty, 1), 1, selectedLine.quantity)
-    : 1;
+  const exchangeQtyNum = isExchange
+    ? selectedOldItems.reduce((sum, item) => sum + item.quantitySelected, 0)
+    : (selectedLine ? clampInteger(parseIntegerInput(exchangeQty, 1), 1, selectedLine.quantity) : 1);
   const refundQtyNum = selectedLine
     ? clampInteger(parseIntegerInput(refundQty, 1), 1, selectedLine.quantity)
     : 1;
@@ -283,13 +285,19 @@ const PosOrderActionModal = ({
     Math.max(1, pickerStock),
   );
   const totalNewQty = selectedNewItems.reduce((sum, item) => sum + item.quantity, 0);
-  const oldTotal = selectedLine ? selectedLine.price * exchangeQtyNum : 0;
+  const oldTotal = isExchange
+    ? selectedOldItems.reduce((sum, item) => sum + item.price * item.quantitySelected, 0)
+    : (selectedLine ? selectedLine.price * exchangeQtyNum : 0);
   const newTotal = selectedNewItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const priceDiff = newTotal - oldTotal;
 
+  const isVariantInOldItems = isExchange
+    ? selectedOldItems.some(item => String(item.variantId) === String(pickerVariant?.id))
+    : (selectedLine?.variantId && String(pickerVariant?.id) === String(selectedLine.variantId));
+
   const canAddPickerVariant =
     pickerVariant
-    && String(pickerVariant.id) !== String(selectedLine?.variantId)
+    && !isVariantInOldItems
     && (pickerVariant.stockUnknown || pickerVariant.stock > 0);
 
   const handleAddVariant = () => {
@@ -358,12 +366,17 @@ const PosOrderActionModal = ({
 
   const handleBack = () => {
     if (step === 'confirm') {
-      setSelectedLine(null);
-      setStep('items');
+      if (isExchange) {
+        setStep('items');
+      } else {
+        setSelectedLine(null);
+        setStep('items');
+      }
       return;
     }
     if (step === 'items') {
       setSelectedOrder(null);
+      setSelectedOldItems([]);
       setStep('search');
     }
   };
@@ -374,8 +387,22 @@ const PosOrderActionModal = ({
   };
 
   const handleExchange = () => {
-    if (!selectedLine || selectedNewItems.length === 0) return;
-    onExchangeConfirm?.(selectedNewItems, exchangeQtyNum, selectedLine);
+    if (isExchange) {
+      if (selectedOldItems.length === 0 || selectedNewItems.length === 0) return;
+      onExchangeConfirm?.(
+        selectedNewItems,
+        selectedOldItems.map(item => ({
+          variantId: item.variantId,
+          quantity: item.quantitySelected,
+          price: item.price,
+          name: item.name,
+        })),
+        { orderId: selectedOrder.orderId ?? selectedOrder.id, isPos: selectedOrder.isPos }
+      );
+    } else {
+      if (!selectedLine || selectedNewItems.length === 0) return;
+      onExchangeConfirm?.(selectedNewItems, exchangeQtyNum, selectedLine);
+    }
   };
 
   return (
@@ -484,29 +511,135 @@ const PosOrderActionModal = ({
 
             <div className="pos-action-lines-list">
               {selectedOrder.products?.length ? (
-                selectedOrder.products.map((product, idx) => (
-                  <button
-                    key={product.lineId ?? `${product.variantId}-${idx}`}
-                    type="button"
-                    className="pos-action-line-card"
-                    onClick={() => handleSelectLine(product)}
-                    disabled={isSaving}
-                  >
-                    <div className="pos-action-line-icon">
-                      <Package size={18} />
-                    </div>
-                    <div className="pos-action-line-info">
-                      <strong>
-                        {resolveLineDisplay(product)}
-                      </strong>
-                      <span>
-                        الكمية: {product.quantity}
-                        {product.price > 0 ? ` — ${product.price} د.ل` : ''}
-                      </span>
-                    </div>
-                    <ChevronRight size={16} />
-                  </button>
-                ))
+                selectedOrder.products.map((product, idx) => {
+                  const line = toSalesLine(selectedOrder, product);
+
+                  if (isExchange) {
+                    const isSelected = selectedOldItems.some((item) => String(item.variantId) === String(line.variantId));
+                    const selectedItem = selectedOldItems.find((item) => String(item.variantId) === String(line.variantId));
+                    const quantitySelected = selectedItem ? selectedItem.quantitySelected : 1;
+
+                    const handleToggleSelect = () => {
+                      if (isSelected) {
+                        setSelectedOldItems(prev => prev.filter(item => String(item.variantId) !== String(line.variantId)));
+                      } else {
+                        setSelectedOldItems(prev => [...prev, {
+                          ...line,
+                          quantitySelected: 1,
+                        }]);
+                      }
+                    };
+
+                    const handleIncrement = (e) => {
+                      e.stopPropagation();
+                      setSelectedOldItems(prev => prev.map(item => {
+                        if (String(item.variantId) === String(line.variantId)) {
+                          const nextQty = Math.min(line.quantity, item.quantitySelected + 1);
+                          return { ...item, quantitySelected: nextQty };
+                        }
+                        return item;
+                      }));
+                    };
+
+                    const handleDecrement = (e) => {
+                      e.stopPropagation();
+                      setSelectedOldItems(prev => prev.map(item => {
+                        if (String(item.variantId) === String(line.variantId)) {
+                          const nextQty = Math.max(1, item.quantitySelected - 1);
+                          return { ...item, quantitySelected: nextQty };
+                        }
+                        return item;
+                      }));
+                    };
+
+                    return (
+                      <div
+                        key={line.lineId ?? `${line.variantId}-${idx}`}
+                        className={`pos-action-line-card ${isSelected ? 'selected-item-card' : ''}`}
+                        onClick={handleToggleSelect}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '12px',
+                          padding: '12px 16px',
+                          border: isSelected ? '1px solid var(--primary)' : '1px solid var(--border-color)',
+                          background: isSelected ? 'rgba(var(--primary-rgb), 0.05)' : 'var(--bg-input)',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={handleToggleSelect}
+                          onClick={(e) => e.stopPropagation()}
+                          style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                        />
+                        <div className="pos-action-line-info" style={{ flex: 1 }}>
+                          <strong style={{ display: 'block', fontSize: '14px' }}>
+                            {resolveLineDisplay(product)}
+                          </strong>
+                          <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                            الكمية المتاحة: {product.quantity}
+                            {product.price > 0 ? ` — ${product.price} د.ل` : ''}
+                          </span>
+                        </div>
+                        {isSelected && (
+                          <div 
+                            className="pos-action-qty-controls" 
+                            onClick={(e) => e.stopPropagation()}
+                            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                          >
+                            <button
+                              type="button"
+                              className="sales-btn-secondary"
+                              style={{ padding: '2px 8px', minWidth: '28px' }}
+                              onClick={handleDecrement}
+                              disabled={quantitySelected <= 1}
+                            >
+                              -
+                            </button>
+                            <span style={{ minWidth: '20px', textAlign: 'center', fontWeight: 'bold' }}>
+                              {quantitySelected}
+                            </span>
+                            <button
+                              type="button"
+                              className="sales-btn-secondary"
+                              style={{ padding: '2px 8px', minWidth: '28px' }}
+                              onClick={handleIncrement}
+                              disabled={quantitySelected >= line.quantity}
+                            >
+                              +
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  } else {
+                    return (
+                      <button
+                        key={product.lineId ?? `${product.variantId}-${idx}`}
+                        type="button"
+                        className="pos-action-line-card"
+                        onClick={() => handleSelectLine(product)}
+                        disabled={isSaving}
+                      >
+                        <div className="pos-action-line-icon">
+                          <Package size={18} />
+                        </div>
+                        <div className="pos-action-line-info">
+                          <strong>
+                            {resolveLineDisplay(product)}
+                          </strong>
+                          <span>
+                            الكمية: {product.quantity}
+                            {product.price > 0 ? ` — ${product.price} د.ل` : ''}
+                          </span>
+                        </div>
+                        <ChevronRight size={16} />
+                      </button>
+                    );
+                  }
+                })
               ) : (
                 <div className="pos-action-empty-block">
                   <p className="pos-action-empty">
@@ -533,6 +666,22 @@ const PosOrderActionModal = ({
                 </div>
               )}
             </div>
+
+            {isExchange && (
+              <div className="sales-modal-footer" style={{ marginTop: '16px' }}>
+                <button
+                  type="button"
+                  className="sales-btn-primary"
+                  onClick={() => setStep('confirm')}
+                  disabled={selectedOldItems.length === 0}
+                >
+                  متابعة الاستبدال ({selectedOldItems.length} قطع مختارة)
+                </button>
+                <button type="button" className="sales-btn-secondary" onClick={onClose}>
+                  إلغاء
+                </button>
+              </div>
+            )}
           </>
         )}
 
@@ -614,57 +763,62 @@ const PosOrderActionModal = ({
           </>
         )}
 
-        {step === 'confirm' && selectedLine && isExchange && (
+        {step === 'confirm' && isExchange && (
           <>
-            <div className="sales-old-product-box">
-              <p className="sales-refund-label">القطعة المراد استبدالها</p>
-              <p className="sales-refund-name">
-                {resolveLineDisplay(selectedLine)}
-              </p>
-              <p className="sales-refund-meta">
-                الكمية المشتراة: {selectedLine.quantity}
-              </p>
-              {selectedLine.quantity > 1 && (
-                <div className="sales-form-group" style={{ marginTop: '12px' }}>
-                  <label htmlFor="pos-exchange-qty" style={{ fontSize: '13px', fontWeight: 'bold' }}>
-                    الكمية المراد استبدالها:
-                  </label>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
-                    <button
-                      type="button"
-                      className="sales-btn-secondary"
-                      style={{ padding: '6px 12px', minWidth: '40px' }}
-                      onClick={() => setExchangeQty(String(Math.max(1, exchangeQtyNum - 1)))}
-                      disabled={exchangeQtyNum <= 1 || isSaving}
-                    >
-                      -
-                    </button>
-                    <input
-                      id="pos-exchange-qty"
-                      type="text"
-                      inputMode="numeric"
-                      className="sales-form-input"
-                      style={{ textAlign: 'center', width: '80px', padding: '6px 12px' }}
-                      value={exchangeQty}
-                      onChange={(e) => {
-                        if (isValidIntegerInput(e.target.value)) setExchangeQty(e.target.value);
-                      }}
-                      onBlur={() => setExchangeQty(clampIntegerInput(exchangeQty, 1, selectedLine.quantity))}
-                      onWheel={preventWheelChange}
-                      disabled={isSaving}
-                    />
-                    <button
-                      type="button"
-                      className="sales-btn-secondary"
-                      style={{ padding: '6px 12px', minWidth: '40px' }}
-                      onClick={() => setExchangeQty(String(Math.min(selectedLine.quantity, exchangeQtyNum + 1)))}
-                      disabled={exchangeQtyNum >= selectedLine.quantity || isSaving}
-                    >
-                      +
-                    </button>
+            <div className="sales-old-product-box" style={{ maxHeight: '180px', overflowY: 'auto' }}>
+              <p className="sales-refund-label">القطع المراد استبدالها</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
+                {selectedOldItems.map((item) => (
+                  <div
+                    key={item.variantId}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '10px 12px',
+                      background: 'var(--bg-input)',
+                      borderRadius: '8px',
+                      border: '1px solid var(--border-color)'
+                    }}
+                  >
+                    <div style={{ textAlign: 'right', flex: 1 }}>
+                      <strong style={{ fontSize: '13px', display: 'block' }}>{item.name}</strong>
+                      <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                        السعر: {item.price} د.ل | الكمية المتاحة: {item.quantity}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <button
+                        type="button"
+                        className="sales-btn-secondary"
+                        style={{ padding: '2px 8px', minWidth: '28px', cursor: 'pointer' }}
+                        onClick={() => {
+                          const nextQty = Math.max(1, item.quantitySelected - 1);
+                          setSelectedOldItems(prev => prev.map(o => o.variantId === item.variantId ? { ...o, quantitySelected: nextQty } : o));
+                        }}
+                        disabled={item.quantitySelected <= 1 || isSaving}
+                      >
+                        -
+                      </button>
+                      <span style={{ minWidth: '20px', textAlign: 'center', fontWeight: 'bold', fontSize: '13px' }}>
+                        {item.quantitySelected}
+                      </span>
+                      <button
+                        type="button"
+                        className="sales-btn-secondary"
+                        style={{ padding: '2px 8px', minWidth: '28px', cursor: 'pointer' }}
+                        onClick={() => {
+                          const nextQty = Math.min(item.quantity, item.quantitySelected + 1);
+                          setSelectedOldItems(prev => prev.map(o => o.variantId === item.variantId ? { ...o, quantitySelected: nextQty } : o));
+                        }}
+                        disabled={item.quantitySelected >= item.quantity || isSaving}
+                      >
+                        +
+                      </button>
+                    </div>
                   </div>
-                </div>
-              )}
+                ))}
+              </div>
             </div>
 
             {products.length === 0 ? (
@@ -763,7 +917,9 @@ const PosOrderActionModal = ({
                     ) : (
                       <div className="pos-action-variants-list">
                         {variantOptions.map((variant) => {
-                          const isCurrent = String(variant.id) === String(selectedLine.variantId);
+                          const isCurrent = variant.id && (isExchange
+                            ? selectedOldItems.some(item => String(item.variantId) === String(variant.id))
+                            : selectedLine?.variantId && String(variant.id) === String(selectedLine.variantId));
                           const isSelected = String(variant.id) === String(pickerVariantId);
                           const outOfStock = !variant.stockUnknown && variant.stock <= 0;
 

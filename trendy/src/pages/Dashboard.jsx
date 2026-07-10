@@ -75,6 +75,9 @@ const mapStoreToForm = (store, ratingAverage = null, user = null, zones = []) =>
     statusLabel: STORE_STATUS_LABELS[statusRaw] ?? store?.status ?? '—',
     image: resolveStoreLogoUrl(rawLogo, id) || '',
     imageCandidates,
+    managerName: store?.owner?.name || user?.name || '',
+    managerEmail: store?.owner?.email || user?.email || '',
+    managerPhone: store?.owner?.phone || user?.phone || '',
   };
 };
 

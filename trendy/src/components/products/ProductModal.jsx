@@ -4,7 +4,7 @@ import { getApiErrorMessage } from '../../api/stores';
 import { productPlaceholderImage } from '../../api/media';
 import './ProductModal.css';
 
-const GalleryImage = ({ img, index, isEdit }) => {
+const GalleryImage = ({ img, index, isEdit, onRemove }) => {
   const candidates = img.candidates?.length ? img.candidates : img.url ? [img.url] : [];
   const [candidateIndex, setCandidateIndex] = useState(0);
 
@@ -27,6 +27,16 @@ const GalleryImage = ({ img, index, isEdit }) => {
     <div className="gallery-item existing">
       <img src={src} alt={`صورة ${index + 1}`} onError={handleError} />
       {isEdit && <span className="gallery-item-tag">حالية</span>}
+      {isEdit && onRemove && (
+        <button
+          type="button"
+          className="gallery-remove-btn"
+          onClick={onRemove}
+          aria-label="حذف الصورة"
+        >
+          <X size={14} />
+        </button>
+      )}
     </div>
   );
 };
@@ -50,6 +60,7 @@ const ProductModal = ({
   });
   const [existingImages, setExistingImages] = useState([]);
   const [newImages, setNewImages] = useState([]);
+  const [deletedImages, setDeletedImages] = useState([]);
   const [savedProduct, setSavedProduct] = useState(null);
   const [error, setError] = useState('');
 
@@ -64,6 +75,7 @@ const ProductModal = ({
       });
       return [];
     });
+    setDeletedImages([]);
 
     if (product) {
       setForm({
@@ -117,6 +129,13 @@ const ProductModal = ({
     });
   };
 
+  const removeExistingImage = (img) => {
+    if (img.id) {
+      setDeletedImages((prev) => [...prev, img.id]);
+    }
+    setExistingImages((prev) => prev.filter((item) => item !== img));
+  };
+
   const totalImages = existingImages.length + newImages.length;
 
   const handleSubmit = async () => {
@@ -137,6 +156,7 @@ const ProductModal = ({
         description: form.description.trim(),
         categoryId: form.categoryId,
         imageFiles: newImages.map((img) => img.file),
+        deletedImages,
       });
       if (!isEdit && result) {
         setSavedProduct(result);
@@ -186,6 +206,7 @@ const ProductModal = ({
                     img={img}
                     index={index}
                     isEdit={isEdit}
+                    onRemove={() => removeExistingImage(img)}
                   />
                 ))}
                 {newImages.map((img, index) => (

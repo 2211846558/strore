@@ -11,7 +11,8 @@ import './ProductVariantModal.css';
 /* ─── مُعرِّف فريد للتركيبة المحددة في صف معين ─── */
 function buildSelectionKey(selections, attributes) {
   return attributes
-    .map((attr) => `${attr.id}:${selections[attr.id] ?? ''}`)
+    .filter((attr) => selections[attr.id])
+    .map((attr) => `${attr.id}:${selections[attr.id]}`)
     .sort()
     .join('|');
 }
@@ -192,10 +193,10 @@ const ProductVariantModal = ({ isOpen, onClose, product, storeId, onVariantAdded
     const usedKeys = new Set(savedVariants.map((v) => v.selectionKey));
 
     pendingRows.forEach((row) => {
-      // تحقق من اختيار جميع الخصائص
-      const missing = attributes.filter((attr) => !row.selections[attr.id]);
-      if (missing.length) {
-        errors[row.id] = `اختر قيمة لـ: ${missing.map((a) => a.name).join('، ')}`;
+      // تحقق من اختيار قيمة لخاصية واحدة على الأقل
+      const hasSelection = attributes.some((attr) => row.selections[attr.id]);
+      if (!hasSelection) {
+        errors[row.id] = 'يجب اختيار قيمة لخاصية واحدة على الأقل';
         return;
       }
 
@@ -227,7 +228,10 @@ const ProductVariantModal = ({ isOpen, onClose, product, storeId, onVariantAdded
 
     await Promise.all(
       pendingRows.map(async (row) => {
-        const attributeValueIds = attributes.map((attr) => Number(row.selections[attr.id]));
+        const attributeValueIds = attributes
+          .map((attr) => row.selections[attr.id])
+          .filter(Boolean)
+          .map(Number);
         try {
           const created = await createProductVariant(product.id, {
             storeId,
@@ -271,7 +275,7 @@ const ProductVariantModal = ({ isOpen, onClose, product, storeId, onVariantAdded
       pendingRows.length > 0 &&
       attributes.length > 0 &&
       pendingRows.some((r) =>
-        attributes.every((attr) => r.selections[attr.id]),
+        attributes.some((attr) => r.selections[attr.id]),
       ),
     [isSaving, pendingRows, attributes],
   );

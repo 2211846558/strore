@@ -98,6 +98,7 @@ const Products = () => {
         categoryId: formData.categoryId,
         stock: editingProduct?.stock ?? '0',
         imageFiles: formData.imageFiles,
+        deletedImages: formData.deletedImages,
       };
 
       if (editingProduct) {

@@ -113,11 +113,78 @@ function mapPosVariant(variant, productRaw) {
   };
 }
 
-function shouldUseDirectSelection(colors, sizes, variants) {
+function shouldUseDirectSelection(colors, sizes, variants, attributeGroups) {
   if (!variants.length) return false;
+  // إذا كان عدد الخصائص أكثر من واحدة فلا نستخدم Direct Selection
+  if (attributeGroups && attributeGroups.length > 1) return false;
   const meaningfulColors = colors.filter((c) => c && c !== '—');
   const meaningfulSizes = sizes.filter((s) => s && s !== '—' && s !== 'واحد');
   return meaningfulColors.length <= 1 && meaningfulSizes.length <= 1;
+}
+
+/**
+ * البحث عن تنوع يطابق مجموعة خصائص محددة { attrName: value, ... }
+ */
+export function resolveVariantByAttributes(product, selectedAttrs) {
+  if (!product?.variants?.length) return null;
+  // إذا لم يُختر شيء بعد، لا نعيد تنوعاً
+  const entries = Object.entries(selectedAttrs).filter(([, v]) => Boolean(v));
+  if (!entries.length) return null;
+
+  return (
+    product.variants.find((v) => {
+      const attrs = v.attributes ?? {};
+      return entries.every(([name, value]) => attrs[name] === value);
+    }) ?? null
+  );
+}
+
+/**
+ * استخراج خريطة الخصائص { attrName: value } من بيانات التنوع الخام
+ * يدعم كلا الشكلَين: attribute_values[{attribute:{name},value}] وattributes:{name:value}
+ */
+function extractVariantAttrMap(variant) {
+  // الشكل الجديد من /pos/catalog: attributes: { "المقاس": "L", ... }
+  if (variant.attributes && typeof variant.attributes === 'object' && !Array.isArray(variant.attributes)) {
+    return { ...variant.attributes };
+  }
+  // الشكل القديم من /stores/{id}/products: attribute_values: [{attribute:{name}, value}]
+  const avList = variant.attribute_values ?? variant.attributeValues ?? [];
+  const map = {};
+  if (Array.isArray(avList)) {
+    avList.forEach((av) => {
+      const name = av?.attribute?.name ?? av?.name;
+      const value = av?.value ?? av?.pivot?.value;
+      if (name && value) map[name] = value;
+    });
+  }
+  return map;
+}
+
+/**
+ * بناء قائمة attribute_groups من مجموعة تنوعات المنتج
+ * يُرجع [{ name, values }] مرتبة بترتيب الظهور الأول
+ */
+function buildAttributeGroupsFromVariants(variants) {
+  // إذا جاءت attribute_groups مباشرة من الباك اند فنستخدمها كما هي
+  // وإلا نبنيها من بيانات التنوعات
+  const order = [];
+  const valuesMap = {};
+
+  variants.forEach((v) => {
+    const attrMap = v._rawAttrMap ?? {};
+    Object.entries(attrMap).forEach(([name, value]) => {
+      if (!order.includes(name)) {
+        order.push(name);
+        valuesMap[name] = [];
+      }
+      if (!valuesMap[name].includes(value)) {
+        valuesMap[name].push(value);
+      }
+    });
+  });
+
+  return order.map((name) => ({ name, values: valuesMap[name] }));
 }
 
 /**
@@ -125,8 +192,17 @@ function shouldUseDirectSelection(colors, sizes, variants) {
  */
 export function mapPosCatalogProduct(raw, inventoryStock = null) {
   const variantsRaw = raw.variants ?? raw.product_variants ?? [];
+
+  // ─── خطوة 1: تحويل التنوعات وبناء خريطة خصائص لكل منها ──────────────
   const variants = (Array.isArray(variantsRaw) ? variantsRaw : []).map((variant) => {
     const mapped = mapPosVariant(variant, raw);
+
+    // بناء خريطة الخصائص من أي مصدر متاح
+    const attrMap = extractVariantAttrMap(variant);
+    mapped.attributes = attrMap;
+    mapped._rawAttrMap = attrMap; // للاستخدام في buildAttributeGroupsFromVariants
+    mapped.variantKey = variant.variantKey ?? variant.variant_key ?? null;
+
     if (inventoryStock) {
       const fromInventory = inventoryStock.get(mapped.id);
       if (fromInventory != null) {
@@ -139,6 +215,12 @@ export function mapPosCatalogProduct(raw, inventoryStock = null) {
 
   if (!variants.length) return null;
 
+  // ─── خطوة 2: بناء attributeGroups ────────────────────────────────────
+  // إذا أرسل الباك اند attribute_groups مباشرة نستخدمها، وإلا نبنيها
+  const attributeGroups = (raw.attribute_groups?.length)
+    ? raw.attribute_groups
+    : buildAttributeGroupsFromVariants(variants);
+
   const colors = [...new Set(variants.map((v) => v.color))];
   const sizes = [...new Set(variants.map((v) => v.size))];
   const stockMap = {};
@@ -148,9 +230,13 @@ export function mapPosCatalogProduct(raw, inventoryStock = null) {
     const key = variantKey(v.color, v.size, v.id);
     stockMap[key] = v.stockUnknown ? null : v.stock;
     variantByKey[key] = v;
+    if (v.variantKey && v.variantKey !== key) {
+      stockMap[v.variantKey] = v.stockUnknown ? null : v.stock;
+      variantByKey[v.variantKey] = v;
+    }
   });
 
-  const useDirectSelection = shouldUseDirectSelection(colors, sizes, variants);
+  const useDirectSelection = shouldUseDirectSelection(colors, sizes, variants, attributeGroups);
 
   return {
     id: Number(raw.id),
@@ -166,10 +252,12 @@ export function mapPosCatalogProduct(raw, inventoryStock = null) {
     stockMap,
     variantByKey,
     useDirectSelection,
+    attributeGroups,
     variantOptions: variants.map((v) => ({
       id: v.id,
       label: v.fullLabel ?? v.label,
       attrLabel: v.label,
+      attributes: v.attributes,
       stock: v.stockUnknown ? null : v.stock,
       stockUnknown: v.stockUnknown,
     })),

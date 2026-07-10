@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react';
 import { X, Trash2 } from 'lucide-react';
 import {
-  resolveVariant,
-  getVariantStock,
   fetchVariantStockPrice,
+  resolveVariantByAttributes,
 } from '../../api/pos';
 import {
   clampInteger,
@@ -22,8 +21,7 @@ const ExchangeModal = ({ isOpen, onClose, item, products = [], storeProducts = [
 
   // Selector state for the new product being added
   const [currentProductId, setCurrentProductId] = useState('');
-  const [color, setColor] = useState('');
-  const [size, setSize] = useState('');
+  const [selectedAttrs, setSelectedAttrs] = useState({});
   const [selectedVariantId, setSelectedVariantId] = useState('');
   const [liveStock, setLiveStock] = useState(null);
   const [livePrice, setLivePrice] = useState(null);
@@ -36,8 +34,7 @@ const ExchangeModal = ({ isOpen, onClose, item, products = [], storeProducts = [
     setExchangeQty(item ? String(item.quantity || 1) : '1');
     setSelectedNewItems([]);
     setCurrentProductId('');
-    setColor('');
-    setSize('');
+    setSelectedAttrs({});
     setSelectedVariantId('');
     setLiveStock(null);
     setLivePrice(null);
@@ -47,24 +44,15 @@ const ExchangeModal = ({ isOpen, onClose, item, products = [], storeProducts = [
   const currentProduct = products.find((p) => String(p.id) === String(currentProductId));
   const useDirectSelection = Boolean(currentProduct?.useDirectSelection);
   const variantOptions = currentProduct?.variantOptions ?? [];
-
-  const hideSizeField =
-    !useDirectSelection &&
-    currentProduct?.sizes?.length === 1 &&
-    currentProduct.sizes[0] === 'واحد';
-  const effectiveSize = hideSizeField ? currentProduct?.sizes?.[0] || 'واحد' : size;
+  const attributeGroups = currentProduct?.attributeGroups ?? [];
 
   const currentVariant = useDirectSelection
     ? currentProduct?.variants?.find((v) => String(v.id) === String(selectedVariantId)) ?? null
     : currentProduct
-      ? resolveVariant(currentProduct, color, effectiveSize)
+      ? resolveVariantByAttributes(currentProduct, selectedAttrs)
       : null;
 
-  const baseStock = useDirectSelection
-    ? Number(currentVariant?.stock ?? 0)
-    : currentProduct
-      ? getVariantStock(currentProduct, color, effectiveSize)
-      : 0;
+  const baseStock = currentVariant ? Number(currentVariant.stock ?? 0) : 0;
 
   const stock =
     liveStock != null && liveStock > 0
@@ -74,12 +62,16 @@ const ExchangeModal = ({ isOpen, onClose, item, products = [], storeProducts = [
   const price = livePrice ?? currentVariant?.price ?? currentProduct?.price ?? 0;
   const selectionReady = useDirectSelection
     ? Boolean(selectedVariantId)
-    : Boolean(color && (hideSizeField || size));
+    : attributeGroups.length > 0 &&
+      attributeGroups.every((g) => Boolean(selectedAttrs[g.name]));
+
+  const isSameAsOriginal = currentVariant && currentVariant.id && item?.variantId && String(currentVariant.id) === String(item.variantId);
 
   const canAdd =
     currentProduct &&
     selectionReady &&
     currentVariant &&
+    !isSameAsOriginal &&
     (stock > 0 || currentVariant?.stockUnknown);
 
   const addItemMaxQty = currentVariant?.stockUnknown ? 999 : stock;
@@ -124,8 +116,7 @@ const ExchangeModal = ({ isOpen, onClose, item, products = [], storeProducts = [
   // Handle product change
   const handleProductChange = (prodId) => {
     setCurrentProductId(prodId);
-    setColor('');
-    setSize('');
+    setSelectedAttrs({});
     setSelectedVariantId('');
     setLiveStock(null);
     setLivePrice(null);
@@ -138,10 +129,18 @@ const ExchangeModal = ({ isOpen, onClose, item, products = [], storeProducts = [
           nextProd.variantOptions?.length === 1 ? String(nextProd.variantOptions[0].id) : '',
         );
       } else {
-        setColor(nextProd.colors?.length === 1 ? nextProd.colors[0] : '');
-        setSize(nextProd.sizes?.length === 1 ? nextProd.sizes[0] : '');
+        // إذا كانت قيمة خاصية ما واحدة فقط، نختارها تلقائياً
+        const autoAttrs = {};
+        (nextProd.attributeGroups ?? []).forEach((group) => {
+          if (group.values.length === 1) autoAttrs[group.name] = group.values[0];
+        });
+        setSelectedAttrs(autoAttrs);
       }
     }
+  };
+
+  const handleAttrChange = (attrName, value) => {
+    setSelectedAttrs((prev) => ({ ...prev, [attrName]: value }));
   };
 
   // Add variant to exchange list
@@ -152,8 +151,9 @@ const ExchangeModal = ({ isOpen, onClose, item, products = [], storeProducts = [
       id: currentVariant.id,
       product: currentProduct,
       variant: currentVariant,
-      color: useDirectSelection ? currentVariant.color ?? '—' : color,
-      size: useDirectSelection ? currentVariant.size ?? '—' : effectiveSize,
+      color: currentVariant.color ?? '—',
+      size: currentVariant.size ?? '—',
+      attributes: useDirectSelection ? (currentVariant.attributes ?? {}) : selectedAttrs,
       price,
       quantity: addItemQtyNum,
       stock,
@@ -178,8 +178,7 @@ const ExchangeModal = ({ isOpen, onClose, item, products = [], storeProducts = [
 
     // Reset selectors
     setCurrentProductId('');
-    setColor('');
-    setSize('');
+    setSelectedAttrs({});
     setSelectedVariantId('');
     setLiveStock(null);
     setLivePrice(null);
@@ -399,6 +398,7 @@ const ExchangeModal = ({ isOpen, onClose, item, products = [], storeProducts = [
                 <p className="sales-modal-product-price">{currentProduct.price} د.ل</p>
               </div>
               {useDirectSelection ? (
+                /* ─── اختيار مباشر ─────────────────────────────────────── */
                 <div className="sales-form-group">
                   <label htmlFor="variant-direct-select">التنوع</label>
                   <select
@@ -409,58 +409,47 @@ const ExchangeModal = ({ isOpen, onClose, item, products = [], storeProducts = [
                     disabled={!variantOptions.length}
                   >
                     <option value="">اختر التنوع</option>
-                    {variantOptions.map((option) => (
-                      <option key={option.id} value={String(option.id)}>
-                        {option.label} {option.stockUnknown ? '' : `(المتوفر: ${option.stock} قطعة)`}
-                      </option>
-                    ))}
+                    {variantOptions.map((option) => {
+                      const isCurrent = option.id && item?.variantId && String(option.id) === String(item.variantId);
+                      return (
+                        <option key={option.id} value={String(option.id)} disabled={isCurrent}>
+                          {option.label} {isCurrent ? '(التنوع الحالي - يرجى اختيار تنوع آخر)' : option.stockUnknown ? '' : `(المتوفر: ${option.stock} قطعة)`}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
               ) : (
+                /* ─── dropdown لكل خاصية ديناميكياً ─────────────────────── */
                 <>
-                  <div className="sales-form-group">
-                    <label htmlFor="variant-color-select">اللون</label>
-                    <select
-                      id="variant-color-select"
-                      className="sales-form-select"
-                      value={color}
-                      onChange={(e) => setColor(e.target.value)}
-                      disabled={!currentProduct.colors?.length}
-                    >
-                      <option value="">اختر اللون</option>
-                      {(currentProduct.colors ?? []).map((c) => (
-                        <option key={c} value={c}>
-                          {c}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  {!hideSizeField && (
-                    <div className="sales-form-group">
-                      <label htmlFor="variant-size-select">المقاس</label>
+                  {attributeGroups.map((group, idx) => (
+                    <div className="sales-form-group" key={group.name}>
+                      <label htmlFor={`exch-attr-${idx}`}>{group.name}</label>
                       <select
-                        id="variant-size-select"
+                        id={`exch-attr-${idx}`}
                         className="sales-form-select"
-                        value={size}
-                        onChange={(e) => setSize(e.target.value)}
-                        disabled={!currentProduct.sizes?.length}
+                        value={selectedAttrs[group.name] ?? ''}
+                        onChange={(e) => handleAttrChange(group.name, e.target.value)}
+                        disabled={!group.values.length}
                       >
-                        <option value="">اختر المقاس</option>
-                        {(currentProduct.sizes ?? []).map((s) => (
-                          <option key={s} value={s}>
-                            {s}
+                        <option value="">اختر {group.name}</option>
+                        {group.values.map((val) => (
+                          <option key={val} value={val}>
+                            {val}
                           </option>
                         ))}
                       </select>
                     </div>
-                  )}
+                  ))}
                 </>
               )}
 
               {selectionReady && (
-                <div className="sales-stock-box">
+                <div className="sales-stock-box" style={isSameAsOriginal ? { color: '#ef4444' } : undefined}>
                   {loadingStock
                     ? 'جاري جلب الكمية المتوفرة...'
+                    : isSameAsOriginal
+                    ? 'هذا هو التنوع الحالي للقطعة المراد استبدالها (يرجى اختيار تنوع آخر).'
                     : `الكمية المتوفرة: ${currentVariant?.stockUnknown && liveStock == null ? 'غير محددة' : `${stock} قطعة`}`}
                 </div>
               )}
